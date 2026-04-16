@@ -1,0 +1,24 @@
+{
+  "name": "@mcp-studio/server",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch src/index.ts",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src"
+  },
+  "dependencies": {
+    "@mcp-studio/types": "workspace:*",
+    "@mcp-studio/mcp-client": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.11.1"
+  },
+  "devDependencies": {
+    "bun-types": "^1.2.13",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}
