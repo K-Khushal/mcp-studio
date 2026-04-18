@@ -38,3 +38,12 @@ export interface MCPResourceContent {
 }
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
+
+export interface MCPConfig {
+  requestTimeout: number;
+  autoScrollLogs: boolean;
+  streamResponses: boolean;
+  verboseLogging: boolean;
+  showReasoning: boolean;
+  showTimeline: boolean;
+}

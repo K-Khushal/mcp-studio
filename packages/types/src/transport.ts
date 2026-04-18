@@ -11,11 +11,11 @@ export interface StdioConfig {
   inheritSystemEnv: boolean;
 }
 
-export interface SseConfig {
+export interface HttpConfig {
   url: string;
   headers: Record<string, string>;
 }
 
 export type ConnectionConfig =
   | { transport: "stdio"; config: StdioConfig }
-  | { transport: "sse"; config: SseConfig };
+  | { transport: "http"; config: HttpConfig };

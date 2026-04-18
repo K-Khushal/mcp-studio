@@ -3,6 +3,7 @@ import { devtools } from "zustand/middleware";
 import type {
   MCPTool,
   MCPPrompt,
+  MCPConfig,
   ConnectionStatus,
   HistoryEntry,
   Collection,
@@ -65,6 +66,14 @@ interface AppState {
   environments: Environment[];
   activeEnvironmentId: string | null;
 
+  // Configuration
+  config: MCPConfig;
+
+  // Metrics
+  latency: number;
+  requestCount: number;
+  errorCount: number;
+
   // UI
   activeView: "studio" | "collections" | "history" | "logs" | "settings";
   isLogsCollapsed: boolean;
@@ -105,6 +114,9 @@ interface AppActions {
   loadEnvironments: () => Promise<void>;
   saveEnvironments: (envs: Environment[]) => Promise<void>;
   setActiveEnvironment: (id: string) => void;
+
+  // Configuration
+  setConfig: (partial: Partial<MCPConfig>) => void;
 
   // UI
   setActiveView: (view: AppState["activeView"]) => void;
@@ -147,6 +159,14 @@ export const useStore = create<AppState & AppActions>()(
       diffSelection: null,
       collections: [],
       environments: [],
+      config: {
+        requestTimeout: 30,
+        autoScrollLogs: true,
+        streamResponses: true,
+        verboseLogging: false,
+        showReasoning: true,
+        showTimeline: true,
+      },
       activeEnvironmentId: null,
       activeView: "studio",
       isLogsCollapsed: false,
@@ -239,6 +259,9 @@ export const useStore = create<AppState & AppActions>()(
         get().saveEnvironments(envs).catch(console.error);
         set({ activeEnvironmentId: id });
       },
+
+      // ---------- configuration ----------
+      setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
 
       // ---------- UI ----------
       setActiveView: (view) => set({ activeView: view }),

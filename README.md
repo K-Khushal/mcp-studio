@@ -46,7 +46,13 @@ git clone git@github.com:K-Khushal/mcp-studio.git
 cd mcp-studio
 bun install
 
-# Start everything
+# Terminal 1 — backend
+cd apps/server && bun dev
+
+# Terminal 2 — frontend
+cd apps/web && bun dev
+
+# Or both via turbo (Start everything)
 bun dev
 
 # Or individually
