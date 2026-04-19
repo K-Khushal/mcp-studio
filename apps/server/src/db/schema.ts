@@ -14,11 +14,6 @@ export const requests = sqliteTable("requests", {
     .notNull()
     .references(() => collections.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  tool: text("tool").notNull(),
-  params: text("params", { mode: "json" })
-    .$type<Record<string, unknown>>()
-    .notNull()
-    .default({}),
   connectionConfig: text("connection_config", { mode: "json" })
     .$type<ConnectionConfig | null>()
     .default(null),

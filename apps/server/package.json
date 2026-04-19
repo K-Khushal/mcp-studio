@@ -7,8 +7,8 @@
     "dev": "bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
+    "test": "STUDIO_DB_PATH=:memory: bun test src/__tests__",
+    "test:watch": "STUDIO_DB_PATH=:memory: bun test --watch src/__tests__",
     "lint": "eslint src",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate"

@@ -6,8 +6,6 @@ import type { SavedRequest, ConnectionConfig } from "@mcp-studio/types";
 
 interface CreateRequestData {
   name: string;
-  tool: string;
-  params: Record<string, unknown>;
   connectionConfig?: ConnectionConfig;
 }
 
@@ -21,8 +19,6 @@ export async function createRequest(
     id,
     collectionId,
     name: data.name,
-    tool: data.tool,
-    params: data.params,
     connectionConfig: data.connectionConfig ?? null,
     createdAt: now,
     updatedAt: now,
@@ -30,8 +26,6 @@ export async function createRequest(
   return {
     id,
     name: data.name,
-    tool: data.tool,
-    params: data.params,
     connectionConfig: data.connectionConfig,
     createdAt: now,
     updatedAt: now,

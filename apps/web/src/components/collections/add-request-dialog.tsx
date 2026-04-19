@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
 import type { Collection } from '@mcp-studio/types';
 
 interface AddRequestDialogProps {
@@ -18,32 +18,21 @@ interface AddRequestDialogProps {
 }
 
 export function AddRequestDialog({ collection, open, onClose }: AddRequestDialogProps) {
-  const { tools, addRequest } = useStore();
+  const { addRequest } = useStore();
   const [name, setName] = useState('');
-  const [tool, setTool] = useState('');
-  const [paramsJson, setParamsJson] = useState('{}');
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (open) {
       setName('');
-      setTool(tools[0]?.name ?? '');
-      setParamsJson('{}');
       setError('');
     }
-  }, [open, tools]);
+  }, [open]);
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
-    if (!tool) { setError('Select a tool'); return; }
-    let params: Record<string, unknown> = {};
-    try {
-      params = JSON.parse(paramsJson) as Record<string, unknown>;
-    } catch {
-      setError('Params must be valid JSON');
-      return;
-    }
-    await addRequest(collection.id, { name: name.trim(), tool, params });
+    await addRequest(collection.id, { name: name.trim() });
+    toast.success(`Request "${name.trim()}" added`);
     onClose();
   };
 

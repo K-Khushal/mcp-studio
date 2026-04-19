@@ -10,7 +10,8 @@ import * as schema from "./schema.js";
 const DATA_DIR = join(homedir(), ".mcp-studio");
 if (!existsSync(DATA_DIR)) mkdirSync(DATA_DIR, { recursive: true });
 
-const sqlite = new Database(join(DATA_DIR, "studio.db"));
+const dbPath = process.env["STUDIO_DB_PATH"] ?? join(DATA_DIR, "studio.db");
+const sqlite = new Database(dbPath);
 
 // Enable foreign keys (SQLite disables them by default)
 sqlite.exec("PRAGMA foreign_keys = ON;");

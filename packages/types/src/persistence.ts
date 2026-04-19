@@ -8,8 +8,6 @@ export interface SavedRequest {
   id: string;
   collectionId?: string;
   name: string;
-  tool: string;
-  params: Record<string, unknown>;
   connectionConfig?: ConnectionConfig;
   createdAt: number;
   updatedAt: number;

@@ -1,6 +1,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
-import type { SseConfig, MCPTool, MCPPrompt, MCPPromptMessage } from "@mcp-studio/types";
+import type { HttpConfig, MCPTool, MCPPrompt, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientInterface, MCPClientOptions, ConnectedServerInfo } from "./types.js";
 
 /**
@@ -13,7 +13,7 @@ export class SSEMCPClient implements MCPClientInterface {
   private _isConnected = false;
 
   constructor(
-    private readonly config: SseConfig,
+    private readonly config: HttpConfig,
     private readonly options: MCPClientOptions = {}
   ) {}
 

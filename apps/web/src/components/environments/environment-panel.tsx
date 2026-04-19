@@ -1,53 +1,86 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useStore } from '@/store';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Globe, Plus, Trash2, Copy, Eye, EyeOff } from 'lucide-react';
-import { cn } from '@/lib/utils';
-import { toast } from "sonner"
+import { toast } from 'sonner';
 
-//Bug: After opening the dialog it on focus on the first input
+export default function EnvironmentPanel() {
+  const {
+    environments,
+    activeEnvironmentId,
+    loadEnvironments,
+    createEnvironment,
+    updateEnvironment,
+    deleteEnvironment,
+    setActiveEnvironment,
+  } = useStore();
 
-export default function EnvironmentPannel() {
-  const [env, setEnv] = useState<Record<string, string>>({
-    MCP_SERVER_URL: 'http://localhost:4000',
-    API_KEY: 'sk-xxxx-xxxx-xxxx',
-    MODEL_NAME: 'gpt-4'
-  });  const [newKey, setNewKey] = useState('');
-  const [newValue, setNewValue] = useState('');
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set(['API_KEY']));
   const [open, setOpen] = useState(false);
+  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+  const [newKey, setNewKey] = useState('');
+  const [newValue, setNewValue] = useState('');
+  const [newEnvName, setNewEnvName] = useState('');
+  const [showNewEnv, setShowNewEnv] = useState(false);
+  const [localVars, setLocalVars] = useState<Record<string, string>>({});
 
-  //const environmentType = ['Local', 'Staging', 'Production']; // To be implemented in last phase
+  const activeEnv = environments.find((e) => e.id === activeEnvironmentId) ?? environments[0];
+
+  useEffect(() => {
+    if (open && environments.length === 0) {
+      loadEnvironments();
+    }
+  }, [open]);
+
+  useEffect(() => {
+    if (activeEnv) setLocalVars(activeEnv.variables);
+  }, [activeEnv?.id]);
+
+  const flushVars = (vars: Record<string, string>) => {
+    if (!activeEnv) return;
+    updateEnvironment(activeEnv.id, { variables: vars });
+  };
 
   const handleAdd = () => {
-    if (!newKey.trim()) return;
-    setEnv(prev => ({
-      ...prev,
-      [newKey.trim()]: newValue
-    }));
+    if (!newKey.trim() || !activeEnv) return;
+    const vars = { ...localVars, [newKey.trim()]: newValue };
+    setLocalVars(vars);
+    flushVars(vars);
+    toast.success(`Variable "${newKey.trim()}" added`);
     setNewKey('');
     setNewValue('');
-    toast.success(`Variable "${newKey.trim()}" added`);
   };
 
-  const handleChange = (key: string, value: string) => {
-    setEnv(prev => ({ ...prev, [key]: value }));
+  const handleBlur = () => {
+    flushVars(localVars);
   };
 
-  const handleRemove = (keyToRemove: string) => {
-    setEnv(prev => {
-      const { [keyToRemove]: _, ...rest } = prev;
-      return rest;
-    });
+  const handleRemove = (key: string) => {
+    const { [key]: _, ...rest } = localVars;
+    setLocalVars(rest);
+    flushVars(rest);
+  };
+
+  const handleCreateEnv = async () => {
+    if (!newEnvName.trim()) return;
+    await createEnvironment(newEnvName.trim());
+    toast.success(`Environment "${newEnvName.trim()}" created`);
+    setNewEnvName('');
+    setShowNewEnv(false);
+  };
+
+  const handleDeleteEnv = async () => {
+    if (!activeEnv || environments.length <= 1) return;
+    await deleteEnvironment(activeEnv.id);
+    toast.success(`Environment "${activeEnv.name}" deleted`);
   };
 
   const toggleVisibility = (key: string) => {
-    setHiddenKeys(prev => {
+    setHiddenKeys((prev) => {
       const next = new Set(prev);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
+      if (next.has(key)) next.delete(key); else next.add(key);
       return next;
     });
   };
@@ -70,6 +103,49 @@ export default function EnvironmentPannel() {
           <DialogTitle className="text-sm font-semibold text-foreground">Environment Variables</DialogTitle>
         </DialogHeader>
 
+        {/* Environment selector */}
+        <div className="flex items-center gap-2">
+          {showNewEnv ? (
+            <>
+              <Input
+                placeholder="Environment name"
+                value={newEnvName}
+                onChange={(e) => setNewEnvName(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateEnv()}
+                className="h-8 text-xs flex-1"
+                autoFocus
+              />
+              <Button size="sm" variant="outline" onClick={handleCreateEnv} className="h-8 text-xs">Create</Button>
+              <Button size="sm" variant="ghost" onClick={() => setShowNewEnv(false)} className="h-8 text-xs">Cancel</Button>
+            </>
+          ) : (
+            <>
+              <Select value={activeEnv?.id ?? ''} onValueChange={setActiveEnvironment}>
+                <SelectTrigger className="h-8 text-xs flex-1">
+                  <SelectValue placeholder="Select environment" />
+                </SelectTrigger>
+                <SelectContent>
+                  {environments.map((e) => (
+                    <SelectItem key={e.id} value={e.id} className="text-xs">{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button size="sm" variant="outline" onClick={() => setShowNewEnv(true)} className="h-8 text-xs gap-1">
+                <Plus size={11} /> New
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={handleDeleteEnv}
+                disabled={environments.length <= 1}
+                className="h-8 text-xs text-muted-foreground hover:text-destructive"
+              >
+                <Trash2 size={11} />
+              </Button>
+            </>
+          )}
+        </div>
+
         {/* Variable table */}
         <div className="border border-border rounded-md overflow-hidden">
           <div className="grid grid-cols-[1fr_1fr_auto] gap-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wider bg-muted/50 px-3 py-2 border-b border-border">
@@ -78,52 +154,48 @@ export default function EnvironmentPannel() {
             <span className="w-20" />
           </div>
           <div className="divide-y divide-border max-h-60 overflow-y-auto">
-            {Object.entries(env).map(([key, value]) => (
+            {Object.entries(localVars).map(([key, value]) => (
               <div key={key} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 px-3 py-2 group">
                 <span className="text-xs font-mono text-foreground truncate">{key}</span>
                 <Input
                   value={value}
-                  onChange={e => handleChange(key, e.target.value)}
+                  onChange={(e) => setLocalVars((prev) => ({ ...prev, [key]: e.target.value }))}
+                  onBlur={handleBlur}
                   type={hiddenKeys.has(key) ? 'password' : 'text'}
                   className="h-7 text-xs font-mono bg-muted border-border"
                 />
                 <div className="flex items-center gap-1 w-20 justify-end">
-                  <button
-                    onClick={() => toggleVisibility(key)}
-                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     {hiddenKeys.has(key) ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
-                  <button
-                    onClick={() => copyValue(value)}
-                    className="p-1 text-muted-foreground hover:text-foreground transition-colors"
-                  >
+                  <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     <Copy size={12} />
                   </button>
-                  <button
-                    onClick={() => handleRemove(key)}
-                    className="p-1 text-muted-foreground hover:text-destructive transition-colors"
-                  >
+                  <button onClick={() => handleRemove(key)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
               </div>
             ))}
+            {Object.keys(localVars).length === 0 && (
+              <div className="px-3 py-4 text-xs text-muted-foreground text-center">No variables yet</div>
+            )}
           </div>
         </div>
 
-        {/* Add new */}
+        {/* Add new variable */}
         <div className="flex gap-2 items-center">
           <Input
             placeholder="KEY"
             value={newKey}
-            onChange={e => setNewKey(e.target.value)}
+            onChange={(e) => setNewKey(e.target.value)}
             className="h-8 text-xs font-mono bg-muted border-border flex-1"
           />
           <Input
             placeholder="VALUE"
             value={newValue}
-            onChange={e => setNewValue(e.target.value)}
+            onChange={(e) => setNewValue(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             className="h-8 text-xs font-mono bg-muted border-border flex-1"
           />
           <Button size="sm" variant="outline" onClick={handleAdd} className="h-8 text-xs gap-1">

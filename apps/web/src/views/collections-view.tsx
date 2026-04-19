@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react';
 import { Search, FolderPlus } from 'lucide-react';
 import { useStore } from '@/store';
 import { CollectionRow } from '@/components/collections/collection-row';
+import { toast } from 'sonner';
 import type { SavedRequest } from '@mcp-studio/types';
 
 export function CollectionsView() {
-  const { collections, loadCollections, createCollection, loadSavedRequest } = useStore();
+  const { collections, loadCollections, createCollection, loadSavedRequest, selectedRequestId } = useStore();
   const [search, setSearch] = useState('');
-  const [selectedRequestId, setSelectedRequestId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const newNameRef = useRef<HTMLInputElement>(null);
@@ -22,13 +22,15 @@ export function CollectionsView() {
 
   const commitCreate = async () => {
     const trimmed = newName.trim();
-    if (trimmed) await createCollection(trimmed);
+    if (trimmed) {
+      await createCollection(trimmed);
+      toast.success(`Collection "${trimmed}" created`);
+    }
     setNewName('');
     setIsCreating(false);
   };
 
   const handleSelectRequest = (req: SavedRequest) => {
-    setSelectedRequestId(req.id);
     loadSavedRequest(req);
   };
 

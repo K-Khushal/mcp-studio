@@ -58,6 +58,11 @@ interface AppState {
 
   // Collections
   collections: Collection[];
+  selectedRequestId: string | null;
+
+  // Connection form (persisted in store so panels stay in sync)
+  transport: "stdio" | "http";
+  connectionUrl: string;
 
   // Environments
   environments: Environment[];
@@ -110,6 +115,10 @@ interface AppActions {
   addRequest: (collectionId: string, data: Omit<SavedRequest, "id" | "createdAt" | "updatedAt">) => Promise<void>;
   deleteRequest: (collectionId: string, reqId: string) => Promise<void>;
 
+  // Connection form
+  setTransport: (t: "stdio" | "http") => void;
+  setConnectionUrl: (url: string) => void;
+
   // Environments
   loadEnvironments: () => Promise<void>;
   createEnvironment: (name: string) => Promise<void>;
@@ -159,15 +168,26 @@ export const useStore = create<AppState & AppActions>()(
       logs: [],
       logIdCounter: 0,
       collections: [],
+      selectedRequestId: null,
+      transport: "stdio",
+      connectionUrl: "",
       environments: [],
-      config: {
-        requestTimeout: 30,
-        autoScrollLogs: true,
-        streamResponses: true,
-        verboseLogging: false,
-        showReasoning: true,
-        showTimeline: true,
-      },
+      config: (() => {
+        const defaults: MCPConfig = {
+          requestTimeout: 30,
+          autoScrollLogs: true,
+          streamResponses: true,
+          verboseLogging: false,
+          showReasoning: true,
+          showTimeline: true,
+        };
+        try {
+          const raw = localStorage.getItem("mcp-studio-config");
+          return raw ? { ...defaults, ...(JSON.parse(raw) as Partial<MCPConfig>) } : defaults;
+        } catch {
+          return defaults;
+        }
+      })(),
       activeEnvironmentId: null,
       activeView: "studio",
       isLogsCollapsed: false,
@@ -214,12 +234,24 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- saved request loading ----------
       loadSavedRequest: (request) => {
-        const matchedTool = get().tools.find((t) => t.name === request.tool) ?? null;
+        const conn = request.connectionConfig;
+        let transport: "stdio" | "http" = "stdio";
+        let connectionUrl = "";
+        if (conn) {
+          transport = conn.transport === "http" ? "http" : "stdio";
+          connectionUrl =
+            conn.transport === "http"
+              ? conn.config.url
+              : [conn.config.command, ...conn.config.args].join(" ");
+        }
         set({
-          selectedTool: matchedTool,
+          selectedTool: null,
           selectedPrompt: null,
-          pendingParams: request.params,
+          pendingParams: null,
           activeView: "studio",
+          selectedRequestId: request.id,
+          transport,
+          connectionUrl,
         });
       },
 
@@ -260,7 +292,15 @@ export const useStore = create<AppState & AppActions>()(
 
       deleteCollection: async (id) => {
         await fetch(`/api/collections/${id}`, { method: "DELETE" });
-        set((s) => ({ collections: s.collections.filter((c) => c.id !== id) }));
+        set((s) => {
+          const deletedReqIds = new Set(
+            s.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
+          );
+          return {
+            collections: s.collections.filter((c) => c.id !== id),
+            selectedRequestId: deletedReqIds.has(s.selectedRequestId ?? "") ? null : s.selectedRequestId,
+          };
+        });
       },
 
       addRequest: async (collectionId, data) => {
@@ -287,6 +327,7 @@ export const useStore = create<AppState & AppActions>()(
               ? { ...c, requests: c.requests.filter((r) => r.id !== reqId) }
               : c
           ),
+          selectedRequestId: s.selectedRequestId === reqId ? null : s.selectedRequestId,
         }));
       },
 
@@ -346,7 +387,15 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       // ---------- configuration ----------
-      setConfig: (partial) => set((s) => ({ config: { ...s.config, ...partial } })),
+      setConfig: (partial) => set((s) => {
+        const config = { ...s.config, ...partial };
+        try { localStorage.setItem("mcp-studio-config", JSON.stringify(config)); } catch {}
+        return { config };
+      }),
+
+      // ---------- connection form ----------
+      setTransport: (t) => set({ transport: t }),
+      setConnectionUrl: (url) => set({ connectionUrl: url }),
 
       // ---------- UI ----------
       setActiveView: (view) => set({ activeView: view }),

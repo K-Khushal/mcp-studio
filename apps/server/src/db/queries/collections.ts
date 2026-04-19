@@ -19,8 +19,6 @@ export async function getAllCollections(): Promise<Collection[]> {
         id: r.id,
         collectionId: r.collectionId,
         name: r.name,
-        tool: r.tool,
-        params: r.params,
         connectionConfig: r.connectionConfig ?? undefined,
         createdAt: r.createdAt,
         updatedAt: r.updatedAt,

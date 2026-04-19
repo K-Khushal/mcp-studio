@@ -1,24 +1,56 @@
 import { cn } from '@/lib/utils';
-import { useStore } from "@/store";
-import EnvironmentPannel from '../environments/environment-panel';
+import { useStore } from '@/store';
+import EnvironmentPanel from '../environments/environment-panel';
 import { ConfigurationPanel } from '../configuration/configuration-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import { useState } from 'react';
+import type { ConnectionConfig } from '@mcp-studio/types';
 
 export function ConnectionPanel() {
-  const { connectionStatus, connect, disconnect } = useStore();
-  const [transport, setTransport] = useState<'stdio' | 'http'>('stdio');
-  const [ connectionUrl, setConnectionUrl ] = useState<string>('');
+  const {
+    connectionStatus,
+    connect,
+    disconnect,
+    transport,
+    connectionUrl,
+    setTransport,
+    setConnectionUrl,
+    selectedRequestId,
+    collections,
+  } = useStore();
 
   const isConnected = connectionStatus === 'connected';
   const isConnecting = connectionStatus === 'connecting';
 
+  const selectedRequest = selectedRequestId
+    ? collections.flatMap((c) => c.requests).find((r) => r.id === selectedRequestId)
+    : null;
+
+  const handleConnect = () => {
+    if (isConnected) {
+      disconnect();
+      return;
+    }
+    let config: ConnectionConfig;
+    if (transport === 'http') {
+      config = { transport: 'http', config: { url: connectionUrl, headers: {} } };
+    } else {
+      const parts = connectionUrl.trim().split(/\s+/);
+      config = {
+        transport: 'stdio',
+        config: { command: parts[0] ?? '', args: parts.slice(1), env: {}, inheritSystemEnv: true },
+      };
+    }
+    connect(config);
+  };
+
   return (
     <div className="border-b border-border bg-card">
-      {/* Header row: Status, Environment, Configuration */}
+      {/* Header row: request name, status, env, config */}
       <div className="flex items-center gap-4 px-3 py-2 border-b border-border">
-        <span className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded">untitled</span>
+        <span className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px]">
+          {selectedRequest?.name ?? 'untitled'}
+        </span>
         <div className="flex items-center gap-1.5">
           <div className={cn(
             'w-2 h-2 rounded-full',
@@ -29,7 +61,7 @@ export function ConnectionPanel() {
           </span>
         </div>
         <div className="flex-1" />
-        <EnvironmentPannel />
+        <EnvironmentPanel />
         <ConfigurationPanel />
       </div>
 
@@ -59,12 +91,13 @@ export function ConnectionPanel() {
         <Input
           value={connectionUrl}
           onChange={(e) => setConnectionUrl(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && !isConnected && handleConnect()}
           placeholder={transport === 'stdio' ? 'npx @test/test-mcp' : 'http://localhost:4000'}
           className="flex-1"
         />
 
         <button
-          // onClick={isConnected ? disconnect : connect}
+          onClick={handleConnect}
           disabled={isConnecting}
           className={cn(
             'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',

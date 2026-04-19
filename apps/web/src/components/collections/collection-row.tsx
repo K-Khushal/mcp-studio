@@ -3,6 +3,17 @@ import { ChevronRight, ChevronDown, Plus, FileText, Trash2, Pencil } from 'lucid
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { AddRequestDialog } from './add-request-dialog';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { toast } from 'sonner';
 import type { Collection, SavedRequest } from '@mcp-studio/types';
 
 interface CollectionRowProps {
@@ -17,6 +28,8 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(collection.name);
   const [addOpen, setAddOpen] = useState(false);
+  const [confirmDeleteCollection, setConfirmDeleteCollection] = useState(false);
+  const [confirmDeleteReqId, setConfirmDeleteReqId] = useState<string | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -32,6 +45,18 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
     }
     setIsRenaming(false);
   };
+
+  const handleDeleteCollection = async () => {
+    await deleteCollection(collection.id);
+    toast.success(`Collection "${collection.name}" deleted`);
+  };
+
+  const handleDeleteRequest = async (req: SavedRequest) => {
+    await deleteRequest(collection.id, req.id);
+    toast.success(`Request "${req.name}" deleted`);
+  };
+
+  const confirmReq = collection.requests.find((r) => r.id === confirmDeleteReqId);
 
   return (
     <div>
@@ -80,7 +105,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
             <Pencil size={12} />
           </button>
           <button
-            onClick={() => deleteCollection(collection.id)}
+            onClick={() => setConfirmDeleteCollection(true)}
             title="Delete"
             className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
           >
@@ -103,11 +128,10 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
           >
             <FileText size={11} className="shrink-0" />
             <span className="flex-1 min-w-0 text-xs truncate">{req.name}</span>
-            <span className="text-[10px] font-mono opacity-60 truncate max-w-[60px]">{req.tool}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                deleteRequest(collection.id, req.id).catch(console.error);
+                setConfirmDeleteReqId(req.id);
               }}
               title="Delete request"
               className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
@@ -122,6 +146,51 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
         open={addOpen}
         onClose={() => setAddOpen(false)}
       />
+
+      {/* Confirm delete collection */}
+      <AlertDialog open={confirmDeleteCollection} onOpenChange={setConfirmDeleteCollection}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">Delete collection?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              "{collection.name}" and all its requests will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="text-xs h-8 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={handleDeleteCollection}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirm delete request */}
+      <AlertDialog
+        open={confirmDeleteReqId !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteReqId(null)}
+      >
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">Delete request?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              "{confirmReq?.name}" will be permanently deleted.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="text-xs h-8 bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => confirmReq && handleDeleteRequest(confirmReq)}
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
