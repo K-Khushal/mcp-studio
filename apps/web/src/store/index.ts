@@ -5,8 +5,8 @@ import type {
   MCPPrompt,
   MCPConfig,
   ConnectionStatus,
-  HistoryEntry,
   Collection,
+  SavedRequest,
   Environment,
   ServerMessage,
   ConnectionConfig,
@@ -47,6 +47,7 @@ interface AppState {
   selectedTool: MCPTool | null;
   selectedPrompt: MCPPrompt | null;
   toolSearch: string;
+  pendingParams: Record<string, unknown> | null;
 
   // Response
   response: ResponseState;
@@ -54,10 +55,6 @@ interface AppState {
   // Logs
   logs: LogEntry[];
   logIdCounter: number;
-
-  // History
-  history: HistoryEntry[];
-  diffSelection: [string, string] | null;
 
   // Collections
   collections: Collection[];
@@ -75,11 +72,10 @@ interface AppState {
   errorCount: number;
 
   // UI
-  activeView: "studio" | "collections" | "history" | "logs" | "settings";
+  activeView: "studio" | "collections" | "logs" | "settings";
   isLogsCollapsed: boolean;
   isDarkMode: boolean;
 
-  // Toasts (managed externally via Radix, but tracked here)
   toasts: Array<{ id: string; title: string; description?: string; variant?: "destructive" }>;
 }
 
@@ -99,21 +95,27 @@ interface AppActions {
   invokeTool: (tool: string, params: Record<string, unknown>) => Promise<void>;
   invokePrompt: (prompt: string, args: Record<string, string>) => Promise<void>;
 
+  // Load saved request into invoke panel
+  loadSavedRequest: (request: SavedRequest) => void;
+  clearPendingParams: () => void;
+
   // Logs
   clearLogs: () => void;
 
-  // History
-  setDiffSelection: (ids: [string, string] | null) => void;
-  loadHistory: () => Promise<void>;
-
   // Collections
   loadCollections: () => Promise<void>;
-  saveCollection: (collections: Collection[]) => Promise<void>;
+  createCollection: (name: string) => Promise<void>;
+  renameCollection: (id: string, name: string) => Promise<void>;
+  deleteCollection: (id: string) => Promise<void>;
+  addRequest: (collectionId: string, data: Omit<SavedRequest, "id" | "createdAt" | "updatedAt">) => Promise<void>;
+  deleteRequest: (collectionId: string, reqId: string) => Promise<void>;
 
   // Environments
   loadEnvironments: () => Promise<void>;
-  saveEnvironments: (envs: Environment[]) => Promise<void>;
-  setActiveEnvironment: (id: string) => void;
+  createEnvironment: (name: string) => Promise<void>;
+  updateEnvironment: (id: string, partial: Partial<Pick<Environment, "name" | "variables" | "isActive">>) => Promise<void>;
+  deleteEnvironment: (id: string) => Promise<void>;
+  setActiveEnvironment: (id: string) => Promise<void>;
 
   // Configuration
   setConfig: (partial: Partial<MCPConfig>) => void;
@@ -144,6 +146,7 @@ export const useStore = create<AppState & AppActions>()(
       selectedTool: null,
       selectedPrompt: null,
       toolSearch: "",
+      pendingParams: null,
       response: {
         requestId: null,
         chunks: [],
@@ -155,8 +158,6 @@ export const useStore = create<AppState & AppActions>()(
       },
       logs: [],
       logIdCounter: 0,
-      history: [],
-      diffSelection: null,
       collections: [],
       environments: [],
       config: {
@@ -185,11 +186,11 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       // ---------- tools ----------
-      selectTool: (tool) => set({ selectedTool: tool, selectedPrompt: null }),
+      selectTool: (tool) => set({ selectedTool: tool, selectedPrompt: null, pendingParams: null }),
       setToolSearch: (q) => set({ toolSearch: q }),
 
       // ---------- prompts ----------
-      selectPrompt: (prompt) => set({ selectedPrompt: prompt, selectedTool: null }),
+      selectPrompt: (prompt) => set({ selectedPrompt: prompt, selectedTool: null, pendingParams: null }),
 
       // ---------- invocation ----------
       invokeTool: async (tool, params) => {
@@ -211,16 +212,21 @@ export const useStore = create<AppState & AppActions>()(
         await transport.invokePrompt(prompt, args);
       },
 
+      // ---------- saved request loading ----------
+      loadSavedRequest: (request) => {
+        const matchedTool = get().tools.find((t) => t.name === request.tool) ?? null;
+        set({
+          selectedTool: matchedTool,
+          selectedPrompt: null,
+          pendingParams: request.params,
+          activeView: "studio",
+        });
+      },
+
+      clearPendingParams: () => set({ pendingParams: null }),
+
       // ---------- logs ----------
       clearLogs: () => set({ logs: [], logIdCounter: 0 }),
-
-      // ---------- history ----------
-      setDiffSelection: (ids) => set({ diffSelection: ids }),
-      loadHistory: async () => {
-        const res = await fetch("/api/history");
-        const history = (await res.json()) as HistoryEntry[];
-        set({ history });
-      },
 
       // ---------- collections ----------
       loadCollections: async () => {
@@ -228,13 +234,60 @@ export const useStore = create<AppState & AppActions>()(
         const collections = (await res.json()) as Collection[];
         set({ collections });
       },
-      saveCollection: async (collections) => {
-        await fetch("/api/collections", {
+
+      createCollection: async (name) => {
+        const res = await fetch("/api/collections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(collections),
+          body: JSON.stringify({ name }),
         });
-        set({ collections });
+        const collection = (await res.json()) as Collection;
+        set((s) => ({ collections: [...s.collections, collection] }));
+      },
+
+      renameCollection: async (id, name) => {
+        await fetch(`/api/collections/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        set((s) => ({
+          collections: s.collections.map((c) =>
+            c.id === id ? { ...c, name, updatedAt: Date.now() } : c
+          ),
+        }));
+      },
+
+      deleteCollection: async (id) => {
+        await fetch(`/api/collections/${id}`, { method: "DELETE" });
+        set((s) => ({ collections: s.collections.filter((c) => c.id !== id) }));
+      },
+
+      addRequest: async (collectionId, data) => {
+        const res = await fetch(`/api/collections/${collectionId}/requests`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+        const request = (await res.json()) as SavedRequest;
+        set((s) => ({
+          collections: s.collections.map((c) =>
+            c.id === collectionId
+              ? { ...c, requests: [...c.requests, request] }
+              : c
+          ),
+        }));
+      },
+
+      deleteRequest: async (collectionId, reqId) => {
+        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, { method: "DELETE" });
+        set((s) => ({
+          collections: s.collections.map((c) =>
+            c.id === collectionId
+              ? { ...c, requests: c.requests.filter((r) => r.id !== reqId) }
+              : c
+          ),
+        }));
       },
 
       // ---------- environments ----------
@@ -246,18 +299,50 @@ export const useStore = create<AppState & AppActions>()(
           activeEnvironmentId: environments.find((e) => e.isActive)?.id ?? null,
         });
       },
-      saveEnvironments: async (envs) => {
-        await fetch("/api/environments", {
+
+      createEnvironment: async (name) => {
+        const res = await fetch("/api/environments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(envs),
+          body: JSON.stringify({ name }),
         });
-        set({ environments: envs });
+        const env = (await res.json()) as Environment;
+        set((s) => ({ environments: [...s.environments, env] }));
       },
-      setActiveEnvironment: (id) => {
-        const envs = get().environments.map((e) => ({ ...e, isActive: e.id === id }));
-        get().saveEnvironments(envs).catch(console.error);
-        set({ activeEnvironmentId: id });
+
+      updateEnvironment: async (id, partial) => {
+        await fetch(`/api/environments/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(partial),
+        });
+        set((s) => ({
+          environments: s.environments.map((e) =>
+            e.id === id ? { ...e, ...partial } : e
+          ),
+        }));
+      },
+
+      deleteEnvironment: async (id) => {
+        await fetch(`/api/environments/${id}`, { method: "DELETE" });
+        set((s) => ({ environments: s.environments.filter((e) => e.id !== id) }));
+      },
+
+      setActiveEnvironment: async (id) => {
+        const envs = get().environments;
+        for (const env of envs) {
+          if (env.isActive !== (env.id === id)) {
+            await fetch(`/api/environments/${env.id}`, {
+              method: "PATCH",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ isActive: env.id === id }),
+            });
+          }
+        }
+        set((s) => ({
+          activeEnvironmentId: id,
+          environments: s.environments.map((e) => ({ ...e, isActive: e.id === id })),
+        }));
       },
 
       // ---------- configuration ----------
@@ -278,14 +363,13 @@ export const useStore = create<AppState & AppActions>()(
         })),
       removeToast: (id) =>
         set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
-
     }),
     { name: "mcp-studio" }
   )
 );
 
 // ---------------------------------------------------------------------------
-// Module-level server message handler (avoids putting it inside the store type)
+// Module-level server message handler
 // ---------------------------------------------------------------------------
 
 function handleServerMessage(msg: ServerMessage): void {
@@ -330,7 +414,6 @@ function handleServerMessage(msg: ServerMessage): void {
       useStore.setState((s) => ({
         response: { ...s.response, result: msg.data, isStreaming: false, completedAt: Date.now() },
       }));
-      store.loadHistory().catch(console.error);
       break;
 
     case "prompt_result":

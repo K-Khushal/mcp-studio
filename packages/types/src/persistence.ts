@@ -6,6 +6,7 @@ import type { ConnectionConfig } from "./transport.js";
 
 export interface SavedRequest {
   id: string;
+  collectionId?: string;
   name: string;
   tool: string;
   params: Record<string, unknown>;
@@ -20,21 +21,6 @@ export interface Collection {
   requests: SavedRequest[];
   createdAt: number;
   updatedAt: number;
-}
-
-// ---------------------------------------------------------------------------
-// History
-// ---------------------------------------------------------------------------
-
-export interface HistoryEntry {
-  id: string;
-  tool: string;
-  params: Record<string, unknown>;
-  result: unknown;
-  error?: string;
-  duration: number; // ms
-  timestamp: number;
-  connectionConfig?: ConnectionConfig;
 }
 
 // ---------------------------------------------------------------------------

@@ -1,12 +1,8 @@
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { SessionManager } from "./session/manager.js";
-import {
-  readCollections,
-  writeCollections,
-  readHistory,
-  readEnvironments,
-  writeEnvironments,
-} from "./persistence/manager.js";
+import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
+import { createRequest, deleteRequest } from "./db/queries/requests.js";
+import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
 const CORS_ORIGIN = process.env["CORS_ORIGIN"] ?? "http://localhost:5173";
@@ -16,34 +12,87 @@ console.log(`[mcp-studio/server] Starting on ws://localhost:${PORT}`);
 const server = Bun.serve<{ session: SessionManager | null }>({
   port: PORT,
 
-  fetch(req, server) {
+  async fetch(req, server) {
     const url = new URL(req.url);
 
+    if (req.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders() });
+    }
+
     // ---------------------------------------------------------------------------
-    // HTTP REST endpoints for persistence + environments
+    // Health
     // ---------------------------------------------------------------------------
     if (req.method === "GET" && url.pathname === "/health") {
       return json({ status: "ok" });
     }
 
+    // ---------------------------------------------------------------------------
+    // Collections
+    // ---------------------------------------------------------------------------
     if (req.method === "GET" && url.pathname === "/collections") {
-      return readCollections().then(json);
+      return json(await getAllCollections());
     }
 
     if (req.method === "POST" && url.pathname === "/collections") {
-      return req.json().then((body) => writeCollections(body as Parameters<typeof writeCollections>[0]).then(() => json({ ok: true })));
+      const { name } = (await req.json()) as { name: string };
+      return json(await createCollection(name), 201);
     }
 
-    if (req.method === "GET" && url.pathname === "/history") {
-      return readHistory().then(json);
+    const collectionMatch = url.pathname.match(/^\/collections\/([^/]+)$/);
+    if (collectionMatch) {
+      const id = collectionMatch[1]!;
+      if (req.method === "PATCH") {
+        const { name } = (await req.json()) as { name: string };
+        await updateCollection(id, name);
+        return json({ ok: true });
+      }
+      if (req.method === "DELETE") {
+        await deleteCollection(id);
+        return json({ ok: true });
+      }
     }
 
+    // ---------------------------------------------------------------------------
+    // Requests
+    // ---------------------------------------------------------------------------
+    const requestsMatch = url.pathname.match(/^\/collections\/([^/]+)\/requests$/);
+    if (requestsMatch && req.method === "POST") {
+      const collectionId = requestsMatch[1]!;
+      const body = (await req.json()) as Parameters<typeof createRequest>[1];
+      return json(await createRequest(collectionId, body), 201);
+    }
+
+    const requestMatch = url.pathname.match(/^\/collections\/([^/]+)\/requests\/([^/]+)$/);
+    if (requestMatch && req.method === "DELETE") {
+      const reqId = requestMatch[2]!;
+      await deleteRequest(reqId);
+      return json({ ok: true });
+    }
+
+    // ---------------------------------------------------------------------------
+    // Environments
+    // ---------------------------------------------------------------------------
     if (req.method === "GET" && url.pathname === "/environments") {
-      return readEnvironments().then(json);
+      return json(await getAllEnvironments());
     }
 
     if (req.method === "POST" && url.pathname === "/environments") {
-      return req.json().then((body) => writeEnvironments(body as Parameters<typeof writeEnvironments>[0]).then(() => json({ ok: true })));
+      const { name } = (await req.json()) as { name: string };
+      return json(await createEnvironment(name), 201);
+    }
+
+    const envMatch = url.pathname.match(/^\/environments\/([^/]+)$/);
+    if (envMatch) {
+      const id = envMatch[1]!;
+      if (req.method === "PATCH") {
+        const body = (await req.json()) as Parameters<typeof updateEnvironment>[1];
+        await updateEnvironment(id, body);
+        return json({ ok: true });
+      }
+      if (req.method === "DELETE") {
+        await deleteEnvironment(id);
+        return json({ ok: true });
+      }
     }
 
     // ---------------------------------------------------------------------------
@@ -77,9 +126,7 @@ const server = Bun.serve<{ session: SessionManager | null }>({
         return;
       }
 
-      // Sync active environment before every message
-      const envs = await readEnvironments();
-      const activeEnv = envs.find((e) => e.isActive);
+      const activeEnv = await getActiveEnvironment();
       if (activeEnv) ws.data.session.setActiveEnv(activeEnv.variables);
 
       await ws.data.session.handle(msg);
@@ -92,12 +139,20 @@ const server = Bun.serve<{ session: SessionManager | null }>({
   },
 });
 
+function corsHeaders(): Record<string, string> {
+  return {
+    "Access-Control-Allow-Origin": CORS_ORIGIN,
+    "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type",
+  };
+}
+
 function json(data: unknown, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
     headers: {
       "Content-Type": "application/json",
-      "Access-Control-Allow-Origin": CORS_ORIGIN,
+      ...corsHeaders(),
     },
   });
 }

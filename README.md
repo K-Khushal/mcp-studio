@@ -55,6 +55,9 @@ cd apps/web && bun dev
 # Or both via turbo (Start everything)
 bun dev
 
+# View db
+cd apps/server && bun drizzle-kit studio
+
 # Or individually
 bun --filter @mcp-studio/server dev   # backend  → ws://localhost:3000
 bun --filter @mcp-studio/web dev      # frontend → http://localhost:5173

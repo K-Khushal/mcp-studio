@@ -126,7 +126,7 @@ export default function EnvironmentPannel() {
             onChange={e => setNewValue(e.target.value)}
             className="h-8 text-xs font-mono bg-muted border-border flex-1"
           />
-          <Button size="sm" variant="outline" onClick={handleAdd} className="h-8 text-xs gap-1 rounded-md">
+          <Button size="sm" variant="outline" onClick={handleAdd} className="h-8 text-xs gap-1">
             <Plus size={12} /> Add
           </Button>
         </div>

@@ -6,14 +6,11 @@ import { CollectionsView } from "@/views/collections-view";
 import { StudioView } from "@/views/studio-view";
 
 export default function Home() {
-  // const { activeView, loadHistory, loadCollections, loadEnvironments } = useStore();
+  const { loadCollections, loadEnvironments } = useStore();
 
-  // useEffect(() => {
-  //   // Hydrate persistent data on mount
-  //   Promise.all([loadHistory(), loadCollections(), loadEnvironments()]).catch(
-  //     console.error
-  //   );
-  // }, [loadCollections, loadEnvironments, loadHistory]);
+  useEffect(() => {
+    Promise.all([loadCollections(), loadEnvironments()]).catch(console.error);
+  }, []);
 
     return (
       <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">

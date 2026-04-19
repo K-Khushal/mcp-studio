@@ -6,7 +6,6 @@ import type {
   ConnectionStatus,
   ConnectionConfig,
 } from "@mcp-studio/types";
-import { appendHistory } from "../persistence/manager.js";
 import { interpolateObject } from "../env/interpolate.js";
 import { nanoid } from "../utils/nanoid.js";
 
@@ -108,34 +107,14 @@ export class SessionManager {
 
     const requestId = nanoid();
     const { result: params } = interpolateObject(rawParams, this.activeEnv);
-    const startMs = Date.now();
 
     try {
       const result = await this.client.callTool(tool, params, requestId);
 
       this.send({ type: "result", requestId, data: result });
-
-      await appendHistory({
-        id: requestId,
-        tool,
-        params,
-        result,
-        duration: Date.now() - startMs,
-        timestamp: Date.now(),
-      });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       this.send({ type: "error", requestId, message, code: "TOOL_ERROR" });
-
-      await appendHistory({
-        id: requestId,
-        tool,
-        params,
-        result: null,
-        error: message,
-        duration: Date.now() - startMs,
-        timestamp: Date.now(),
-      });
     }
   }
 
@@ -198,7 +177,7 @@ export class SessionManager {
         this.activeEnv
       );
       return {
-        transport: "sse",
+        transport: "http",
         config: { ...msg.config, headers: headers as Record<string, string> },
       };
     }

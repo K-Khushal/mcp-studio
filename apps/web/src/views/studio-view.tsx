@@ -1,11 +1,10 @@
-import { ConnectionPanel } from "@/components/connection/connection-pannel";
+import { ConnectionPanel } from "@/components/connection/connection-panel";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
-import { PromptPanel } from "@/components/prompts/prompt-pannel";
-import ToolPannel from "@/components/tools/tool-pannel";
-
+import { PromptPanel } from "@/components/prompts/prompt-panel";
+import ToolPannel from "@/components/tools/tool-panel";
 /**
  * StudioView — main workspace.
  * Layout: [ConnectionPanel | ToolExplorer] | [ResponseViewer]

@@ -1,7 +1,6 @@
 import {
   Zap,
   BookOpen,
-  History,
   ScrollText,
   Settings,
 } from "lucide-react";
@@ -14,7 +13,6 @@ type View = AppState["activeView"];
 const NAV_ITEMS: Array<{ view: View; icon: React.ElementType; label: string }> = [
   { view: "studio", icon: Zap, label: "Studio" },
   { view: "collections", icon: BookOpen, label: "Collections" },
-  { view: "history", icon: History, label: "History" },
   { view: "logs", icon: ScrollText, label: "Logs" },
   { view: "settings", icon: Settings, label: "Settings" },
 ];

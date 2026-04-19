@@ -15,6 +15,11 @@ bun --filter @mcp-studio/server dev    # bun --watch src/index.ts
 bun --filter @mcp-studio/mcp-client test
 
 cd packages/mcp-client && bun vitest run src/__tests__/stdio-client.test.ts
+
+# DB (run from apps/server)
+bun db:generate   # generate migration after schema change
+bun db:migrate    # apply migrations manually
+bun drizzle-kit studio  # visual DB browser at https://local.drizzle.studio
 ```
 
 Ports: frontend `5173`, backend WS `ws://localhost:3000/ws`, REST `localhost:3000`.
@@ -44,7 +49,14 @@ Browser → WebSocketTransport → Bun WS server
 `requestId` ties `chunk`/`result`/`error` back to originating `invoke`.
 
 ### Persistence
-`~/.mcp-studio/` — plain JSON, no DB. `apps/server/src/persistence/manager.ts`. REST: `/collections`, `/history`, `/environments`. Frontend proxies via Vite → `localhost:3000`.
+SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `requests`, `environments`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely.
+
+REST (granular CRUD, no bulk replace):
+- `GET/POST /collections`, `PATCH/DELETE /collections/:id`
+- `POST /collections/:id/requests`, `DELETE /collections/:id/requests/:reqId`
+- `GET/POST /environments`, `PATCH/DELETE /environments/:id`
+
+Frontend proxies via Vite → `localhost:3000`.
 
 ### Env interpolation
 `{{VAR_NAME}}` → `apps/server/src/env/interpolate.ts`. Runs before invoke + connect. `interpolateObject()` recurses into nested objects/arrays.
@@ -52,7 +64,10 @@ Browser → WebSocketTransport → Bun WS server
 ### Frontend structure
 Views: `apps/web/src/views/`, switched by `activeView` in store.  
 Shell: `src/components/shell/` (TopNav, IconSidebar, StatusBar).  
-Features: `src/components/{connection,tools,prompts,response,logs,collections,history,environments,shared}/`
+Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,shared}/`  
+`activeView` values: `studio | collections | logs | settings` (history removed).  
+Collections CRUD in `CollectionsView`; clicking a saved request calls `loadSavedRequest()` → sets `selectedTool` + `pendingParams` in store → ToolPanel pre-fills.  
+ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`

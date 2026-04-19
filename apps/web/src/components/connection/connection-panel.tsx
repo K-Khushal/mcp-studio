@@ -1,7 +1,7 @@
 import { cn } from '@/lib/utils';
 import { useStore } from "@/store";
-import EnvironmentPannel from '../environments/environment-pannel';
-import { ConfigurationPanel } from '../configuration/configuration-pannel';
+import EnvironmentPannel from '../environments/environment-panel';
+import { ConfigurationPanel } from '../configuration/configuration-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { useState } from 'react';
