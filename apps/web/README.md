@@ -37,6 +37,7 @@ src/
 │   ├── prompts/
 │   │   └── prompt-panel.tsx       # Prompt textarea + send button
 │   ├── collections/
+│   │   ├── collections-sidebar.tsx # shadcn composable Sidebar for collections/search/create
 │   │   ├── collection-row.tsx     # Collapsible collection with rename/delete + request items
 │   │   └── add-request-dialog.tsx # Modal to create a saved request
 │   ├── environments/

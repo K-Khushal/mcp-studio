@@ -16,6 +16,10 @@ bun --filter @mcp-studio/mcp-client test
 
 cd packages/mcp-client && bun vitest run src/__tests__/stdio-client.test.ts
 
+# Tests
+cd apps/server && STUDIO_DB_PATH=:memory: bun test src/__tests__   # server DB/query tests (bun:test)
+cd apps/web && bun vitest run src/__tests__                         # web store tests (vitest + jsdom)
+
 # DB (run from apps/server)
 bun db:generate   # generate migration after schema change
 bun db:migrate    # apply migrations manually
@@ -49,7 +53,7 @@ Browser → WebSocketTransport → Bun WS server
 `requestId` ties `chunk`/`result`/`error` back to originating `invoke`.
 
 ### Persistence
-SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `requests`, `environments`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely.
+SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `requests`, `environments`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `SavedRequest` has no `tool`/`params` fields — tools fetched live from MCP after connect (dropped in migration `0001`).
 
 REST (granular CRUD, no bulk replace):
 - `GET/POST /collections`, `PATCH/DELETE /collections/:id`
@@ -66,8 +70,9 @@ Views: `apps/web/src/views/`, switched by `activeView` in store.
 Shell: `src/components/shell/` (TopNav, IconSidebar, StatusBar).  
 Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,shared}/`  
 `activeView` values: `studio | collections | logs | settings` (history removed).  
-Collections CRUD in `CollectionsView`; clicking a saved request calls `loadSavedRequest()` → sets `selectedTool` + `pendingParams` in store → ToolPanel pre-fills.  
-ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).
+Collections CRUD in `CollectionsView`; clicking a saved request calls `loadSavedRequest()` → sets `selectedRequestId`, `transport`, `connectionUrl`, `selectedTool`, `pendingParams` → ToolPanel pre-fills. Home shows blank state when `selectedRequestId === null`.  
+ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
+`MCPConfig` persisted to `localStorage` (key: `mcp-studio-config`); `setConfig` writes atomically to store + localStorage. Environments are global (not per-collection/request).
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`
@@ -86,3 +91,5 @@ Update after any session with: new package/route/transport, schema change, arch 
 - **`getServerVersion()` missing `protocolVersion`** — SDK doesn't expose it. Hardcoded `"2024-11-05"` in both clients.
 - **`cwd` must be spread conditionally** — `StdioClientTransport` uses `exactOptionalPropertyTypes` internally: `...(cwd ? { cwd } : {})`.
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
+- **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
+- **AppState includes `selectedRequestId`, `transport`, `connectionUrl`** — moved from local component state to store so connection panel and home page stay in sync.
