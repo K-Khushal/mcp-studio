@@ -53,7 +53,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
               if (e.key === 'Enter') commitRename();
               if (e.key === 'Escape') { setRenameValue(collection.name); setIsRenaming(false); }
             }}
-            className="flex-1 min-w-0 text-xs bg-muted border border-border rounded px-1 py-0.5 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            className="flex-1 min-w-0 text-xs bg-muted border border-border rounded px-1 py-0.5 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
           />
         ) : (
           <span

@@ -103,7 +103,7 @@ function SchemaForm({ schema, values, onChange }: SchemaFormProps) {
               <select
                 value={value}
                 onChange={(e) => onChange(key, e.target.value)}
-                className="h-8 rounded-md border border-input bg-muted px-2 text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                className="h-8 rounded-md border border-input bg-muted px-2 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
               >
                 <option value="true">true</option>
                 <option value="false">false</option>

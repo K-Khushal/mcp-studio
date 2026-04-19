@@ -59,7 +59,7 @@ export function CollectionsView() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
-            className="w-full bg-muted border-none rounded-md pl-6 pr-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+            className="w-full bg-muted border-none rounded-md pl-6 pr-2 py-1.5 text-xs text-foreground placeholder:text-muted-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
           />
         </div>
       </div>
@@ -77,7 +77,7 @@ export function CollectionsView() {
                 if (e.key === 'Escape') { setNewName(''); setIsCreating(false); }
               }}
               placeholder="Collection name"
-              className="w-full text-xs bg-muted border border-border rounded px-2 py-1 text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full text-xs bg-muted border border-border rounded px-2 py-1 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
             />
           </div>
         )}
