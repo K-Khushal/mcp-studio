@@ -6,7 +6,7 @@ import { useStore } from '@/store';
 import { CollectionRow } from '@/components/collections/collection-row';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Sidebar, SidebarContent, SidebarHeader } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
 
 export function CollectionsSidebar() {
   const { collections, loadCollections, createCollection, loadSavedRequest, selectedRequestId } = useStore();
@@ -44,7 +44,10 @@ export function CollectionsSidebar() {
   );
 
   return (
-    <Sidebar collapsible="none" className="border-r border-sidebar-border">
+    <Sidebar
+      collapsible="offcanvas"
+      className="border-r border-sidebar-border md:top-11 md:h-[calc(100svh-2.75rem)]"
+    >
       <SidebarHeader className="border-b border-sidebar-border p-3">
         <div className="flex items-center justify-between">
           <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
@@ -109,6 +112,7 @@ export function CollectionsSidebar() {
           />
         ))}
       </SidebarContent>
+      <SidebarRail />
     </Sidebar>
   );
 }
