@@ -9,8 +9,6 @@ import { toast } from 'sonner';
 
 export function ConfigurationPanel() {
   const { config, setConfig } = useStore();
-  const [transport, setTransport] = useState<'stdio' | 'http'>('stdio');
-  const [ connectionUrl, setConnectionUrl ] = useState<string>('');
   const [open, setOpen] = useState(false);
 
   return (
@@ -28,7 +26,7 @@ export function ConfigurationPanel() {
 
         <div className="space-y-5">
           {/* Transport Settings */}
-          <Section title="Transport Settings">
+          {/*<Section title="Transport Settings">
             <div className="space-y-3">
               <div>
                 <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5 block">Transport Type</label>
@@ -61,7 +59,7 @@ export function ConfigurationPanel() {
                 />
               </div>
             </div>
-          </Section>
+          </Section>*/}
 
           {/* Execution Settings */}
           <Section title="Execution Settings">
