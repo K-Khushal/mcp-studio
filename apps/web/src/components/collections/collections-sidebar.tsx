@@ -55,7 +55,7 @@ export function CollectionsSidebar() {
           </span>
           <Button
             variant="ghost"
-            size="icon-xs"
+            size="icon-sm"
             onClick={() => setIsCreating(true)}
             title="New collection"
             aria-label="New collection"
@@ -99,7 +99,7 @@ export function CollectionsSidebar() {
           <p className="px-3 py-4 text-center text-xs text-muted-foreground">
             No collections yet.
             <br />
-            Click <FolderPlus size={11} className="mx-0.5 inline" /> to create one.
+            Click <FolderPlus size={14} className="mx-0.5 inline" /> to create one.
           </p>
         )}
 

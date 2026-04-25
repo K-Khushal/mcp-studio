@@ -1,6 +1,11 @@
 {
   "version": 1,
   "skills": {
+    "frontend-patterns": {
+      "source": "affaan-m/everything-claude-code",
+      "sourceType": "github",
+      "computedHash": "b06e633e783acfc364cf08cf44ee0fe48ece7e8c727457b188046e5ece25836f"
+    },
     "grill-me": {
       "source": "mattpocock/skills",
       "sourceType": "github",
