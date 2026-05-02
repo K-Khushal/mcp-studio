@@ -52,8 +52,10 @@ interface RequestWorkspaceState {
   selectedTool: MCPTool | null;
   selectedPrompt: MCPPrompt | null;
   toolSearch: string;
+  promptSearch: string;
   pendingParams: Record<string, unknown> | null;
   toolFormValues: Record<string, string>;
+  promptArgValues: Record<string, string>;
   response: ResponseState;
   timeline: TimelineStep[];
   logs: LogEntry[];
@@ -78,8 +80,10 @@ interface AppState {
   selectedTool: MCPTool | null;
   selectedPrompt: MCPPrompt | null;
   toolSearch: string;
+  promptSearch: string;
   pendingParams: Record<string, unknown> | null;
   toolFormValues: Record<string, string>;
+  promptArgValues: Record<string, string>;
 
   // Response
   response: ResponseState;
@@ -128,6 +132,8 @@ interface AppActions {
   selectTool: (tool: MCPTool | null) => void;
   setToolSearch: (q: string) => void;
   setToolFormValues: (values: Record<string, string>) => void;
+  setPromptSearch: (q: string) => void;
+  setPromptArgValues: (values: Record<string, string>) => void;
 
   // Prompts
   selectPrompt: (prompt: MCPPrompt | null) => void;
@@ -200,8 +206,10 @@ function createBlankWorkspace(): RequestWorkspaceState {
     selectedTool: null,
     selectedPrompt: null,
     toolSearch: "",
+    promptSearch: "",
     pendingParams: null,
     toolFormValues: {},
+    promptArgValues: {},
     response: { ...BLANK_RESPONSE },
     timeline: [],
     logs: [],
@@ -215,8 +223,10 @@ function cloneWorkspace(workspace: RequestWorkspaceState): RequestWorkspaceState
     selectedTool: workspace.selectedTool,
     selectedPrompt: workspace.selectedPrompt,
     toolSearch: workspace.toolSearch,
+    promptSearch: workspace.promptSearch,
     pendingParams: workspace.pendingParams ? { ...workspace.pendingParams } : null,
     toolFormValues: { ...workspace.toolFormValues },
+    promptArgValues: { ...workspace.promptArgValues },
     response: {
       chunks: [...workspace.response.chunks],
       result: workspace.response.result,
@@ -279,8 +289,10 @@ function requestWorkspacePatch(workspace: RequestWorkspaceState): Pick<
   | "selectedTool"
   | "selectedPrompt"
   | "toolSearch"
+  | "promptSearch"
   | "pendingParams"
   | "toolFormValues"
+  | "promptArgValues"
   | "response"
   | "timeline"
   | "logs"
@@ -292,8 +304,10 @@ function requestWorkspacePatch(workspace: RequestWorkspaceState): Pick<
     selectedTool: clone.selectedTool,
     selectedPrompt: clone.selectedPrompt,
     toolSearch: clone.toolSearch,
+    promptSearch: clone.promptSearch,
     pendingParams: clone.pendingParams,
     toolFormValues: clone.toolFormValues,
+    promptArgValues: clone.promptArgValues,
     response: clone.response,
     timeline: clone.timeline,
     logs: clone.logs,
@@ -307,8 +321,10 @@ function blankWorkspacePatch(): Pick<
   | "selectedTool"
   | "selectedPrompt"
   | "toolSearch"
+  | "promptSearch"
   | "pendingParams"
   | "toolFormValues"
+  | "promptArgValues"
   | "response"
   | "timeline"
   | "logs"
@@ -470,11 +486,15 @@ export const useStore = create<AppState & AppActions>()(
           selectedTool: tool,
           selectedPrompt: null,
           pendingParams: null,
+          toolFormValues: {},
+          promptArgValues: {},
           ...syncConnectedWorkspace(s, (workspace) => ({
             ...workspace,
             selectedTool: tool,
             selectedPrompt: null,
             pendingParams: null,
+            toolFormValues: {},
+            promptArgValues: {},
           })),
         })),
       setToolSearch: (q) =>
@@ -493,6 +513,22 @@ export const useStore = create<AppState & AppActions>()(
             toolFormValues: { ...values },
           })),
         })),
+      setPromptSearch: (q) =>
+        set((s) => ({
+          promptSearch: q,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            promptSearch: q,
+          })),
+        })),
+      setPromptArgValues: (values) =>
+        set((s) => ({
+          promptArgValues: { ...values },
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            promptArgValues: { ...values },
+          })),
+        })),
 
       // ---------- prompts ----------
       selectPrompt: (prompt) =>
@@ -500,11 +536,15 @@ export const useStore = create<AppState & AppActions>()(
           selectedPrompt: prompt,
           selectedTool: null,
           pendingParams: null,
+          promptArgValues: {},
+          toolFormValues: {},
           ...syncConnectedWorkspace(s, (workspace) => ({
             ...workspace,
             selectedPrompt: prompt,
             selectedTool: null,
             pendingParams: null,
+            promptArgValues: {},
+            toolFormValues: {},
           })),
         })),
 
@@ -660,7 +700,17 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       deleteCollection: async (id) => {
+        const wasConnected = (() => {
+          const state = get();
+          const deletedReqIds = new Set(
+            state.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
+          );
+          return deletedReqIds.has(state.connectedRequestId ?? "");
+        })();
         await fetch(`/api/collections/${id}`, { method: "DELETE" });
+        if (wasConnected) {
+          await get().disconnect();
+        }
         set((s) => {
           const deletedReqIds = new Set(
             s.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
@@ -735,7 +785,11 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       deleteRequest: async (collectionId, reqId) => {
+        const wasConnected = get().connectedRequestId === reqId;
         await fetch(`/api/collections/${collectionId}/requests/${reqId}`, { method: "DELETE" });
+        if (wasConnected) {
+          await get().disconnect();
+        }
         set((s) => {
           const deletingSelected = s.selectedRequestId === reqId;
           const deletingConnected = s.connectedRequestId === reqId;

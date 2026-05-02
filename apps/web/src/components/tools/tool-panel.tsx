@@ -27,7 +27,12 @@ export default function ToolPanel() {
     connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
 
   useEffect(() => {
-    if (!selectedTool) { setToolFormValues({}); return; }
+    if (!selectedTool) {
+      if (Object.keys(toolFormValues).length === 0) return;
+      setToolFormValues({});
+      return;
+    }
+    if (Object.keys(toolFormValues).length > 0) return;
     const defaults: Record<string, string> = {};
     for (const [key, prop] of Object.entries(getProperties(selectedTool.inputSchema))) {
       defaults[key] = defaultValue(prop);
@@ -39,7 +44,7 @@ export default function ToolPanel() {
     if (!pendingParams || !selectedTool) return;
     setToolFormValues({ ...toolFormValues, ...seedValues(selectedTool.inputSchema, pendingParams) });
     clearPendingParams();
-  }, [pendingParams, selectedTool?.name, toolFormValues, setToolFormValues, clearPendingParams]);
+  }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
     setToolFormValues({ ...toolFormValues, [key]: value });

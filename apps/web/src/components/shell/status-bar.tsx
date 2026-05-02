@@ -61,7 +61,22 @@ export function StatusBar() {
     return null;
   });
 
-  const isConnected = connectionStatus === 'connected';
+  const statusTone =
+    connectionStatus === 'connected'
+      ? 'bg-success'
+      : connectionStatus === 'connecting'
+        ? 'bg-warning'
+        : connectionStatus === 'error'
+          ? 'bg-destructive'
+          : 'bg-destructive';
+  const statusLabel =
+    connectionStatus === 'connected'
+      ? 'Connected'
+      : connectionStatus === 'connecting'
+        ? 'Connecting...'
+        : connectionStatus === 'error'
+          ? 'Error'
+          : 'Disconnected';
 
   return (
     <div className="flex items-center h-7 px-4 border-t border-border bg-background text-[11px] text-muted-foreground gap-4 shrink-0">
@@ -75,12 +90,12 @@ export function StatusBar() {
 
       {/* Connection status dot + label */}
       <div className="flex items-center gap-1.5">
-        <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', isConnected ? 'bg-success' : 'bg-destructive')} />
-        <span>{isConnected ? 'Connected' : 'Disconnected'}</span>
+        <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusTone)} />
+        <span>{statusLabel}</span>
       </div>
 
       {/* Uptime — isolated component, never re-renders StatusBar */}
-      {isConnected && connectedAt && <UptimeTimer connectedAt={connectedAt} />}
+      {connectionStatus === 'connected' && connectedAt && <UptimeTimer connectedAt={connectedAt} />}
 
       {/* Last request latency */}
       <div className="flex items-center gap-1">

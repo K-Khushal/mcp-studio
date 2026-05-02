@@ -69,8 +69,10 @@ beforeEach(() => {
     prompts: [],
     selectedTool: null,
     selectedPrompt: null,
+    promptSearch: "",
     pendingParams: null,
     toolFormValues: {},
+    promptArgValues: {},
     response: {
       chunks: [],
       result: null,
@@ -167,8 +169,10 @@ describe("loadSavedRequest", () => {
         selectedTool: { name: "tool-a" } as never,
         selectedPrompt: null,
         toolSearch: "find",
+        promptSearch: "",
         pendingParams: { id: 1 },
         toolFormValues: { query: "abc" },
+        promptArgValues: {},
         response: {
           chunks: [{ foo: "bar" }],
           result: { ok: true },
@@ -225,8 +229,10 @@ describe("loadSavedRequest", () => {
         selectedTool: { name: "tool-a" } as never,
         selectedPrompt: null,
         toolSearch: "find",
+        promptSearch: "",
         pendingParams: null,
         toolFormValues: { query: "abc" },
+        promptArgValues: {},
         response: {
           chunks: [],
           result: { ok: true },
@@ -270,5 +276,48 @@ describe("loadSavedRequest", () => {
     expect(state.toolFormValues).toEqual({ query: "abc" });
     expect(state.response.result).toEqual({ ok: true });
     expect(state.logs).toEqual(cachedLogs);
+  });
+});
+
+describe("delete connected request state", () => {
+  it("disconnects and clears live state when deleting the connected request", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ ok: true }) }));
+    useStore.setState({
+      selectedRequestId: "req-2",
+      connectedRequestId: "req-1",
+      connectionStatus: "connected",
+      connectedAt: 123,
+      connectedRequestCache: {
+        requestId: "req-1",
+        tools: [{ name: "tool-a" }] as never,
+        prompts: [],
+        selectedTool: null,
+        selectedPrompt: null,
+        toolSearch: "",
+        promptSearch: "",
+        pendingParams: null,
+        toolFormValues: {},
+        promptArgValues: {},
+        response: {
+          chunks: [],
+          result: null,
+          error: null,
+          isStreaming: false,
+          startedAt: null,
+          completedAt: null,
+        },
+        timeline: [],
+        logs: [],
+      },
+    });
+
+    await useStore.getState().deleteRequest("col-1", "req-1");
+
+    const state = useStore.getState();
+    expect(state.connectedRequestId).toBeNull();
+    expect(state.connectionStatus).toBe("disconnected");
+    expect(state.connectedAt).toBeNull();
+    expect(state.connectedRequestCache).toBeNull();
+    expect(state.selectedRequestId).toBe("req-2");
   });
 });

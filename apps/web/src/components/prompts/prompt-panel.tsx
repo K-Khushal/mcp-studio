@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import { Play, ChevronRight, Search } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
@@ -89,27 +89,22 @@ export function PromptPanel() {
     connectedRequestId,
     prompts,
     selectedPrompt,
+    promptSearch,
+    promptArgValues,
     response,
     selectPrompt,
+    setPromptSearch,
+    setPromptArgValues,
     invokePrompt,
   } = useStore();
-
-  const [search, setSearch] = useState('');
-  const [argValues, setArgValues] = useState<Record<string, string>>({});
-
-  // Reset args whenever selected prompt changes
-  useEffect(() => {
-    setArgValues({});
-  }, [selectedPrompt?.name]);
-
   const handleArgChange = useCallback((name: string, value: string) => {
-    setArgValues((prev) => ({ ...prev, [name]: value }));
-  }, []);
+    setPromptArgValues({ ...promptArgValues, [name]: value });
+  }, [promptArgValues, setPromptArgValues]);
 
   const handleRun = useCallback(() => {
     if (!selectedPrompt) return;
-    invokePrompt(selectedPrompt.name, argValues).catch(console.error);
-  }, [selectedPrompt, argValues, invokePrompt]);
+    invokePrompt(selectedPrompt.name, promptArgValues).catch(console.error);
+  }, [selectedPrompt, promptArgValues, invokePrompt]);
 
   const isSelectedRequestConnected =
     connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
@@ -135,8 +130,8 @@ export function PromptPanel() {
       <PromptList
         prompts={prompts}
         selectedPromptName={selectedPrompt?.name}
-        search={search}
-        onSearch={setSearch}
+        search={promptSearch}
+        onSearch={setPromptSearch}
         onSelect={selectPrompt}
       />
 
@@ -167,7 +162,7 @@ export function PromptPanel() {
                       )}
                     </label>
                     <Input
-                      value={argValues[arg.name] ?? ''}
+                      value={promptArgValues[arg.name] ?? ''}
                       onChange={(e) => handleArgChange(arg.name, e.target.value)}
                       placeholder={arg.description ?? arg.name}
                       className="h-8 text-xs"

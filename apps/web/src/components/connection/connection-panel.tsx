@@ -56,6 +56,7 @@ export function ConnectionPanel() {
 
   useEffect(() => {
     if (!selectedRequest || !selectedCollection) return;
+    if (!connectionUrl.trim() && !selectedRequest.connectionConfig) return;
 
     const connectionConfig: ConnectionConfig =
       transport === 'http'
