@@ -6,7 +6,7 @@ import {
   getAllCollections,
   updateCollection,
 } from "../db/queries/collections.js";
-import { createRequest, deleteRequest } from "../db/queries/requests.js";
+import { createRequest, deleteRequest, updateRequest } from "../db/queries/requests.js";
 
 beforeEach(clearDb);
 
@@ -66,6 +66,14 @@ describe("requests", () => {
     await deleteRequest(req.id);
     const cols = await getAllCollections();
     expect(cols[0]!.requests).toHaveLength(0);
+  });
+
+  it("renames a request", async () => {
+    const col = await createCollection("Col");
+    const req = await createRequest(col.id, { name: "Old Name" });
+    await updateRequest(req.id, "New Name");
+    const cols = await getAllCollections();
+    expect(cols[0]!.requests[0]!.name).toBe("New Name");
   });
 
   it("cascade-deletes requests when collection is deleted", async () => {

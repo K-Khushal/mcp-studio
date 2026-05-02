@@ -1,7 +1,7 @@
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { SessionManager } from "./session/manager.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
-import { createRequest, deleteRequest } from "./db/queries/requests.js";
+import { createRequest, deleteRequest, updateRequest } from "./db/queries/requests.js";
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
@@ -63,10 +63,17 @@ const server = Bun.serve<{ session: SessionManager | null }>({
     }
 
     const requestMatch = url.pathname.match(/^\/collections\/([^/]+)\/requests\/([^/]+)$/);
-    if (requestMatch && req.method === "DELETE") {
+    if (requestMatch) {
       const reqId = requestMatch[2]!;
-      await deleteRequest(reqId);
-      return json({ ok: true });
+      if (req.method === "PATCH") {
+        const { name } = (await req.json()) as { name: string };
+        await updateRequest(reqId, name);
+        return json({ ok: true });
+      }
+      if (req.method === "DELETE") {
+        await deleteRequest(reqId);
+        return json({ ok: true });
+      }
     }
 
     // ---------------------------------------------------------------------------

@@ -113,6 +113,7 @@ interface AppActions {
   renameCollection: (id: string, name: string) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
   addRequest: (collectionId: string, data: Omit<SavedRequest, "id" | "createdAt" | "updatedAt">) => Promise<void>;
+  renameRequest: (collectionId: string, reqId: string, name: string) => Promise<void>;
   deleteRequest: (collectionId: string, reqId: string) => Promise<void>;
 
   // Connection form
@@ -314,6 +315,26 @@ export const useStore = create<AppState & AppActions>()(
           collections: s.collections.map((c) =>
             c.id === collectionId
               ? { ...c, requests: [...c.requests, request] }
+              : c
+          ),
+        }));
+      },
+
+      renameRequest: async (collectionId, reqId, name) => {
+        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name }),
+        });
+        set((s) => ({
+          collections: s.collections.map((c) =>
+            c.id === collectionId
+              ? {
+                  ...c,
+                  requests: c.requests.map((r) =>
+                    r.id === reqId ? { ...r, name, updatedAt: Date.now() } : r
+                  ),
+                }
               : c
           ),
         }));

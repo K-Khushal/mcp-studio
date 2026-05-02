@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
@@ -11,6 +12,7 @@ export function ConnectionPanel() {
     connectionStatus,
     connect,
     disconnect,
+    renameRequest,
     transport,
     connectionUrl,
     setTransport,
@@ -18,6 +20,9 @@ export function ConnectionPanel() {
     selectedRequestId,
     collections,
   } = useStore();
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
+  const renameRef = useRef<HTMLInputElement>(null);
 
   const isConnected = connectionStatus === 'connected';
   const isConnecting = connectionStatus === 'connecting';
@@ -25,6 +30,37 @@ export function ConnectionPanel() {
   const selectedRequest = selectedRequestId
     ? collections.flatMap((c) => c.requests).find((r) => r.id === selectedRequestId)
     : null;
+  const selectedCollection = selectedRequestId
+    ? collections.find((collection) => collection.requests.some((request) => request.id === selectedRequestId))
+    : null;
+
+  useEffect(() => {
+    if (!isRenaming) {
+      setRenameValue(selectedRequest?.name ?? '');
+    }
+  }, [selectedRequest?.id, selectedRequest?.name, isRenaming]);
+
+  useEffect(() => {
+    if (isRenaming) {
+      renameRef.current?.focus();
+      renameRef.current?.select();
+    }
+  }, [isRenaming]);
+
+  const commitRename = async () => {
+    if (!selectedRequest || !selectedCollection) {
+      setIsRenaming(false);
+      return;
+    }
+
+    const trimmed = renameValue.trim();
+    if (trimmed && trimmed !== selectedRequest.name) {
+      await renameRequest(selectedCollection.id, selectedRequest.id, trimmed);
+    } else {
+      setRenameValue(selectedRequest.name);
+    }
+    setIsRenaming(false);
+  };
 
   const handleConnect = () => {
     if (isConnected) {
@@ -48,9 +84,29 @@ export function ConnectionPanel() {
     <div className="border-b border-border bg-card">
       {/* Header row: request name, status, env, config */}
       <div className="flex items-center gap-4 px-3 py-2 border-b border-border">
-        <span className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px]">
-          {selectedRequest?.name ?? 'untitled'}
-        </span>
+        {isRenaming && selectedRequest ? (
+          <input
+            ref={renameRef}
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            onBlur={commitRename}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void commitRename();
+              if (e.key === 'Escape') {
+                setRenameValue(selectedRequest.name);
+                setIsRenaming(false);
+              }
+            }}
+            className="h-6 max-w-[160px] rounded-md border border-input bg-background px-2 text-xs font-semibold font-mono text-foreground outline-hidden focus:ring-1 focus:ring-primary"
+          />
+        ) : (
+          <span
+            onDoubleClick={() => selectedRequest && setIsRenaming(true)}
+            className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px] cursor-text"
+          >
+            {selectedRequest?.name ?? 'untitled'}
+          </span>
+        )}
         <div className="flex items-center gap-1.5">
           <div className={cn(
             'w-2 h-2 rounded-full',

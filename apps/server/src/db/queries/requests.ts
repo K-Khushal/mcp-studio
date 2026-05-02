@@ -35,3 +35,10 @@ export async function createRequest(
 export async function deleteRequest(id: string): Promise<void> {
   await db.delete(requests).where(eq(requests.id, id));
 }
+
+export async function updateRequest(id: string, name: string): Promise<void> {
+  await db
+    .update(requests)
+    .set({ name, updatedAt: Date.now() })
+    .where(eq(requests.id, id));
+}
