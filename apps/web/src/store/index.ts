@@ -26,16 +26,12 @@ interface LogEntry {
 }
 
 interface ResponseState {
-  requestId: string | null;
-  status: number | null;
   chunks: unknown[];
   result: unknown | null;
   error: string | null;
   isStreaming: boolean;
   startedAt: number | null;
   completedAt: number | null;
-  headers: Record<string, string>;
-  body: any;
 }
 
 interface TimelineStep {
@@ -86,6 +82,7 @@ interface AppState {
   latency: number;
   requestCount: number;
   errorCount: number;
+  connectedAt: number | null;
 
   // UI
   activeView: "studio" | "collections" | "logs" | "settings";
@@ -150,6 +147,18 @@ interface AppActions {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function fmtTime(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
+// ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
 
@@ -168,14 +177,31 @@ export const useStore = create<AppState & AppActions>()(
       selectedPrompt: null,
       toolSearch: "",
       pendingParams: null,
-      response: null,
+      response: {
+        chunks: [],
+        result: null,
+        error: null,
+        isStreaming: false,
+        startedAt: null,
+        completedAt: null,
+      },
       timeline: [],
       logs: [],
       logIdCounter: 0,
       collections: [],
       selectedRequestId: null,
-      transport: "stdio",
-      connectionUrl: "",
+      transport: (() => {
+        try {
+          const raw = localStorage.getItem("mcp-studio-connection");
+          return (raw ? (JSON.parse(raw) as { transport?: string }).transport : null) ?? "stdio";
+        } catch { return "stdio"; }
+      })() as "stdio" | "http",
+      connectionUrl: (() => {
+        try {
+          const raw = localStorage.getItem("mcp-studio-connection");
+          return (raw ? (JSON.parse(raw) as { connectionUrl?: string }).connectionUrl : null) ?? "";
+        } catch { return ""; }
+      })(),
       environments: [],
       config: (() => {
         const defaults: MCPConfig = {
@@ -194,6 +220,10 @@ export const useStore = create<AppState & AppActions>()(
         }
       })(),
       activeEnvironmentId: null,
+      latency: 0,
+      requestCount: 0,
+      errorCount: 0,
+      connectedAt: null,
       activeView: "studio",
       isLogsCollapsed: false,
       isDarkMode: true,
@@ -201,7 +231,7 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- connection ----------
       connect: async (config) => {
-        set({ connectionStatus: "connecting", connectionConfig: config });
+        set({ connectionStatus: "connecting", connectionConfig: config, requestCount: 0, errorCount: 0, latency: 0, connectedAt: null });
         transport.onMessage(handleServerMessage);
         await transport.connect(config);
       },
@@ -219,20 +249,22 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- invocation ----------
       invokeTool: async (tool, params) => {
-        set({
+        const now = Date.now();
+        set((s) => ({
+          requestCount: s.requestCount + 1,
           response: {
-            requestId: null,
-            status: null,
             chunks: [],
             result: null,
             error: null,
             isStreaming: true,
-            startedAt: Date.now(),
+            startedAt: now,
             completedAt: null,
-            headers: {},
-            body: null,
           },
-        });
+          timeline: [
+            { label: 'Request sent', detail: `Tool: ${tool}`, timestamp: fmtTime(now), status: 'completed' },
+            { label: 'Awaiting response', detail: 'Waiting for server…', timestamp: fmtTime(now), status: 'active' },
+          ],
+        }));
         await transport.invoke(tool, params);
       },
 
@@ -254,14 +286,16 @@ export const useStore = create<AppState & AppActions>()(
         }
 
         const conn = request.connectionConfig;
-        let transport: "stdio" | "http" = "stdio";
-        let connectionUrl = "";
+        const urlUpdate: { transport?: "stdio" | "http"; connectionUrl?: string } = {};
         if (conn) {
-          transport = conn.transport === "http" ? "http" : "stdio";
-          connectionUrl =
+          urlUpdate.transport = conn.transport === "http" ? "http" : "stdio";
+          urlUpdate.connectionUrl =
             conn.transport === "http"
               ? conn.config.url
               : [conn.config.command, ...conn.config.args].join(" ");
+          try {
+            localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: urlUpdate.transport, connectionUrl: urlUpdate.connectionUrl }));
+          } catch {}
         }
         set({
           selectedTool: null,
@@ -269,8 +303,7 @@ export const useStore = create<AppState & AppActions>()(
           pendingParams: null,
           activeView: "studio",
           selectedRequestId: request.id,
-          transport,
-          connectionUrl,
+          ...urlUpdate,
         });
       },
 
@@ -433,8 +466,14 @@ export const useStore = create<AppState & AppActions>()(
       }),
 
       // ---------- connection form ----------
-      setTransport: (t) => set({ transport: t }),
-      setConnectionUrl: (url) => set({ connectionUrl: url }),
+      setTransport: (t) => {
+        try { localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: t, connectionUrl: get().connectionUrl })); } catch {}
+        set({ transport: t });
+      },
+      setConnectionUrl: (url) => {
+        try { localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: get().transport, connectionUrl: url })); } catch {}
+        set({ connectionUrl: url });
+      },
 
       // ---------- UI ----------
       setActiveView: (view) => set({ activeView: view }),
@@ -484,12 +523,16 @@ function handleServerMessage(msg: ServerMessage): void {
         tools: msg.tools,
         prompts: msg.prompts,
         serverInfo: msg.serverInfo,
+        connectedAt: Date.now(),
+        requestCount: 0,
+        errorCount: 0,
+        latency: 0,
       });
       addLog("INFO", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
       break;
 
     case "disconnected":
-      useStore.setState({ connectionStatus: "disconnected", tools: [], prompts: [] });
+      useStore.setState({ connectionStatus: "disconnected", tools: [], prompts: [], connectedAt: null });
       break;
 
     case "chunk":
@@ -498,11 +541,28 @@ function handleServerMessage(msg: ServerMessage): void {
       }));
       break;
 
-    case "result":
-      useStore.setState((s) => ({
-        response: { ...s.response, result: msg.data, isStreaming: false, completedAt: Date.now() },
-      }));
+    case "result": {
+      const completedAt = Date.now();
+      useStore.setState((s) => {
+        const elapsed = s.response.startedAt ? completedAt - s.response.startedAt : 0;
+        return {
+          latency: elapsed,
+          response: { ...s.response, result: msg.data, isStreaming: false, completedAt },
+          timeline: [
+            ...s.timeline.map((step) =>
+              step.status === 'active' ? { ...step, status: 'completed' as const } : step
+            ),
+            {
+              label: 'Result received',
+              detail: `Completed in ${elapsed}ms`,
+              timestamp: fmtTime(completedAt),
+              status: 'completed' as const,
+            },
+          ],
+        };
+      });
       break;
+    }
 
     case "prompt_result":
       useStore.setState((s) => ({
@@ -515,9 +575,26 @@ function handleServerMessage(msg: ServerMessage): void {
         useStore.setState({ connectionStatus: "error" });
         store.addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
       } else {
-        useStore.setState((s) => ({
-          response: { ...s.response, error: msg.message, isStreaming: false, completedAt: Date.now() },
-        }));
+        const errorAt = Date.now();
+        useStore.setState((s) => {
+          const elapsed = s.response.startedAt ? errorAt - s.response.startedAt : 0;
+          return {
+            errorCount: s.errorCount + 1,
+            latency: elapsed,
+            response: { ...s.response, error: msg.message, isStreaming: false, completedAt: errorAt },
+            timeline: [
+              ...s.timeline.map((step) =>
+                step.status === 'active' ? { ...step, status: 'completed' as const } : step
+              ),
+              {
+                label: 'Error',
+                detail: msg.message,
+                timestamp: fmtTime(errorAt),
+                status: 'completed' as const,
+              },
+            ],
+          };
+        });
       }
       addLog("ERROR", "protocol", msg.message);
       break;

@@ -30,12 +30,12 @@ export class SSEMCPClient implements MCPClientInterface {
 
     this.client = new Client({ name: "mcp-studio", version: "0.0.1" });
 
-    this.options.onLog?.("info", "protocol", `Connecting via SSE to ${this.config.url}`);
+    this.options.onLog?.("INFO", "protocol", `Connecting via SSE to ${this.config.url}`);
 
     await this.client.connect(this.transport);
     this._isConnected = true;
 
-    this.options.onLog?.("info", "protocol", "MCP initialize handshake complete");
+    this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
 
     const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
 
@@ -54,7 +54,7 @@ export class SSEMCPClient implements MCPClientInterface {
     if (!this.client) throw new Error("Not connected");
 
     const response = await this.client.listTools();
-    this.options.onLog?.("debug", "protocol", `tools/list → ${response.tools.length} tools`);
+    this.options.onLog?.("DEBUG", "protocol", `tools/list → ${response.tools.length} tools`);
 
     return response.tools.map((t) => ({
       name: t.name,
@@ -70,7 +70,7 @@ export class SSEMCPClient implements MCPClientInterface {
   ): Promise<unknown> {
     if (!this.client) throw new Error("Not connected");
 
-    this.options.onLog?.("info", "protocol", `tools/call → ${name} (requestId: ${requestId})`);
+    this.options.onLog?.("INFO", "protocol", `tools/call → ${name} (requestId: ${requestId})`);
 
     const result = await this.client.callTool({ name, arguments: params });
 
@@ -105,7 +105,7 @@ export class SSEMCPClient implements MCPClientInterface {
   ): Promise<MCPPromptMessage[]> {
     if (!this.client) throw new Error("Not connected");
 
-    this.options.onLog?.("info", "protocol", `prompts/get → ${name} (requestId: ${requestId})`);
+    this.options.onLog?.("INFO", "protocol", `prompts/get → ${name} (requestId: ${requestId})`);
 
     const result = await this.client.getPrompt({ name, arguments: args });
 
@@ -122,6 +122,6 @@ export class SSEMCPClient implements MCPClientInterface {
     }
     this.client = null;
     this._isConnected = false;
-    this.options.onLog?.("info", "protocol", "Disconnected");
+    this.options.onLog?.("INFO", "protocol", "Disconnected");
   }
 }

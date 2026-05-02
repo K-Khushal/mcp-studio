@@ -1,11 +1,9 @@
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Circle } from 'lucide-react';
-import { useState } from 'react';
 
 export function TimelinePanel() {
   const { timeline } = useStore();
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   if (timeline.length === 0) {
     return <div className="text-sm text-muted-foreground text-center py-8">No timeline data yet</div>;
@@ -27,16 +25,11 @@ export function TimelinePanel() {
             )}
           </div>
           <div className="pb-4 flex-1 min-w-0">
-            <button
-              onClick={() => setExpandedIdx(expandedIdx === i ? null : i)}
-              className="text-xs font-semibold text-foreground hover:text-primary transition-colors text-left"
-            >
+            <p className="text-xs font-semibold text-foreground">
               {step.label}
               <span className="ml-2 font-mono text-muted-foreground font-normal">{step.timestamp}</span>
-            </button>
-            {(expandedIdx === i || true) && (
-              <p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{step.detail}</p>
-            )}
+            </p>
+            <p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{step.detail}</p>
           </div>
         </div>
       ))}

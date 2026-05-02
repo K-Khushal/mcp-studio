@@ -10,9 +10,17 @@ const levelColors: Record<string, string> = {
   ERROR: "text-destructive",
 };
 
+function formatTimestamp(ts: number): string {
+  const d = new Date(ts);
+  const hh = String(d.getHours()).padStart(2, '0');
+  const mm = String(d.getMinutes()).padStart(2, '0');
+  const ss = String(d.getSeconds()).padStart(2, '0');
+  return `${hh}:${mm}:${ss}`;
+}
+
 export function LogsPanel() {
-  const { logs } = useStore();
-  const [logsOpen, setLogsOpen] = useState(false);
+  const { logs, isLogsCollapsed, toggleLogs } = useStore();
+  const logsOpen = !isLogsCollapsed;
   const [filter, setFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
@@ -30,7 +38,7 @@ export function LogsPanel() {
       )}
     >
       <button
-        onClick={() => setLogsOpen(!logsOpen)}
+        onClick={toggleLogs}
         className="w-full flex items-center justify-between px-4 h-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         <span>Console ({logs.length})</span>
@@ -78,7 +86,7 @@ export function LogsPanel() {
               onClick={() =>
                 navigator.clipboard.writeText(
                   filtered
-                    .map((l) => `[${l.timestamp}] ${l.level} ${l.message}`)
+                    .map((l) => `[${formatTimestamp(l.timestamp)}] ${l.level} ${l.message}`)
                     .join("\n"),
                 )
               }
@@ -92,12 +100,12 @@ export function LogsPanel() {
             {filtered.map((log, i) => (
               <div key={i} className="flex gap-2">
                 <span className="text-muted-foreground shrink-0">
-                  [{log.timestamp}]
+                  [{formatTimestamp(log.timestamp)}]
                 </span>
                 <span
                   className={cn(
                     "shrink-0 w-11 font-semibold",
-                    levelColors[log.level],
+                    levelColors[log.level] ?? "text-foreground",
                   )}
                 >
                   {log.level}

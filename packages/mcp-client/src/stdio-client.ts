@@ -32,16 +32,27 @@ export class StdioMCPClient implements MCPClientInterface {
       args: this.config.args,
       env: env as Record<string, string>,
       ...(this.config.cwd ? { cwd: this.config.cwd } : {}),
+      stderr: "pipe",
+    });
+
+    // Forward subprocess stderr lines to the UI before connect so startup
+    // messages (usage info, warnings) are visible to the user.
+    this.transport.stderr?.on("data", (chunk: Buffer) => {
+      const text = chunk.toString();
+      for (const line of text.split("\n")) {
+        const trimmed = line.trim();
+        if (trimmed) this.options.onLog?.("INFO", "subprocess", trimmed);
+      }
     });
 
     this.client = new Client({ name: "mcp-studio", version: "0.0.1" });
 
-    this.options.onLog?.("info", "protocol", "Connecting via STDIO transport…");
+    this.options.onLog?.("INFO", "protocol", "Connecting via STDIO transport…");
 
     await this.client.connect(this.transport);
     this._isConnected = true;
 
-    this.options.onLog?.("info", "protocol", "MCP initialize handshake complete");
+    this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
 
     const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
 
@@ -60,7 +71,7 @@ export class StdioMCPClient implements MCPClientInterface {
     if (!this.client) throw new Error("Not connected");
 
     const response = await this.client.listTools();
-    this.options.onLog?.("debug", "protocol", `tools/list → ${response.tools.length} tools`);
+    this.options.onLog?.("DEBUG", "protocol", `tools/list → ${response.tools.length} tools`);
 
     return response.tools.map((t) => ({
       name: t.name,
@@ -77,14 +88,14 @@ export class StdioMCPClient implements MCPClientInterface {
     if (!this.client) throw new Error("Not connected");
 
     this.options.onLog?.(
-      "info",
+      "INFO",
       "protocol",
       `tools/call → ${name} (requestId: ${requestId})`
     );
 
     const result = await this.client.callTool({ name, arguments: params });
 
-    this.options.onLog?.("info", "protocol", `tools/call ← ${name} complete`);
+    this.options.onLog?.("INFO", "protocol", `tools/call ← ${name} complete`);
 
     // Emit a single chunk then the final result
     this.options.onChunk?.(requestId, result);
@@ -98,7 +109,7 @@ export class StdioMCPClient implements MCPClientInterface {
     try {
       const response = await this.client.listPrompts();
       this.options.onLog?.(
-        "debug",
+        "DEBUG",
         "protocol",
         `prompts/list → ${response.prompts.length} prompts`
       );
@@ -126,7 +137,7 @@ export class StdioMCPClient implements MCPClientInterface {
     if (!this.client) throw new Error("Not connected");
 
     this.options.onLog?.(
-      "info",
+      "INFO",
       "protocol",
       `prompts/get → ${name} (requestId: ${requestId})`
     );
@@ -146,6 +157,6 @@ export class StdioMCPClient implements MCPClientInterface {
     }
     this.client = null;
     this._isConnected = false;
-    this.options.onLog?.("info", "protocol", "Disconnected");
+    this.options.onLog?.("INFO", "protocol", "Disconnected");
   }
 }

@@ -8,8 +8,8 @@ import type { ServerMessage } from "./messages.js";
 
 export interface StudioTransport {
   connect(config: ConnectionConfig): Promise<void>;
-  invoke(tool: string, params: Record<string, unknown>): Promise<string>; // returns requestId
-  invokePrompt(prompt: string, args: Record<string, string>): Promise<string>;
+  invoke(tool: string, params: Record<string, unknown>): Promise<void>;
+  invokePrompt(prompt: string, args: Record<string, string>): Promise<void>;
   disconnect(): Promise<void>;
   onMessage(handler: (msg: ServerMessage) => void): void;
   offMessage(handler: (msg: ServerMessage) => void): void;

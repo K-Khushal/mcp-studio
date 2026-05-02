@@ -9,7 +9,6 @@ const WS_URL = import.meta.env["VITE_WS_URL"] ?? "ws://localhost:3000/ws";
 export class WebSocketTransport implements StudioTransport {
   private ws: WebSocket | null = null;
   private handlers = new Set<(msg: ServerMessage) => void>();
-  private requestCounter = 0;
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
@@ -20,16 +19,12 @@ export class WebSocketTransport implements StudioTransport {
     this.send({ type: "connect", ...config });
   }
 
-  async invoke(tool: string, params: Record<string, unknown>): Promise<string> {
-    const requestId = `req_${++this.requestCounter}_${Date.now()}`;
+  async invoke(tool: string, params: Record<string, unknown>): Promise<void> {
     this.send({ type: "invoke", tool, params });
-    return requestId;
   }
 
-  async invokePrompt(prompt: string, args: Record<string, string>): Promise<string> {
-    const requestId = `req_${++this.requestCounter}_${Date.now()}`;
+  async invokePrompt(prompt: string, args: Record<string, string>): Promise<void> {
     this.send({ type: "invoke_prompt", prompt, args });
-    return requestId;
   }
 
   async disconnect(): Promise<void> {

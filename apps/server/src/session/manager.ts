@@ -68,14 +68,14 @@ export class SessionManager {
       this.client =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
-              onLog: (level, source, text) =>
-                this.send({ type: "log", level, source, text, timestamp: Date.now() }),
+              onLog: (level, source, message) =>
+                this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             })
           : new SSEMCPClient(config.config, {
-              onLog: (level, source, text) =>
-                this.send({ type: "log", level, source, text, timestamp: Date.now() }),
+              onLog: (level, source, message) =>
+                this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             });
@@ -92,7 +92,7 @@ export class SessionManager {
     } catch (err) {
       this.setStatus("error");
       this.send({
-        type: "error",
+        type: "ERROR",
         message: err instanceof Error ? err.message : String(err),
         code: "CONNECTION_FAILED",
       });
@@ -101,7 +101,7 @@ export class SessionManager {
 
   private async invoke(tool: string, rawParams: Record<string, unknown>): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
 
@@ -114,7 +114,7 @@ export class SessionManager {
       this.send({ type: "result", requestId, data: result });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.send({ type: "error", requestId, message, code: "TOOL_ERROR" });
+      this.send({ type: "ERROR", requestId, message, code: "TOOL_ERROR" });
     }
   }
 
@@ -123,7 +123,7 @@ export class SessionManager {
     args: Record<string, string>
   ): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
 
@@ -134,7 +134,7 @@ export class SessionManager {
       this.send({ type: "prompt_result", requestId, messages });
     } catch (err) {
       this.send({
-        type: "error",
+        type: "ERROR",
         requestId,
         message: err instanceof Error ? err.message : String(err),
         code: "PROMPT_ERROR",
