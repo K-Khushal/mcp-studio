@@ -249,6 +249,10 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- invocation ----------
       invokeTool: async (tool, params) => {
+        if (get().connectionStatus !== "connected") {
+          get().addToast({ title: "Not connected", description: "Connect to an MCP server first.", variant: "destructive" });
+          return;
+        }
         const now = Date.now();
         set((s) => ({
           requestCount: s.requestCount + 1,
@@ -269,6 +273,26 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       invokePrompt: async (prompt, args) => {
+        if (get().connectionStatus !== "connected") {
+          get().addToast({ title: "Not connected", description: "Connect to an MCP server first.", variant: "destructive" });
+          return;
+        }
+        const now = Date.now();
+        set((s) => ({
+          requestCount: s.requestCount + 1,
+          response: {
+            chunks: [],
+            result: null,
+            error: null,
+            isStreaming: true,
+            startedAt: now,
+            completedAt: null,
+          },
+          timeline: [
+            { label: 'Request sent', detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), status: 'completed' },
+            { label: 'Awaiting response', detail: 'Waiting for server…', timestamp: fmtTime(now), status: 'active' },
+          ],
+        }));
         await transport.invokePrompt(prompt, args);
       },
 
@@ -564,16 +588,33 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     }
 
-    case "prompt_result":
-      useStore.setState((s) => ({
-        response: { ...s.response, result: msg.messages, isStreaming: false, completedAt: Date.now() },
-      }));
+    case "prompt_result": {
+      const completedAt = Date.now();
+      useStore.setState((s) => {
+        const elapsed = s.response.startedAt ? completedAt - s.response.startedAt : 0;
+        return {
+          latency: elapsed,
+          response: { ...s.response, result: msg.messages, isStreaming: false, completedAt },
+          timeline: [
+            ...s.timeline.map((step) =>
+              step.status === 'active' ? { ...step, status: 'completed' as const } : step
+            ),
+            {
+              label: 'Result received',
+              detail: `Completed in ${elapsed}ms`,
+              timestamp: fmtTime(completedAt),
+              status: 'completed' as const,
+            },
+          ],
+        };
+      });
       break;
+    }
 
     case "ERROR":
       if (msg.code === "CONNECTION_FAILED") {
         useStore.setState({ connectionStatus: "error" });
-        store.addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
+        useStore.getState().addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
       } else {
         const errorAt = Date.now();
         useStore.setState((s) => {

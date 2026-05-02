@@ -1,6 +1,6 @@
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Inbox, Loader2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { TimelinePanel } from './timeline-pannel';
 
@@ -125,7 +125,7 @@ export function ResponsePanel() {
           </div>
         ) : isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2">
-            <Loader2 size={20} className="opacity-30" />
+            <Inbox size={20} className="opacity-30" />
             Send a request to see the response
           </div>
         ) : activeTab === 'pretty' ? (

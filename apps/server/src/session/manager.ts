@@ -55,6 +55,7 @@ export class SessionManager {
   }
 
   private async connect(msg: Extract<ClientMessage, { type: "connect" }>): Promise<void> {
+    if (this.status === "connecting") return;
     if (this.client?.isConnected) {
       await this.disconnect();
     }
@@ -91,6 +92,8 @@ export class SessionManager {
       });
     } catch (err) {
       this.setStatus("error");
+      try { await this.client?.disconnect(); } catch {}
+      this.client = null;
       this.send({
         type: "ERROR",
         message: err instanceof Error ? err.message : String(err),
@@ -143,18 +146,25 @@ export class SessionManager {
   }
 
   private async listTools(): Promise<void> {
-    if (!this.client?.isConnected) return;
+    if (!this.client?.isConnected) {
+      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      return;
+    }
     const tools = await this.client.listTools();
     this.send({ type: "tools_listed", tools });
   }
 
   private async listPrompts(): Promise<void> {
-    if (!this.client?.isConnected) return;
+    if (!this.client?.isConnected) {
+      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      return;
+    }
     const prompts = await this.client.listPrompts();
     this.send({ type: "prompts_listed", prompts });
   }
 
   async disconnect(): Promise<void> {
+    if (this.status === "disconnected") return;
     await this.client?.disconnect();
     this.client = null;
     this.setStatus("disconnected");

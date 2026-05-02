@@ -86,7 +86,7 @@ export function LogsPanel() {
               onClick={() =>
                 navigator.clipboard.writeText(
                   filtered
-                    .map((l) => `[${formatTimestamp(l.timestamp)}] ${l.level} ${l.message}`)
+                    .map((l) => `[${formatTimestamp(l.timestamp)}] ${l.level} [${l.source}] ${l.message}`)
                     .join("\n"),
                 )
               }
@@ -97,8 +97,8 @@ export function LogsPanel() {
             </button>
           </div>
           <div className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[11px] leading-5">
-            {filtered.map((log, i) => (
-              <div key={i} className="flex gap-2">
+            {filtered.map((log) => (
+              <div key={log.id} className="flex gap-2">
                 <span className="text-muted-foreground shrink-0">
                   [{formatTimestamp(log.timestamp)}]
                 </span>
@@ -109,6 +109,9 @@ export function LogsPanel() {
                   )}
                 >
                   {log.level}
+                </span>
+                <span className="shrink-0 text-muted-foreground w-14 text-[10px] leading-5 italic">
+                  {log.source}
                 </span>
                 <span className="text-foreground">{log.message}</span>
               </div>

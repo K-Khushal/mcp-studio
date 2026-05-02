@@ -1,6 +1,6 @@
 import { useStore } from '@/store/index';
 import { cn } from '@/lib/utils';
-import { Activity, AlertCircle, Clock, Timer, Wifi } from 'lucide-react';
+import { Activity, AlertCircle, Clock, Timer } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 function formatUptime(ms: number): string {
@@ -19,6 +19,7 @@ export function StatusBar() {
 
   useEffect(() => {
     if (!isConnected) return;
+    setNow(Date.now());
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, [isConnected]);

@@ -1,28 +1,25 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
-import type { StdioConfig, MCPTool, MCPPrompt, MCPPromptMessage } from "@mcp-studio/types";
-import type { MCPClientInterface, MCPClientOptions, ConnectedServerInfo } from "./types.js";
+import type { StdioConfig } from "@mcp-studio/types";
+import type { MCPClientOptions } from "./types.js";
+import { BaseMCPClient } from "./base-client.js";
 
 /**
  * MCP client over STDIO transport.
- * Spawns the MCP server process, handles initialize handshake,
- * tool listing, tool invocation, and prompt support.
+ * Spawns the MCP server process; all protocol logic lives in BaseMCPClient.
  */
-export class StdioMCPClient implements MCPClientInterface {
-  private client: Client | null = null;
+export class StdioMCPClient extends BaseMCPClient {
   private transport: StdioClientTransport | null = null;
-  private _isConnected = false;
+  private stderrHandler: ((chunk: Buffer) => void) | null = null;
 
   constructor(
     private readonly config: StdioConfig,
-    private readonly options: MCPClientOptions = {}
-  ) {}
-
-  get isConnected(): boolean {
-    return this._isConnected;
+    options: MCPClientOptions = {}
+  ) {
+    super(options);
   }
 
-  async connect(): Promise<ConnectedServerInfo> {
+  protected async setupTransport(): Promise<Client> {
     const env = this.config.inheritSystemEnv
       ? { ...process.env, ...this.config.env }
       : { ...this.config.env };
@@ -35,128 +32,30 @@ export class StdioMCPClient implements MCPClientInterface {
       stderr: "pipe",
     });
 
-    // Forward subprocess stderr lines to the UI before connect so startup
-    // messages (usage info, warnings) are visible to the user.
-    this.transport.stderr?.on("data", (chunk: Buffer) => {
-      const text = chunk.toString();
-      for (const line of text.split("\n")) {
+    // Forward subprocess stderr to the UI so startup messages are visible.
+    this.stderrHandler = (chunk: Buffer) => {
+      for (const line of chunk.toString().split("\n")) {
         const trimmed = line.trim();
         if (trimmed) this.options.onLog?.("INFO", "subprocess", trimmed);
       }
-    });
-
-    this.client = new Client({ name: "mcp-studio", version: "0.0.1" });
-
-    this.options.onLog?.("INFO", "protocol", "Connecting via STDIO transport…");
-
-    await this.client.connect(this.transport);
-    this._isConnected = true;
-
-    this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
-
-    const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
-
-    const serverInfo = this.client.getServerVersion();
-
-    return {
-      serverName: serverInfo?.name,
-      serverVersion: serverInfo?.version,
-      protocolVersion: "2024-11-05",
-      tools,
-      prompts,
     };
+    this.transport.stderr?.on("data", this.stderrHandler);
+
+    const client = new Client({ name: "mcp-studio", version: "0.0.1" });
+    this.options.onLog?.("INFO", "protocol", "Connecting via STDIO transport…");
+    await client.connect(this.transport);
+    this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
+    return client;
   }
 
-  async listTools(): Promise<MCPTool[]> {
-    if (!this.client) throw new Error("Not connected");
-
-    const response = await this.client.listTools();
-    this.options.onLog?.("DEBUG", "protocol", `tools/list → ${response.tools.length} tools`);
-
-    return response.tools.map((t) => ({
-      name: t.name,
-      description: t.description ?? "",
-      inputSchema: t.inputSchema as Record<string, unknown>,
-    }));
-  }
-
-  async callTool(
-    name: string,
-    params: Record<string, unknown>,
-    requestId: string
-  ): Promise<unknown> {
-    if (!this.client) throw new Error("Not connected");
-
-    this.options.onLog?.(
-      "INFO",
-      "protocol",
-      `tools/call → ${name} (requestId: ${requestId})`
-    );
-
-    const result = await this.client.callTool({ name, arguments: params });
-
-    this.options.onLog?.("INFO", "protocol", `tools/call ← ${name} complete`);
-
-    // Emit a single chunk then the final result
-    this.options.onChunk?.(requestId, result);
-
-    return result;
-  }
-
-  async listPrompts(): Promise<MCPPrompt[]> {
-    if (!this.client) throw new Error("Not connected");
-
-    try {
-      const response = await this.client.listPrompts();
-      this.options.onLog?.(
-        "DEBUG",
-        "protocol",
-        `prompts/list → ${response.prompts.length} prompts`
-      );
-
-      return response.prompts.map((p) => ({
-        name: p.name,
-        description: p.description,
-        arguments: p.arguments?.map((a) => ({
-          name: a.name,
-          description: a.description,
-          required: a.required,
-        })),
-      }));
-    } catch {
-      // Server may not support prompts — return empty list gracefully
-      return [];
+  protected async teardownTransport(): Promise<void> {
+    if (this.stderrHandler) {
+      this.transport?.stderr?.off("data", this.stderrHandler);
+      this.stderrHandler = null;
     }
-  }
-
-  async callPrompt(
-    name: string,
-    args: Record<string, string>,
-    requestId: string
-  ): Promise<MCPPromptMessage[]> {
-    if (!this.client) throw new Error("Not connected");
-
-    this.options.onLog?.(
-      "INFO",
-      "protocol",
-      `prompts/get → ${name} (requestId: ${requestId})`
-    );
-
-    const result = await this.client.getPrompt({ name, arguments: args });
-
-    return result.messages.map((m) => ({
-      role: m.role as "user" | "assistant",
-      content: m.content as import("@mcp-studio/types").MCPContent,
-    }));
-  }
-
-  async disconnect(): Promise<void> {
     if (this.transport) {
       await this.transport.close();
       this.transport = null;
     }
-    this.client = null;
-    this._isConnected = false;
-    this.options.onLog?.("INFO", "protocol", "Disconnected");
   }
 }

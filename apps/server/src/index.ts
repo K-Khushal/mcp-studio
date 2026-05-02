@@ -128,7 +128,7 @@ const server = Bun.serve<{ session: SessionManager | null }>({
         msg = JSON.parse(String(raw)) as ClientMessage;
       } catch {
         ws.send(
-          JSON.stringify({ type: "error", message: "Invalid JSON", code: "PARSE_ERROR" })
+          JSON.stringify({ type: "ERROR", message: "Invalid JSON", code: "PARSE_ERROR" })
         );
         return;
       }

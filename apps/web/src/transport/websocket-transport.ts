@@ -29,6 +29,7 @@ export class WebSocketTransport implements StudioTransport {
 
   async disconnect(): Promise<void> {
     this.send({ type: "disconnect" });
+    this.ws?.close();
   }
 
   onMessage(handler: (msg: ServerMessage) => void): void {
