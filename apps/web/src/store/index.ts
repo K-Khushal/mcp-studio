@@ -242,6 +242,17 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- saved request loading ----------
       loadSavedRequest: (request) => {
+        if (get().selectedRequestId === request.id) {
+          set({
+            selectedTool: null,
+            selectedPrompt: null,
+            pendingParams: null,
+            activeView: "studio",
+            selectedRequestId: null,
+          });
+          return;
+        }
+
         const conn = request.connectionConfig;
         let transport: "stdio" | "http" = "stdio";
         let connectionUrl = "";

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Collection } from "@mcp-studio/types";
+import type { Collection, SavedRequest } from "@mcp-studio/types";
 
 const { useStore } = await import("../store/index.js");
 
@@ -19,6 +19,21 @@ const makeCollection = (): Collection => ({
   ],
 });
 
+const makeSavedRequest = (): SavedRequest => ({
+  id: "req-1",
+  collectionId: "col-1",
+  name: "Original Name",
+  connectionConfig: {
+    transport: "http",
+    config: {
+      url: "http://localhost:4000",
+      headers: {},
+    },
+  },
+  createdAt: 1,
+  updatedAt: 1,
+});
+
 beforeEach(() => {
   vi.restoreAllMocks();
   useStore.setState({ collections: [makeCollection()], selectedRequestId: "req-1" });
@@ -36,5 +51,39 @@ describe("renameRequest", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name: "Renamed Request" }),
     });
+  });
+});
+
+describe("loadSavedRequest", () => {
+  it("toggles off the currently selected request", () => {
+    useStore.setState({
+      selectedRequestId: null,
+      selectedTool: { name: "old-tool" } as never,
+      selectedPrompt: { name: "old-prompt" } as never,
+      pendingParams: { stale: true },
+      activeView: "collections",
+      transport: "stdio",
+      connectionUrl: "",
+    });
+
+    const request = makeSavedRequest();
+
+    useStore.getState().loadSavedRequest(request);
+
+    expect(useStore.getState().selectedRequestId).toBe("req-1");
+    expect(useStore.getState().transport).toBe("http");
+    expect(useStore.getState().connectionUrl).toBe("http://localhost:4000");
+    expect(useStore.getState().selectedTool).toBeNull();
+    expect(useStore.getState().selectedPrompt).toBeNull();
+    expect(useStore.getState().pendingParams).toBeNull();
+    expect(useStore.getState().activeView).toBe("studio");
+
+    useStore.getState().loadSavedRequest(request);
+
+    expect(useStore.getState().selectedRequestId).toBeNull();
+    expect(useStore.getState().selectedTool).toBeNull();
+    expect(useStore.getState().selectedPrompt).toBeNull();
+    expect(useStore.getState().pendingParams).toBeNull();
+    expect(useStore.getState().activeView).toBe("studio");
   });
 });
