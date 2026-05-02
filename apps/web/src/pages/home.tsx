@@ -6,6 +6,7 @@ import { CollectionsView } from "@/views/collections-view";
 import { StudioView } from "@/views/studio-view";
 import { FolderOpen } from "lucide-react";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { LogsPanel } from "@/components/logs/logs-panel";
 
 export default function Home() {
   const { loadCollections, loadEnvironments, selectedRequestId } = useStore();
@@ -22,7 +23,10 @@ export default function Home() {
           <CollectionsView />
           <SidebarInset className="min-w-0 min-h-0 rounded-none shadow-none">
             {selectedRequestId ? (
-              <StudioView />
+              <>
+                <StudioView />
+                <LogsPanel />
+              </>
             ) : (
               <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
                 <FolderOpen size={32} strokeWidth={1.5} />

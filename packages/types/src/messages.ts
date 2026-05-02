@@ -21,7 +21,7 @@ export type ClientMessage =
 // Bun Server → Browser messages
 // ---------------------------------------------------------------------------
 
-export type LogLevel = "debug" | "info" | "warn" | "error";
+export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export type ServerMessage =
   | { type: "connected"; tools: MCPTool[]; prompts: MCPPrompt[]; serverInfo?: unknown }
@@ -34,12 +34,12 @@ export type ServerMessage =
       requestId: string;
       messages: MCPPromptMessage[];
     }
-  | { type: "error"; requestId?: string; message: string; code?: string }
+  | { type: "ERROR"; requestId?: string; message: string; code?: string }
   | {
       type: "log";
       level: LogLevel;
       source: "protocol" | "subprocess";
-      text: string;
+      message: string;
       timestamp: number;
     }
   | { type: "disconnected" }
