@@ -51,8 +51,10 @@ function JsonView({ data, indent = 0 }: { data: unknown; indent?: number }) {
 }
 
 export function ResponsePanel() {
-  const { response, connectionConfig } = useStore();
+  const { response, connectionConfig, connectionStatus, selectedRequestId, connectedRequestId } = useStore();
   const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'headers' | 'timeline'>('pretty');
+  const isSelectedRequestConnected =
+    connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
 
   const tabs = ['pretty', 'raw', 'headers', 'timeline'] as const;
 
@@ -65,7 +67,7 @@ export function ResponsePanel() {
     : null;
 
   const configuredHeaders =
-    connectionConfig?.transport === 'http'
+    isSelectedRequestConnected && connectionConfig?.transport === 'http'
       ? connectionConfig.config.headers
       : null;
 

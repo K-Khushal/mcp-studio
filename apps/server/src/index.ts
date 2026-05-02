@@ -66,8 +66,8 @@ const server = Bun.serve<{ session: SessionManager | null }>({
     if (requestMatch) {
       const reqId = requestMatch[2]!;
       if (req.method === "PATCH") {
-        const { name } = (await req.json()) as { name: string };
-        await updateRequest(reqId, name);
+        const body = (await req.json()) as Parameters<typeof updateRequest>[1];
+        await updateRequest(reqId, body);
         return json({ ok: true });
       }
       if (req.method === "DELETE") {

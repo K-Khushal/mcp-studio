@@ -71,9 +71,23 @@ describe("requests", () => {
   it("renames a request", async () => {
     const col = await createCollection("Col");
     const req = await createRequest(col.id, { name: "Old Name" });
-    await updateRequest(req.id, "New Name");
+    await updateRequest(req.id, { name: "New Name" });
     const cols = await getAllCollections();
     expect(cols[0]!.requests[0]!.name).toBe("New Name");
+  });
+
+  it("updates request connectionConfig", async () => {
+    const col = await createCollection("Col");
+    const req = await createRequest(col.id, { name: "Run" });
+    const config = {
+      transport: "http" as const,
+      config: { url: "http://localhost:4000", headers: {} },
+    };
+
+    await updateRequest(req.id, { connectionConfig: config });
+
+    const cols = await getAllCollections();
+    expect(cols[0]!.requests[0]!.connectionConfig).toMatchObject(config);
   });
 
   it("cascade-deletes requests when collection is deleted", async () => {

@@ -38,7 +38,29 @@ interface TimelineStep {
   label: string;
   detail: string;
   timestamp: string;
-  status: 'completed' | 'active' | 'pending';
+  status: "completed" | "active" | "pending";
+}
+
+interface ConnectionDraft {
+  transport: "stdio" | "http";
+  connectionUrl: string;
+}
+
+interface RequestWorkspaceState {
+  tools: MCPTool[];
+  prompts: MCPPrompt[];
+  selectedTool: MCPTool | null;
+  selectedPrompt: MCPPrompt | null;
+  toolSearch: string;
+  pendingParams: Record<string, unknown> | null;
+  toolFormValues: Record<string, string>;
+  response: ResponseState;
+  timeline: TimelineStep[];
+  logs: LogEntry[];
+}
+
+interface ConnectedRequestCache extends RequestWorkspaceState {
+  requestId: string;
 }
 
 interface AppState {
@@ -46,6 +68,9 @@ interface AppState {
   connectionStatus: ConnectionStatus;
   connectionConfig: ConnectionConfig | null;
   serverInfo: unknown;
+  connectedRequestId: string | null;
+  connectingRequestId: string | null;
+  connectedRequestCache: ConnectedRequestCache | null;
 
   // Tools & Prompts
   tools: MCPTool[];
@@ -54,6 +79,7 @@ interface AppState {
   selectedPrompt: MCPPrompt | null;
   toolSearch: string;
   pendingParams: Record<string, unknown> | null;
+  toolFormValues: Record<string, string>;
 
   // Response
   response: ResponseState;
@@ -66,6 +92,7 @@ interface AppState {
   // Collections
   collections: Collection[];
   selectedRequestId: string | null;
+  requestDrafts: Record<string, ConnectionDraft>;
 
   // Connection form (persisted in store so panels stay in sync)
   transport: "stdio" | "http";
@@ -100,6 +127,7 @@ interface AppActions {
   // Tools
   selectTool: (tool: MCPTool | null) => void;
   setToolSearch: (q: string) => void;
+  setToolFormValues: (values: Record<string, string>) => void;
 
   // Prompts
   selectPrompt: (prompt: MCPPrompt | null) => void;
@@ -122,6 +150,7 @@ interface AppActions {
   deleteCollection: (id: string) => Promise<void>;
   addRequest: (collectionId: string, data: Omit<SavedRequest, "id" | "createdAt" | "updatedAt">) => Promise<void>;
   renameRequest: (collectionId: string, reqId: string, name: string) => Promise<void>;
+  updateRequestConnection: (collectionId: string, reqId: string, connectionConfig: ConnectionConfig) => Promise<void>;
   deleteRequest: (collectionId: string, reqId: string) => Promise<void>;
 
   // Connection form
@@ -150,12 +179,185 @@ interface AppActions {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const BLANK_RESPONSE = {
+  chunks: [] as unknown[],
+  result: null,
+  error: null,
+  isStreaming: false,
+  startedAt: null,
+  completedAt: null,
+} as const;
+
+const DEFAULT_CONNECTION_DRAFT: ConnectionDraft = {
+  transport: "stdio",
+  connectionUrl: "",
+};
+
+function createBlankWorkspace(): RequestWorkspaceState {
+  return {
+    tools: [],
+    prompts: [],
+    selectedTool: null,
+    selectedPrompt: null,
+    toolSearch: "",
+    pendingParams: null,
+    toolFormValues: {},
+    response: { ...BLANK_RESPONSE },
+    timeline: [],
+    logs: [],
+  };
+}
+
+function cloneWorkspace(workspace: RequestWorkspaceState): RequestWorkspaceState {
+  return {
+    tools: [...workspace.tools],
+    prompts: [...workspace.prompts],
+    selectedTool: workspace.selectedTool,
+    selectedPrompt: workspace.selectedPrompt,
+    toolSearch: workspace.toolSearch,
+    pendingParams: workspace.pendingParams ? { ...workspace.pendingParams } : null,
+    toolFormValues: { ...workspace.toolFormValues },
+    response: {
+      chunks: [...workspace.response.chunks],
+      result: workspace.response.result,
+      error: workspace.response.error,
+      isStreaming: workspace.response.isStreaming,
+      startedAt: workspace.response.startedAt,
+      completedAt: workspace.response.completedAt,
+    },
+    timeline: [...workspace.timeline],
+    logs: [...workspace.logs],
+  };
+}
+
+function cloneConnectedCache(cache: ConnectedRequestCache): ConnectedRequestCache {
+  return {
+    requestId: cache.requestId,
+    ...cloneWorkspace(cache),
+  };
+}
+
+function connectionDraftFromConfig(config?: ConnectionConfig | null): ConnectionDraft | null {
+  if (!config) return null;
+  if (config.transport === "http") {
+    return {
+      transport: "http",
+      connectionUrl: config.config.url,
+    };
+  }
+
+  return {
+    transport: "stdio",
+    connectionUrl: [config.config.command, ...config.config.args].join(" ").trim(),
+  };
+}
+
+function readPersistedConnectionDraft(): ConnectionDraft {
+  try {
+    const raw = localStorage.getItem("mcp-studio-connection");
+    if (!raw) return { ...DEFAULT_CONNECTION_DRAFT };
+    const parsed = JSON.parse(raw) as Partial<ConnectionDraft>;
+    return {
+      transport: parsed.transport === "http" ? "http" : "stdio",
+      connectionUrl: parsed.connectionUrl ?? "",
+    };
+  } catch {
+    return { ...DEFAULT_CONNECTION_DRAFT };
+  }
+}
+
+function persistConnectionDraft(draft: ConnectionDraft): void {
+  try {
+    localStorage.setItem("mcp-studio-connection", JSON.stringify(draft));
+  } catch {}
+}
+
+function requestWorkspacePatch(workspace: RequestWorkspaceState): Pick<
+  AppState,
+  | "tools"
+  | "prompts"
+  | "selectedTool"
+  | "selectedPrompt"
+  | "toolSearch"
+  | "pendingParams"
+  | "toolFormValues"
+  | "response"
+  | "timeline"
+  | "logs"
+> {
+  const clone = cloneWorkspace(workspace);
+  return {
+    tools: clone.tools,
+    prompts: clone.prompts,
+    selectedTool: clone.selectedTool,
+    selectedPrompt: clone.selectedPrompt,
+    toolSearch: clone.toolSearch,
+    pendingParams: clone.pendingParams,
+    toolFormValues: clone.toolFormValues,
+    response: clone.response,
+    timeline: clone.timeline,
+    logs: clone.logs,
+  };
+}
+
+function blankWorkspacePatch(): Pick<
+  AppState,
+  | "tools"
+  | "prompts"
+  | "selectedTool"
+  | "selectedPrompt"
+  | "toolSearch"
+  | "pendingParams"
+  | "toolFormValues"
+  | "response"
+  | "timeline"
+  | "logs"
+> {
+  return requestWorkspacePatch(createBlankWorkspace());
+}
+
 function fmtTime(ts: number): string {
   const d = new Date(ts);
-  const hh = String(d.getHours()).padStart(2, '0');
-  const mm = String(d.getMinutes()).padStart(2, '0');
-  const ss = String(d.getSeconds()).padStart(2, '0');
+  const hh = String(d.getHours()).padStart(2, "0");
+  const mm = String(d.getMinutes()).padStart(2, "0");
+  const ss = String(d.getSeconds()).padStart(2, "0");
   return `${hh}:${mm}:${ss}`;
+}
+
+function syncConnectedWorkspace(
+  state: AppState,
+  updater: (workspace: RequestWorkspaceState) => RequestWorkspaceState
+): Partial<AppState> {
+  if (!state.connectedRequestCache) return {};
+
+  const nextWorkspace = updater(cloneWorkspace(state.connectedRequestCache));
+  const nextCache: ConnectedRequestCache = {
+    requestId: state.connectedRequestCache.requestId,
+    ...cloneWorkspace(nextWorkspace),
+  };
+
+  if (state.selectedRequestId === state.connectedRequestId) {
+    return {
+      connectedRequestCache: nextCache,
+      ...requestWorkspacePatch(nextWorkspace),
+    };
+  }
+
+  return { connectedRequestCache: nextCache };
+}
+
+function buildRequestDraftsPatch(
+  selectedRequestId: string | null,
+  drafts: Record<string, ConnectionDraft>,
+  draft: ConnectionDraft
+): { requestDrafts?: Record<string, ConnectionDraft> } {
+  if (!selectedRequestId) return {};
+  return {
+    requestDrafts: {
+      ...drafts,
+      [selectedRequestId]: { ...draft },
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -171,37 +373,16 @@ export const useStore = create<AppState & AppActions>()(
       connectionStatus: "disconnected",
       connectionConfig: null,
       serverInfo: null,
-      tools: [],
-      prompts: [],
-      selectedTool: null,
-      selectedPrompt: null,
-      toolSearch: "",
-      pendingParams: null,
-      response: {
-        chunks: [],
-        result: null,
-        error: null,
-        isStreaming: false,
-        startedAt: null,
-        completedAt: null,
-      },
-      timeline: [],
-      logs: [],
+      connectedRequestId: null,
+      connectingRequestId: null,
+      connectedRequestCache: null,
+      ...blankWorkspacePatch(),
       logIdCounter: 0,
       collections: [],
       selectedRequestId: null,
-      transport: (() => {
-        try {
-          const raw = localStorage.getItem("mcp-studio-connection");
-          return (raw ? (JSON.parse(raw) as { transport?: string }).transport : null) ?? "stdio";
-        } catch { return "stdio"; }
-      })() as "stdio" | "http",
-      connectionUrl: (() => {
-        try {
-          const raw = localStorage.getItem("mcp-studio-connection");
-          return (raw ? (JSON.parse(raw) as { connectionUrl?: string }).connectionUrl : null) ?? "";
-        } catch { return ""; }
-      })(),
+      requestDrafts: {},
+      transport: readPersistedConnectionDraft().transport,
+      connectionUrl: readPersistedConnectionDraft().connectionUrl,
       environments: [],
       config: (() => {
         const defaults: MCPConfig = {
@@ -231,67 +412,167 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- connection ----------
       connect: async (config) => {
-        set({ connectionStatus: "connecting", connectionConfig: config, requestCount: 0, errorCount: 0, latency: 0, connectedAt: null });
+        const selectedRequestId = get().selectedRequestId;
+        if (!selectedRequestId) return;
+
+        const clearedWorkspace = blankWorkspacePatch();
+        set({
+          ...clearedWorkspace,
+          connectedRequestId: null,
+          connectingRequestId: selectedRequestId,
+          connectedRequestCache: null,
+          connectionConfig: config,
+          serverInfo: null,
+          connectionStatus: "connecting",
+          requestCount: 0,
+          errorCount: 0,
+          latency: 0,
+          connectedAt: null,
+        });
+
+        if (transport.isConnected) {
+          await transport.disconnect();
+        }
+
+        set({
+          connectionConfig: config,
+          connectionStatus: "connecting",
+          connectingRequestId: selectedRequestId,
+        });
         transport.onMessage(handleServerMessage);
         await transport.connect(config);
       },
 
       disconnect: async () => {
-        await transport.disconnect();
+        const clearedWorkspace = blankWorkspacePatch();
+        set({
+          ...clearedWorkspace,
+          connectionStatus: "disconnected",
+          connectionConfig: null,
+          serverInfo: null,
+          connectedRequestId: null,
+          connectingRequestId: null,
+          connectedRequestCache: null,
+          requestCount: 0,
+          errorCount: 0,
+          latency: 0,
+          connectedAt: null,
+        });
+
+        if (transport.isConnected) {
+          await transport.disconnect();
+        }
       },
 
       // ---------- tools ----------
-      selectTool: (tool) => set({ selectedTool: tool, selectedPrompt: null, pendingParams: null }),
-      setToolSearch: (q) => set({ toolSearch: q }),
+      selectTool: (tool) =>
+        set((s) => ({
+          selectedTool: tool,
+          selectedPrompt: null,
+          pendingParams: null,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            selectedTool: tool,
+            selectedPrompt: null,
+            pendingParams: null,
+          })),
+        })),
+      setToolSearch: (q) =>
+        set((s) => ({
+          toolSearch: q,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            toolSearch: q,
+          })),
+        })),
+      setToolFormValues: (values) =>
+        set((s) => ({
+          toolFormValues: { ...values },
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            toolFormValues: { ...values },
+          })),
+        })),
 
       // ---------- prompts ----------
-      selectPrompt: (prompt) => set({ selectedPrompt: prompt, selectedTool: null, pendingParams: null }),
+      selectPrompt: (prompt) =>
+        set((s) => ({
+          selectedPrompt: prompt,
+          selectedTool: null,
+          pendingParams: null,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            selectedPrompt: prompt,
+            selectedTool: null,
+            pendingParams: null,
+          })),
+        })),
 
       // ---------- invocation ----------
       invokeTool: async (tool, params) => {
-        if (get().connectionStatus !== "connected") {
-          get().addToast({ title: "Not connected", description: "Connect to an MCP server first.", variant: "destructive" });
+        const state = get();
+        if (state.connectionStatus !== "connected" || state.selectedRequestId !== state.connectedRequestId) {
+          state.addToast({ title: "Not connected", description: "Connect the selected request first.", variant: "destructive" });
           return;
         }
+
         const now = Date.now();
+        const response: ResponseState = {
+          chunks: [],
+          result: null,
+          error: null,
+          isStreaming: true,
+          startedAt: now,
+          completedAt: null,
+        };
+        const timeline: TimelineStep[] = [
+          { label: "Request sent", detail: `Tool: ${tool}`, timestamp: fmtTime(now), status: "completed" },
+          { label: "Awaiting response", detail: "Waiting for server…", timestamp: fmtTime(now), status: "active" },
+        ];
+
         set((s) => ({
           requestCount: s.requestCount + 1,
-          response: {
-            chunks: [],
-            result: null,
-            error: null,
-            isStreaming: true,
-            startedAt: now,
-            completedAt: null,
-          },
-          timeline: [
-            { label: 'Request sent', detail: `Tool: ${tool}`, timestamp: fmtTime(now), status: 'completed' },
-            { label: 'Awaiting response', detail: 'Waiting for server…', timestamp: fmtTime(now), status: 'active' },
-          ],
+          response,
+          timeline,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            response,
+            timeline,
+          })),
         }));
         await transport.invoke(tool, params);
       },
 
       invokePrompt: async (prompt, args) => {
-        if (get().connectionStatus !== "connected") {
-          get().addToast({ title: "Not connected", description: "Connect to an MCP server first.", variant: "destructive" });
+        const state = get();
+        if (state.connectionStatus !== "connected" || state.selectedRequestId !== state.connectedRequestId) {
+          state.addToast({ title: "Not connected", description: "Connect the selected request first.", variant: "destructive" });
           return;
         }
+
         const now = Date.now();
+        const response: ResponseState = {
+          chunks: [],
+          result: null,
+          error: null,
+          isStreaming: true,
+          startedAt: now,
+          completedAt: null,
+        };
+        const timeline: TimelineStep[] = [
+          { label: "Request sent", detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), status: "completed" },
+          { label: "Awaiting response", detail: "Waiting for server…", timestamp: fmtTime(now), status: "active" },
+        ];
+
         set((s) => ({
           requestCount: s.requestCount + 1,
-          response: {
-            chunks: [],
-            result: null,
-            error: null,
-            isStreaming: true,
-            startedAt: now,
-            completedAt: null,
-          },
-          timeline: [
-            { label: 'Request sent', detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), status: 'completed' },
-            { label: 'Awaiting response', detail: 'Waiting for server…', timestamp: fmtTime(now), status: 'active' },
-          ],
+          response,
+          timeline,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            response,
+            timeline,
+          })),
         }));
         await transport.invokePrompt(prompt, args);
       },
@@ -299,42 +580,54 @@ export const useStore = create<AppState & AppActions>()(
       // ---------- saved request loading ----------
       loadSavedRequest: (request) => {
         if (get().selectedRequestId === request.id) {
-          set({
-            selectedTool: null,
-            selectedPrompt: null,
-            pendingParams: null,
-            activeView: "studio",
-            selectedRequestId: null,
-          });
+          set({ activeView: "studio" });
           return;
         }
 
-        const conn = request.connectionConfig;
-        const urlUpdate: { transport?: "stdio" | "http"; connectionUrl?: string } = {};
-        if (conn) {
-          urlUpdate.transport = conn.transport === "http" ? "http" : "stdio";
-          urlUpdate.connectionUrl =
-            conn.transport === "http"
-              ? conn.config.url
-              : [conn.config.command, ...conn.config.args].join(" ");
-          try {
-            localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: urlUpdate.transport, connectionUrl: urlUpdate.connectionUrl }));
-          } catch {}
-        }
+        const state = get();
+        const draft =
+          state.requestDrafts[request.id] ??
+          connectionDraftFromConfig(request.connectionConfig) ??
+          { ...DEFAULT_CONNECTION_DRAFT };
+
+        persistConnectionDraft(draft);
+
+        const workspace =
+          state.connectedRequestId === request.id && state.connectedRequestCache
+            ? requestWorkspacePatch(state.connectedRequestCache)
+            : blankWorkspacePatch();
+
         set({
-          selectedTool: null,
-          selectedPrompt: null,
-          pendingParams: null,
+          ...workspace,
           activeView: "studio",
           selectedRequestId: request.id,
-          ...urlUpdate,
+          transport: draft.transport,
+          connectionUrl: draft.connectionUrl,
+          requestDrafts: {
+            ...state.requestDrafts,
+            [request.id]: draft,
+          },
         });
       },
 
-      clearPendingParams: () => set({ pendingParams: null }),
+      clearPendingParams: () =>
+        set((s) => ({
+          pendingParams: null,
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            pendingParams: null,
+          })),
+        })),
 
       // ---------- logs ----------
-      clearLogs: () => set({ logs: [], logIdCounter: 0 }),
+      clearLogs: () =>
+        set((s) => ({
+          logs: [],
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            logs: [],
+          })),
+        })),
 
       // ---------- collections ----------
       loadCollections: async () => {
@@ -372,9 +665,15 @@ export const useStore = create<AppState & AppActions>()(
           const deletedReqIds = new Set(
             s.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
           );
+          const selectedRequestDeleted = deletedReqIds.has(s.selectedRequestId ?? "");
+          const connectedRequestDeleted = deletedReqIds.has(s.connectedRequestId ?? "");
           return {
             collections: s.collections.filter((c) => c.id !== id),
-            selectedRequestId: deletedReqIds.has(s.selectedRequestId ?? "") ? null : s.selectedRequestId,
+            selectedRequestId: selectedRequestDeleted ? null : s.selectedRequestId,
+            connectedRequestId: connectedRequestDeleted ? null : s.connectedRequestId,
+            connectingRequestId: connectedRequestDeleted ? null : s.connectingRequestId,
+            connectedRequestCache: connectedRequestDeleted ? null : s.connectedRequestCache,
+            ...(selectedRequestDeleted ? blankWorkspacePatch() : {}),
           };
         });
       },
@@ -415,16 +714,44 @@ export const useStore = create<AppState & AppActions>()(
         }));
       },
 
-      deleteRequest: async (collectionId, reqId) => {
-        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, { method: "DELETE" });
+      updateRequestConnection: async (collectionId, reqId, connectionConfig) => {
+        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ connectionConfig }),
+        });
         set((s) => ({
           collections: s.collections.map((c) =>
             c.id === collectionId
-              ? { ...c, requests: c.requests.filter((r) => r.id !== reqId) }
+              ? {
+                  ...c,
+                  requests: c.requests.map((r) =>
+                    r.id === reqId ? { ...r, connectionConfig, updatedAt: Date.now() } : r
+                  ),
+                }
               : c
           ),
-          selectedRequestId: s.selectedRequestId === reqId ? null : s.selectedRequestId,
         }));
+      },
+
+      deleteRequest: async (collectionId, reqId) => {
+        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, { method: "DELETE" });
+        set((s) => {
+          const deletingSelected = s.selectedRequestId === reqId;
+          const deletingConnected = s.connectedRequestId === reqId;
+          return {
+            collections: s.collections.map((c) =>
+              c.id === collectionId
+                ? { ...c, requests: c.requests.filter((r) => r.id !== reqId) }
+                : c
+            ),
+            selectedRequestId: deletingSelected ? null : s.selectedRequestId,
+            connectedRequestId: deletingConnected ? null : s.connectedRequestId,
+            connectingRequestId: deletingConnected ? null : s.connectingRequestId,
+            connectedRequestCache: deletingConnected ? null : s.connectedRequestCache,
+            ...(deletingSelected ? blankWorkspacePatch() : {}),
+          };
+        });
       },
 
       // ---------- environments ----------
@@ -490,14 +817,24 @@ export const useStore = create<AppState & AppActions>()(
       }),
 
       // ---------- connection form ----------
-      setTransport: (t) => {
-        try { localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: t, connectionUrl: get().connectionUrl })); } catch {}
-        set({ transport: t });
-      },
-      setConnectionUrl: (url) => {
-        try { localStorage.setItem("mcp-studio-connection", JSON.stringify({ transport: get().transport, connectionUrl: url })); } catch {}
-        set({ connectionUrl: url });
-      },
+      setTransport: (t) =>
+        set((s) => {
+          const draft = { transport: t, connectionUrl: s.connectionUrl };
+          persistConnectionDraft(draft);
+          return {
+            transport: t,
+            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+          };
+        }),
+      setConnectionUrl: (url) =>
+        set((s) => {
+          const draft = { transport: s.transport, connectionUrl: url };
+          persistConnectionDraft(draft);
+          return {
+            connectionUrl: url,
+            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+          };
+        }),
 
       // ---------- UI ----------
       setActiveView: (view) => set({ activeView: view }),
@@ -524,16 +861,40 @@ export const useStore = create<AppState & AppActions>()(
 // ---------------------------------------------------------------------------
 
 function handleServerMessage(msg: ServerMessage): void {
-  const store = useStore.getState();
-
   const addLog = (level: LogEntry["level"], source: LogEntry["source"], message: string) => {
-    useStore.setState((s) => ({
-      logIdCounter: s.logIdCounter + 1,
-      logs: [
-        ...s.logs,
-        { id: `log_${s.logIdCounter}`, level, source, message, timestamp: Date.now() },
-      ].slice(-500),
-    }));
+    useStore.setState((s) => {
+      const nextLogIdCounter = s.logIdCounter + 1;
+      const nextLog: LogEntry = {
+        id: `log_${nextLogIdCounter}`,
+        level,
+        source,
+        message,
+        timestamp: Date.now(),
+      };
+
+      if (!s.connectedRequestCache) {
+        return { logIdCounter: nextLogIdCounter };
+      }
+
+      const nextLogs = [...s.connectedRequestCache.logs, nextLog].slice(-500);
+      const nextCache: ConnectedRequestCache = {
+        ...cloneConnectedCache(s.connectedRequestCache),
+        logs: nextLogs,
+      };
+
+      if (s.selectedRequestId === s.connectedRequestId) {
+        return {
+          logIdCounter: nextLogIdCounter,
+          logs: nextLogs,
+          connectedRequestCache: nextCache,
+        };
+      }
+
+      return {
+        logIdCounter: nextLogIdCounter,
+        connectedRequestCache: nextCache,
+      };
+    });
   };
 
   switch (msg.type) {
@@ -541,48 +902,79 @@ function handleServerMessage(msg: ServerMessage): void {
       useStore.setState({ connectionStatus: msg.status });
       break;
 
-    case "connected":
-      useStore.setState({
-        connectionStatus: "connected",
+    case "connected": {
+      const state = useStore.getState();
+      const requestId = state.connectingRequestId ?? state.selectedRequestId;
+      if (!requestId) {
+        useStore.setState({ connectionStatus: "connected" });
+        return;
+      }
+
+      const nextCache: ConnectedRequestCache = {
+        requestId,
+        ...createBlankWorkspace(),
         tools: msg.tools,
         prompts: msg.prompts,
+      };
+
+      useStore.setState({
+        connectionStatus: "connected",
+        connectedRequestId: requestId,
+        connectingRequestId: null,
+        connectedRequestCache: nextCache,
         serverInfo: msg.serverInfo,
         connectedAt: Date.now(),
         requestCount: 0,
         errorCount: 0,
         latency: 0,
+        ...(state.selectedRequestId === requestId ? requestWorkspacePatch(nextCache) : blankWorkspacePatch()),
       });
       addLog("INFO", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
       break;
+    }
 
     case "disconnected":
-      useStore.setState({ connectionStatus: "disconnected", tools: [], prompts: [], connectedAt: null });
+      useStore.setState((s) => ({
+        connectionStatus: "disconnected",
+        connectionConfig: null,
+        serverInfo: null,
+        connectedRequestId: null,
+        connectingRequestId: null,
+        connectedRequestCache: null,
+        connectedAt: null,
+        ...(s.selectedRequestId === s.connectedRequestId ? blankWorkspacePatch() : {}),
+      }));
       break;
 
     case "chunk":
-      useStore.setState((s) => ({
-        response: { ...s.response, chunks: [...s.response.chunks, msg.data] },
-      }));
+      useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
+        ...workspace,
+        response: { ...workspace.response, chunks: [...workspace.response.chunks, msg.data] },
+      })));
       break;
 
     case "result": {
       const completedAt = Date.now();
       useStore.setState((s) => {
-        const elapsed = s.response.startedAt ? completedAt - s.response.startedAt : 0;
+        const startedAt = s.connectedRequestCache?.response.startedAt;
+        const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
-          response: { ...s.response, result: msg.data, isStreaming: false, completedAt },
-          timeline: [
-            ...s.timeline.map((step) =>
-              step.status === 'active' ? { ...step, status: 'completed' as const } : step
-            ),
-            {
-              label: 'Result received',
-              detail: `Completed in ${elapsed}ms`,
-              timestamp: fmtTime(completedAt),
-              status: 'completed' as const,
-            },
-          ],
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            response: { ...workspace.response, result: msg.data, isStreaming: false, completedAt },
+            timeline: [
+              ...workspace.timeline.map((step) =>
+                step.status === "active" ? { ...step, status: "completed" as const } : step
+              ),
+              {
+                label: "Result received",
+                detail: `Completed in ${elapsed}ms`,
+                timestamp: fmtTime(completedAt),
+                status: "completed" as const,
+              },
+            ],
+          })),
         };
       });
       break;
@@ -591,21 +983,25 @@ function handleServerMessage(msg: ServerMessage): void {
     case "prompt_result": {
       const completedAt = Date.now();
       useStore.setState((s) => {
-        const elapsed = s.response.startedAt ? completedAt - s.response.startedAt : 0;
+        const startedAt = s.connectedRequestCache?.response.startedAt;
+        const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
-          response: { ...s.response, result: msg.messages, isStreaming: false, completedAt },
-          timeline: [
-            ...s.timeline.map((step) =>
-              step.status === 'active' ? { ...step, status: 'completed' as const } : step
-            ),
-            {
-              label: 'Result received',
-              detail: `Completed in ${elapsed}ms`,
-              timestamp: fmtTime(completedAt),
-              status: 'completed' as const,
-            },
-          ],
+          ...syncConnectedWorkspace(s, (workspace) => ({
+            ...workspace,
+            response: { ...workspace.response, result: msg.messages, isStreaming: false, completedAt },
+            timeline: [
+              ...workspace.timeline.map((step) =>
+                step.status === "active" ? { ...step, status: "completed" as const } : step
+              ),
+              {
+                label: "Result received",
+                detail: `Completed in ${elapsed}ms`,
+                timestamp: fmtTime(completedAt),
+                status: "completed" as const,
+              },
+            ],
+          })),
         };
       });
       break;
@@ -613,27 +1009,40 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case "ERROR":
       if (msg.code === "CONNECTION_FAILED") {
-        useStore.setState({ connectionStatus: "error" });
+        useStore.setState({
+          connectionStatus: "error",
+          connectedRequestId: null,
+          connectingRequestId: null,
+          connectedRequestCache: null,
+          connectionConfig: null,
+          serverInfo: null,
+          connectedAt: null,
+          ...blankWorkspacePatch(),
+        });
         useStore.getState().addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
       } else {
         const errorAt = Date.now();
         useStore.setState((s) => {
-          const elapsed = s.response.startedAt ? errorAt - s.response.startedAt : 0;
+          const startedAt = s.connectedRequestCache?.response.startedAt;
+          const elapsed = startedAt ? errorAt - startedAt : 0;
           return {
             errorCount: s.errorCount + 1,
             latency: elapsed,
-            response: { ...s.response, error: msg.message, isStreaming: false, completedAt: errorAt },
-            timeline: [
-              ...s.timeline.map((step) =>
-                step.status === 'active' ? { ...step, status: 'completed' as const } : step
-              ),
-              {
-                label: 'Error',
-                detail: msg.message,
-                timestamp: fmtTime(errorAt),
-                status: 'completed' as const,
-              },
-            ],
+            ...syncConnectedWorkspace(s, (workspace) => ({
+              ...workspace,
+              response: { ...workspace.response, error: msg.message, isStreaming: false, completedAt: errorAt },
+              timeline: [
+                ...workspace.timeline.map((step) =>
+                  step.status === "active" ? { ...step, status: "completed" as const } : step
+                ),
+                {
+                  label: "Error",
+                  detail: msg.message,
+                  timestamp: fmtTime(errorAt),
+                  status: "completed" as const,
+                },
+              ],
+            })),
           };
         });
       }
@@ -645,11 +1054,17 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
 
     case "tools_listed":
-      useStore.setState({ tools: msg.tools });
+      useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
+        ...workspace,
+        tools: msg.tools,
+      })));
       break;
 
     case "prompts_listed":
-      useStore.setState({ prompts: msg.prompts });
+      useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
+        ...workspace,
+        prompts: msg.prompts,
+      })));
       break;
   }
 }

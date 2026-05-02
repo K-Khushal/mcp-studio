@@ -1,168 +1,281 @@
 # MCP Studio — Web Frontend
 
-React 19 + Vite + Tailwind. Communicates with the Bun WebSocket server at `ws://localhost:3000/ws`.
+React 19 + Vite + Tailwind. Talks to Bun server over WS + REST.
 
 ## Quick Start
 
 ```bash
-bun --filter @mcp-studio/web dev   # dev server at http://localhost:5173
+bun --filter @mcp-studio/web dev
+bun --filter @mcp-studio/web test
 bun --filter @mcp-studio/web typecheck
 ```
 
----
+## Project Shape
 
-## Project Structure
-
-```
+```text
 src/
-├── pages/          # Route entry points
-│   └── home.tsx    # Root layout: TopNav + CollectionsView + main area + StatusBar
-├── views/          # Tab-level views (switched by activeView in store)
-│   ├── studio-view.tsx      # Main workspace (connection panel + tools/prompts tabs)
-│   ├── collections-view.tsx # Saved requests sidebar
-│   ├── logs-view.tsx        # Stub (Phase 8)
-│   └── settings-view.tsx   # Stub (Phase 12)
+├── pages/                 # route entry
+├── views/                 # top-level view shells
 ├── components/
-│   ├── shell/               # Persistent layout chrome
-│   │   ├── top-nav.tsx      # Logo, links
-│   │   ├── icon-sidebar.tsx # View switcher (Zap/BookOpen/ScrollText/Settings icons)
-│   │   └── status-bar.tsx   # Connection status, latency, request/error counts
-│   ├── connection/
-│   │   └── connection-panel.tsx   # Transport selector, URL input, connect/disconnect
-│   ├── tools/
-│   │   ├── tool-panel.tsx         # Orchestrator: form state, invoke handler
-│   │   ├── tool-list.tsx          # Search input + scrollable tool list + ToolListItem
-│   │   ├── tool-schema-form.tsx   # JSON Schema → form fields renderer
-│   │   └── tool-schema-helpers.ts # Pure fns: parse schema, build/seed params
-│   ├── prompts/
-│   │   └── prompt-panel.tsx       # Prompt textarea + send button
-│   ├── collections/
-│   │   ├── collections-sidebar.tsx # shadcn composable Sidebar for collections/search/create
-│   │   ├── collection-row.tsx     # Collapsible collection with rename/delete + request items
-│   │   └── add-request-dialog.tsx # Modal to create a saved request
-│   ├── environments/
-│   │   └── environment-panel.tsx  # Dialog: env var table (add/remove/toggle/copy)
-│   ├── configuration/
-│   │   └── configuration-panel.tsx # Dialog: transport + execution + debug toggles
-│   ├── response/             # Response streaming display
-│   ├── logs/                 # Log viewer
-│   ├── shared/               # Shared UI helpers
-│   ├── error-boundary.tsx
-│   └── ui/                   # shadcn/radix-ui primitives (button, input, dialog, …)
-├── store/
-│   └── index.ts              # Single Zustand store — all state + actions
-├── transport/
-│   └── websocket-transport.ts # WebSocket wrapper; calls store.handleServerMessage()
-└── lib/
-    └── utils.ts              # cn() helper (clsx + tailwind-merge)
+│   ├── connection/        # request header + transport/url controls
+│   ├── collections/       # sidebar + request CRUD
+│   ├── tools/             # tool list + schema form + run
+│   ├── prompts/           # prompt list + args + run
+│   ├── response/          # response + timeline
+│   ├── logs/              # request console
+│   ├── environments/      # env manager
+│   ├── configuration/     # UI/config dialog
+│   ├── shell/             # nav + status bar
+│   └── ui/                # shared primitives
+├── store/                 # single Zustand store
+├── transport/             # websocket transport
+└── lib/                   # helpers
 ```
 
----
+## Core State Model
 
-## State Management
+Single Zustand store in `src/store/index.ts`.
 
-Single Zustand store (`src/store/index.ts`). All mutations go through store actions.
+Two request identities matter:
 
-**State slices:**
+- `selectedRequestId`: request user currently viewing/editing
+- `connectedRequestId`: request with active live MCP session
 
-| Slice | Key fields |
-|-------|-----------|
-| Connection | `connectionStatus`, `connectionConfig`, `serverInfo` |
-| Tools | `tools`, `selectedTool`, `toolSearch`, `pendingParams` |
-| Prompts | `prompts`, `selectedPrompt` |
-| Response | `response.chunks`, `isStreaming`, `result`, `error`, `timing` |
-| Logs | `logs` (capped at 500) |
-| Collections | `collections` |
-| Environments | `environments`, `activeEnvironmentId` |
-| Config | `config` (timeout, streaming, reasoning, etc.) |
-| UI | `activeView`, `isDarkMode`, `toasts` |
+These can differ.
 
-**Key actions:**
+Example:
 
-```ts
-connect(config)           // open WebSocket, register message handler
-invokeTool(name, params)  // send invoke message, updates response slice
-loadSavedRequest(req)     // sets selectedTool + pendingParams → ToolPanel pre-fills
-setActiveView(view)       // "studio" | "collections" | "logs" | "settings"
-```
+- Request A connected
+- user selects Request B
+- UI shows B name + B saved connection fields
+- status bar still shows A as connected
+- tools/prompts/response/logs for B stay blank
 
-**Server messages** arrive via `handleServerMessage()` (bottom of store) — the sole mutation point for all `ServerMessage` events from the WebSocket.
+## What Persists
 
----
+Saved per request in DB:
 
-## Data Flow: Tool Invocation
+- `name`
+- `connectionConfig`
 
-```
-User clicks "Run Tool"
-  → ToolPanel.handleInvoke()
-  → buildParams(schema, formValues)      # tool-schema-helpers.ts
-  → store.invokeTool(name, params)
-  → WebSocketTransport.send({ type: "invoke", ... })
-  → Server streams chunks back
-  → handleServerMessage() receives "chunk" / "result" / "error"
-  → response slice updated → ResponsePanel re-renders
-```
+Not saved in DB:
 
-## Data Flow: Saved Request → Pre-filled Form
+- tools
+- prompts
+- response
+- timeline
+- logs
+- selected tool/prompt
+- tool form values
 
-```
-User clicks request in CollectionsView
+Live workspace is memory-only and only for the currently connected request.
+
+## Request Behavior
+
+Selecting a request:
+
+- loads that request's saved transport/url into connection panel
+- sets `selectedRequestId`
+- if selected request is also connected request, restores its live in-memory workspace
+- otherwise shows blank request workspace
+
+Clicking same selected request again:
+
+- no-op
+- do not deselect
+
+## Connection Behavior
+
+Panel always reflects selected request, not connected request.
+
+Status bar always reflects connected request, not selected request.
+
+Button behavior:
+
+- selected request connected: button means `Disconnect`
+- selected request not connected: button means `Connect`
+
+Connect flow when A connected and B selected:
+
+1. user clicks `Connect`
+2. clear current live workspace UI immediately
+3. disconnect A
+4. connect using B staged transport/url
+5. on success: set `connectedRequestId = B`, load B tools/prompts
+6. on failure: nothing connected, B remains selected
+
+Manual disconnect:
+
+- clears live tools/prompts/response/timeline/logs
+- clears connected request cache
+- keeps selected request + its saved connection fields
+
+## Request Workspace Rules
+
+Only connected request can show live MCP data:
+
+- tools
+- prompts
+- response
+- timeline
+- logs
+
+If user switches away from connected A to unconnected B:
+
+- A remains connected
+- A live workspace kept in memory
+- B workspace blank
+
+If user switches back to A before reconnecting elsewhere:
+
+- restore A live workspace from memory
+
+If user disconnects A:
+
+- clear A live workspace
+
+## Connection Field Persistence
+
+Connection type/url edits are request-scoped.
+
+Behavior:
+
+- editing selected request fields updates in-memory draft immediately
+- draft also PATCHed to request record
+- reload restores saved request connection fields from DB
+
+This is why connection string no longer disappears on refresh.
+
+## Main Store Slices
+
+Connection/runtime:
+
+- `connectionStatus`
+- `connectionConfig`
+- `connectedRequestId`
+- `connectingRequestId`
+- `connectedRequestCache`
+- `connectedAt`
+
+Selected request workspace:
+
+- `tools`
+- `prompts`
+- `selectedTool`
+- `selectedPrompt`
+- `toolSearch`
+- `pendingParams`
+- `toolFormValues`
+- `response`
+- `timeline`
+- `logs`
+
+Collections:
+
+- `collections`
+- `selectedRequestId`
+- `requestDrafts`
+
+## Key Actions
+
+- `loadSavedRequest(req)`
+  - selects request
+  - loads saved connection fields
+  - restores connected workspace only if same request is live
+
+- `connect(config)`
+  - switches live connection to selected request
+
+- `disconnect()`
+  - ends live connection
+  - clears live request workspace
+
+- `setTransport(t)` / `setConnectionUrl(url)`
+  - update selected request draft
+  - persist draft locally
+  - request record persisted from connection panel layer
+
+- `selectTool(tool)` / `selectPrompt(prompt)`
+  - update visible workspace
+  - sync into connected request cache if selected request is live
+
+## Data Flows
+
+### Request Selection
+
+```text
+Sidebar click
   → store.loadSavedRequest(req)
-  → sets selectedTool + pendingParams
-  → ToolPanel useEffect detects pendingParams
-  → seedValues(schema, pendingParams)    # tool-schema-helpers.ts
-  → setFormValues(seeded)
-  → clearPendingParams()
+  → selectedRequestId = req.id
+  → load req connectionConfig into panel
+  → if req.id === connectedRequestId
+      restore cached live workspace
+    else
+      blank workspace
 ```
 
----
+### Connect Selected Request
 
-## Routing & Navigation
-
-`activeView` controls the main content area. `CollectionsView` is always visible as a left sidebar (240 px) inside `home.tsx`.
-
-```
-"studio"      → StudioView  (default)
-"collections" → (main area — sidebar already shows collections)
-"logs"        → LogsView
-"settings"    → SettingsView
-```
-
-Icon sidebar (`icon-sidebar.tsx`) calls `setActiveView()` on click.
-
----
-
-## Conventions
-
-**Imports**
-```ts
-import { useStore } from '@/store'          // alias: src/
-import { Button } from '@/components/ui/button'
-import { cn } from '@/lib/utils'
-import { AddRequestDialog } from './add-request-dialog'  // relative within same folder
+```text
+ConnectionPanel.handleConnect()
+  → build ConnectionConfig from selected request fields
+  → store.connect(config)
+  → clear live workspace
+  → disconnect old session if any
+  → WS connect for selected request
+  → server sends connected
+  → store sets connectedRequestId
+  → tools/prompts visible only for that request
 ```
 
-**Styling:** Tailwind utility classes, `cn()` for conditional composition. Dark mode via `document.documentElement.classList.toggle('dark')`.
+### Tool Invocation
 
-**Icons:** lucide-react only.
+```text
+Run Tool
+  → allowed only when selectedRequestId === connectedRequestId
+  → store.invokeTool()
+  → transport.invoke()
+  → server messages update connected request cache
+  → if selected request is live one, visible workspace updates too
+```
 
-**Exports:** Named exports for feature components, default export for `ToolPanel` (legacy — imported as `import ToolPanel from '...'`).
+## Important Components
 
-**Forms:** Local `useState` for form values. No form library. JSON Schema → fields via `tool-schema-helpers.ts`.
+- `src/pages/home.tsx`
+  - page shell
+  - shows studio only when a request is selected
 
-**Types:** Imported from `@mcp-studio/types` (workspace package). No inline type duplication.
+- `src/components/connection/connection-panel.tsx`
+  - selected request title
+  - transport/url inputs
+  - connect/disconnect button
+  - persists request connection config
 
----
+- `src/components/tools/tool-panel.tsx`
+  - visible only for selected connected request
+  - tool form values synced into store
 
-## Adding a New View
+- `src/components/prompts/prompt-panel.tsx`
+  - visible only for selected connected request
 
-1. Create `src/views/my-view.tsx`, export a named component
-2. Add `"my-view"` to `activeView` union in `store/index.ts`
-3. Add nav item to `NAV_ITEMS` in `icon-sidebar.tsx`
-4. Render in `home.tsx` conditional block
+- `src/components/response/response-panel.tsx`
+  - request-scoped response/timeline
 
-## Adding a New ServerMessage Type
+- `src/components/logs/logs-panel.tsx`
+  - request-scoped console
 
-1. Add variant to `packages/types/src/messages.ts`
-2. Handle in `handleServerMessage()` in `store/index.ts`
-3. Emit from `SessionManager` in `apps/server/src/session/manager.ts`
+- `src/components/shell/status-bar.tsx`
+  - shows connected request name + runtime status
+
+## Tests
+
+Current tests cover:
+
+- request rename
+- request connection config updates
+- request selection behavior
+- blank workspace when switching away from connected request
+- restoring connected request workspace when switching back
+- environment store behavior
+
+Frontend tests: `src/__tests__/*`

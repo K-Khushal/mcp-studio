@@ -9,6 +9,11 @@ interface CreateRequestData {
   connectionConfig?: ConnectionConfig;
 }
 
+interface UpdateRequestData {
+  name?: string;
+  connectionConfig?: ConnectionConfig | null;
+}
+
 export async function createRequest(
   collectionId: string,
   data: CreateRequestData
@@ -36,9 +41,25 @@ export async function deleteRequest(id: string): Promise<void> {
   await db.delete(requests).where(eq(requests.id, id));
 }
 
-export async function updateRequest(id: string, name: string): Promise<void> {
+export async function updateRequest(id: string, data: UpdateRequestData): Promise<void> {
+  const update: {
+    name?: string;
+    connectionConfig?: ConnectionConfig | null;
+    updatedAt: number;
+  } = {
+    updatedAt: Date.now(),
+  };
+
+  if (data.name !== undefined) {
+    update.name = data.name;
+  }
+
+  if (data.connectionConfig !== undefined) {
+    update.connectionConfig = data.connectionConfig;
+  }
+
   await db
     .update(requests)
-    .set({ name, updatedAt: Date.now() })
+    .set(update)
     .where(eq(requests.id, id));
 }

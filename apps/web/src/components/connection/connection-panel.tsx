@@ -13,6 +13,9 @@ export function ConnectionPanel() {
     connect,
     disconnect,
     renameRequest,
+    updateRequestConnection,
+    connectedRequestId,
+    connectingRequestId,
     transport,
     connectionUrl,
     setTransport,
@@ -25,7 +28,11 @@ export function ConnectionPanel() {
   const renameRef = useRef<HTMLInputElement>(null);
 
   const isConnected = connectionStatus === 'connected';
+  const isSelectedRequestConnected =
+    selectedRequestId !== null && selectedRequestId === connectedRequestId && isConnected;
   const isConnecting = connectionStatus === 'connecting';
+  const isSelectedRequestConnecting =
+    selectedRequestId !== null && selectedRequestId === connectingRequestId && isConnecting;
 
   const selectedRequest = selectedRequestId
     ? collections.flatMap((c) => c.requests).find((r) => r.id === selectedRequestId)
@@ -47,6 +54,41 @@ export function ConnectionPanel() {
     }
   }, [isRenaming]);
 
+  useEffect(() => {
+    if (!selectedRequest || !selectedCollection) return;
+
+    const connectionConfig: ConnectionConfig =
+      transport === 'http'
+        ? { transport: 'http', config: { url: connectionUrl, headers: {} } }
+        : {
+            transport: 'stdio',
+            config: {
+              command: connectionUrl.trim().split(/\s+/)[0] ?? '',
+              args: connectionUrl.trim().split(/\s+/).slice(1),
+              env: {},
+              inheritSystemEnv: true,
+            },
+          };
+
+    const currentConfig = selectedRequest.connectionConfig;
+    if (JSON.stringify(currentConfig ?? null) === JSON.stringify(connectionConfig)) {
+      return;
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      updateRequestConnection(selectedCollection.id, selectedRequest.id, connectionConfig).catch(console.error);
+    }, 250);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [
+    selectedCollection?.id,
+    selectedRequest?.id,
+    selectedRequest?.connectionConfig,
+    connectionUrl,
+    transport,
+    updateRequestConnection,
+  ]);
+
   const commitRename = async () => {
     if (!selectedRequest || !selectedCollection) {
       setIsRenaming(false);
@@ -63,20 +105,18 @@ export function ConnectionPanel() {
   };
 
   const handleConnect = () => {
-    if (isConnected) {
+    if (isSelectedRequestConnected) {
       disconnect();
       return;
     }
-    let config: ConnectionConfig;
-    if (transport === 'http') {
-      config = { transport: 'http', config: { url: connectionUrl, headers: {} } };
-    } else {
-      const parts = connectionUrl.trim().split(/\s+/);
-      config = {
-        transport: 'stdio',
-        config: { command: parts[0] ?? '', args: parts.slice(1), env: {}, inheritSystemEnv: true },
-      };
-    }
+    const parts = connectionUrl.trim().split(/\s+/);
+    const config: ConnectionConfig =
+      transport === 'http'
+        ? { transport: 'http', config: { url: connectionUrl, headers: {} } }
+        : {
+            transport: 'stdio',
+            config: { command: parts[0] ?? '', args: parts.slice(1), env: {}, inheritSystemEnv: true },
+          };
     connect(config);
   };
 
@@ -110,10 +150,14 @@ export function ConnectionPanel() {
         <div className="flex items-center gap-1.5">
           <div className={cn(
             'w-2 h-2 rounded-full',
-            isConnected ? 'bg-success' : isConnecting ? 'bg-warning animate-pulse' : 'bg-destructive'
+            isSelectedRequestConnected
+              ? 'bg-success'
+              : isSelectedRequestConnecting
+                ? 'bg-warning animate-pulse'
+                : 'bg-destructive'
           )} />
           <span className="text-xs text-muted-foreground">
-            {isConnected ? 'Connected' : isConnecting ? 'Connecting...' : 'Disconnected'}
+            {isSelectedRequestConnected ? 'Connected' : isSelectedRequestConnecting ? 'Connecting...' : 'Disconnected'}
           </span>
         </div>
         <div className="flex-1" />
@@ -147,7 +191,7 @@ export function ConnectionPanel() {
         <Input
           value={connectionUrl}
           onChange={(e) => setConnectionUrl(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isConnected && handleConnect()}
+          onKeyDown={(e) => e.key === 'Enter' && !isSelectedRequestConnected && !isSelectedRequestConnecting && handleConnect()}
           placeholder={transport === 'stdio' ? 'npx @test/test-mcp' : 'http://localhost:4000'}
           className="flex-1"
         />
@@ -157,14 +201,14 @@ export function ConnectionPanel() {
           disabled={isConnecting}
           className={cn(
             'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
-            isConnected
+            isSelectedRequestConnected
               ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
             isConnecting && 'opacity-50 cursor-not-allowed'
           )}
         >
-          {isConnecting ? <Loader2 size={14} className="animate-spin" /> : isConnected ? <Unplug size={14} /> : <Plug size={14} />}
-          {isConnected ? 'Disconnect' : 'Connect'}
+          {isSelectedRequestConnecting ? <Loader2 size={14} className="animate-spin" /> : isSelectedRequestConnected ? <Unplug size={14} /> : <Plug size={14} />}
+          {isSelectedRequestConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
     </div>

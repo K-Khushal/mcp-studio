@@ -13,7 +13,7 @@ export default function Home() {
 
   useEffect(() => {
     Promise.all([loadCollections(), loadEnvironments()]).catch(console.error);
-  }, []);
+  }, [loadCollections, loadEnvironments]);
 
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">

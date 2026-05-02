@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useCallback } from 'react';
 import { Play, ChevronRight } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
@@ -9,47 +9,51 @@ import { defaultValue, buildParams, seedValues, getProperties } from './tool-sch
 export default function ToolPanel() {
   const {
     connectionStatus,
+    selectedRequestId,
+    connectedRequestId,
     tools,
     selectedTool,
     toolSearch,
     pendingParams,
+    toolFormValues,
     response,
     selectTool,
     setToolSearch,
+    setToolFormValues,
     invokeTool,
     clearPendingParams,
   } = useStore();
-
-  const [formValues, setFormValues] = useState<Record<string, string>>({});
+  const isSelectedRequestConnected =
+    connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
 
   useEffect(() => {
-    if (!selectedTool) { setFormValues({}); return; }
+    if (!selectedTool) { setToolFormValues({}); return; }
     const defaults: Record<string, string> = {};
     for (const [key, prop] of Object.entries(getProperties(selectedTool.inputSchema))) {
       defaults[key] = defaultValue(prop);
     }
-    setFormValues(defaults);
-  }, [selectedTool?.name]);
+    setToolFormValues(defaults);
+  }, [selectedTool?.name, setToolFormValues]);
 
   useEffect(() => {
     if (!pendingParams || !selectedTool) return;
-    setFormValues((prev) => ({ ...prev, ...seedValues(selectedTool.inputSchema, pendingParams) }));
+    setToolFormValues({ ...toolFormValues, ...seedValues(selectedTool.inputSchema, pendingParams) });
     clearPendingParams();
-  }, [pendingParams, selectedTool?.name]);
+  }, [pendingParams, selectedTool?.name, toolFormValues, setToolFormValues, clearPendingParams]);
 
   const handleFieldChange = useCallback((key: string, value: string) => {
-    setFormValues((prev) => ({ ...prev, [key]: value }));
-  }, []);
+    setToolFormValues({ ...toolFormValues, [key]: value });
+  }, [toolFormValues, setToolFormValues]);
 
   const handleInvoke = useCallback(() => {
     if (!selectedTool) return;
-    invokeTool(selectedTool.name, buildParams(selectedTool.inputSchema, formValues)).catch(console.error);
-  }, [selectedTool, formValues, invokeTool]);
+    invokeTool(selectedTool.name, buildParams(selectedTool.inputSchema, toolFormValues)).catch(console.error);
+  }, [selectedTool, toolFormValues, invokeTool]);
 
-  if (connectionStatus !== 'connected') {
+  if (!isSelectedRequestConnected) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-        Connect to an MCP server to discover tools
+        Connect to this request to load tools
       </div>
     );
   }
@@ -81,7 +85,7 @@ export default function ToolPanel() {
 
             <SchemaForm
               schema={selectedTool.inputSchema}
-              values={formValues}
+              values={toolFormValues}
               onChange={handleFieldChange}
             />
 

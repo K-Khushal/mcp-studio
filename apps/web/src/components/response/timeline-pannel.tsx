@@ -1,6 +1,6 @@
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Circle } from 'lucide-react';
+import { CheckCircle2, Circle, Loader2 } from 'lucide-react';
 
 export function TimelinePanel() {
   const { timeline } = useStore();
@@ -12,13 +12,17 @@ export function TimelinePanel() {
   return (
     <div className="flex flex-col gap-0">
       {timeline.map((step, i) => (
-        <div key={i} className="flex gap-3">
+        <div key={`${step.label}-${step.timestamp}-${i}`} className="flex gap-3">
           <div className="flex flex-col items-center">
             <div className={cn(
               'w-5 h-5 rounded-full flex items-center justify-center shrink-0',
               step.status === 'completed' ? 'text-success' : step.status === 'active' ? 'text-primary' : 'text-muted-foreground'
             )}>
-              {step.status === 'completed' ? <CheckCircle2 size={16} /> : <Circle size={16} />}
+              {step.status === 'completed'
+                ? <CheckCircle2 size={16} />
+                : step.status === 'active'
+                  ? <Loader2 size={16} className="animate-spin" />
+                  : <Circle size={16} />}
             </div>
             {i < timeline.length - 1 && (
               <div className="w-px flex-1 bg-border min-h-6" />

@@ -30,9 +30,9 @@ export default function EnvironmentPanel() {
 
   useEffect(() => {
     if (open && environments.length === 0) {
-      loadEnvironments();
+      void loadEnvironments();
     }
-  }, [open]);
+  }, [open, loadEnvironments]);
 
   useEffect(() => {
     if (activeEnv) setLocalVars(activeEnv.variables);
