@@ -40,3 +40,4 @@ vitest.cache/
 
 # MCP Studio runtime data (local only)
 ~/.mcp-studio/
+.codex/config.toml
