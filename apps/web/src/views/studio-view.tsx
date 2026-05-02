@@ -5,6 +5,7 @@ import { cn } from "@/lib/utils";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { PromptPanel } from "@/components/prompts/prompt-panel";
 import ToolPannel from "@/components/tools/tool-panel";
+import { ResponsePanel } from "@/components/response/response-panel";
 /**
  * StudioView — main workspace.
  * Layout: [ConnectionPanel | ToolExplorer] | [ResponseViewer]
@@ -52,6 +53,9 @@ export function StudioView() {
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
+        <ResizablePanel defaultSize={55} minSize={40}>
+          <ResponsePanel />
+        </ResizablePanel>
       </ResizablePanelGroup>
     </div>
   );

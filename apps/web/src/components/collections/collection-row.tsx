@@ -60,7 +60,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
 
   return (
     <div>
-      <div className="group flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 transition-colors">
+      <div className="group/collection flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 transition-colors">
         <button
           onClick={() => setExpanded((e) => !e)}
           className="text-muted-foreground hover:text-foreground transition-colors"
@@ -89,7 +89,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
           </span>
         )}
 
-        <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity shrink-0">
+        <div className="flex items-center gap-0.5 opacity-0 transition-opacity shrink-0 group-hover/collection:opacity-100">
           <button
             onClick={() => setAddOpen(true)}
             title="Add request"
@@ -119,7 +119,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
           <div
             key={req.id}
             className={cn(
-              'group flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer',
+              'group/request flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer',
               selectedRequestId === req.id
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
@@ -134,7 +134,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
                 setConfirmDeleteReqId(req.id);
               }}
               title="Delete request"
-              className="opacity-0 group-hover:opacity-100 p-0.5 text-muted-foreground hover:text-destructive transition-all"
+              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive transition-all group-hover/request:opacity-100"
             >
               <Trash2 size={11} />
             </button>

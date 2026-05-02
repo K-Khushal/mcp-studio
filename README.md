@@ -21,6 +21,7 @@ MCP Studio is a local developer tool for working with [Model Context Protocol](h
 | Shared types | `packages/types` — discriminated union message protocol |
 | MCP client | `packages/mcp-client` — wraps `@modelcontextprotocol/sdk` |
 
+Theme: bunx shadcn@latest add https://tweakcn.com/r/themes/cmo5x7bmj000204l2bmnu3lgh
 ---
 
 ## Monorepo structure

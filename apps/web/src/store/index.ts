@@ -19,20 +19,30 @@ import { transport } from "@/transport/websocket-transport";
 
 interface LogEntry {
   id: string;
-  level: "debug" | "info" | "warn" | "error";
+  level: "DEBUG" | "INFO" | "WARN" | "ERROR";
   source: "protocol" | "subprocess";
-  text: string;
+  message: string;
   timestamp: number;
 }
 
 interface ResponseState {
   requestId: string | null;
+  status: number | null;
   chunks: unknown[];
   result: unknown | null;
   error: string | null;
   isStreaming: boolean;
   startedAt: number | null;
   completedAt: number | null;
+  headers: Record<string, string>;
+  body: any;
+}
+
+interface TimelineStep {
+  label: string;
+  detail: string;
+  timestamp: string;
+  status: 'completed' | 'active' | 'pending';
 }
 
 interface AppState {
@@ -51,6 +61,7 @@ interface AppState {
 
   // Response
   response: ResponseState;
+  timeline: TimelineStep[];
 
   // Logs
   logs: LogEntry[];
@@ -157,15 +168,8 @@ export const useStore = create<AppState & AppActions>()(
       selectedPrompt: null,
       toolSearch: "",
       pendingParams: null,
-      response: {
-        requestId: null,
-        chunks: [],
-        result: null,
-        error: null,
-        isStreaming: false,
-        startedAt: null,
-        completedAt: null,
-      },
+      response: null,
+      timeline: [],
       logs: [],
       logIdCounter: 0,
       collections: [],
@@ -218,12 +222,15 @@ export const useStore = create<AppState & AppActions>()(
         set({
           response: {
             requestId: null,
+            status: null,
             chunks: [],
             result: null,
             error: null,
             isStreaming: true,
             startedAt: Date.now(),
             completedAt: null,
+            headers: {},
+            body: null,
           },
         });
         await transport.invoke(tool, params);
@@ -235,6 +242,17 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- saved request loading ----------
       loadSavedRequest: (request) => {
+        if (get().selectedRequestId === request.id) {
+          set({
+            selectedTool: null,
+            selectedPrompt: null,
+            pendingParams: null,
+            activeView: "studio",
+            selectedRequestId: null,
+          });
+          return;
+        }
+
         const conn = request.connectionConfig;
         let transport: "stdio" | "http" = "stdio";
         let connectionUrl = "";
@@ -445,12 +463,12 @@ export const useStore = create<AppState & AppActions>()(
 function handleServerMessage(msg: ServerMessage): void {
   const store = useStore.getState();
 
-  const addLog = (level: LogEntry["level"], source: LogEntry["source"], text: string) => {
+  const addLog = (level: LogEntry["level"], source: LogEntry["source"], message: string) => {
     useStore.setState((s) => ({
       logIdCounter: s.logIdCounter + 1,
       logs: [
         ...s.logs,
-        { id: `log_${s.logIdCounter}`, level, source, text, timestamp: Date.now() },
+        { id: `log_${s.logIdCounter}`, level, source, message, timestamp: Date.now() },
       ].slice(-500),
     }));
   };
@@ -467,7 +485,7 @@ function handleServerMessage(msg: ServerMessage): void {
         prompts: msg.prompts,
         serverInfo: msg.serverInfo,
       });
-      addLog("info", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
+      addLog("INFO", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
       break;
 
     case "disconnected":
@@ -492,7 +510,7 @@ function handleServerMessage(msg: ServerMessage): void {
       }));
       break;
 
-    case "error":
+    case "ERROR":
       if (msg.code === "CONNECTION_FAILED") {
         useStore.setState({ connectionStatus: "error" });
         store.addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
@@ -501,11 +519,11 @@ function handleServerMessage(msg: ServerMessage): void {
           response: { ...s.response, error: msg.message, isStreaming: false, completedAt: Date.now() },
         }));
       }
-      addLog("error", "protocol", msg.message);
+      addLog("ERROR", "protocol", msg.message);
       break;
 
     case "log":
-      addLog(msg.level, msg.source, msg.text);
+      addLog(msg.level, msg.source, msg.message);
       break;
 
     case "tools_listed":
