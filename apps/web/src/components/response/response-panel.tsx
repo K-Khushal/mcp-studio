@@ -1,6 +1,6 @@
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Clock, Copy, Inbox, Loader2, XCircle, Check } from 'lucide-react';
+import { CheckCircle2, Clock, Copy, Inbox, Loader2, XCircle, Check, Eye, EyeOff } from 'lucide-react';
 import { useState } from 'react';
 import { TimelinePanel } from './timeline-pannel';
 import { JsonViewer } from './json-viewer';
@@ -54,9 +54,9 @@ function HeaderTable({ entries, maskKeys = [] }: { entries: [string, string][]; 
                     {isSensitive && (
                       <button
                         onClick={() => toggleReveal(key)}
-                        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors text-[10px]"
+                        className="shrink-0 text-muted-foreground hover:text-foreground transition-colors"
                       >
-                        {isRevealed ? 'hide' : 'show'}
+                        {isRevealed ? <EyeOff size={11} /> : <Eye size={11} />}
                       </button>
                     )}
                   </span>

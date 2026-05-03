@@ -166,7 +166,7 @@ export default function EnvironmentPanel() {
                 />
                 <div className="flex items-center gap-1 w-20 justify-end">
                   <button onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                    {hiddenKeys.has(key) ? <EyeOff size={12} /> : <Eye size={12} />}
+                    {hiddenKeys.has(key) ? <Eye size={12} /> : <EyeOff size={12} />}
                   </button>
                   <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     <Copy size={12} />
