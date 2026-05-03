@@ -1,58 +1,16 @@
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
-import { CheckCircle2, Clock, Inbox, Loader2, XCircle } from 'lucide-react';
+import { CheckCircle2, Clock, Copy, Inbox, Loader2, XCircle, Check } from 'lucide-react';
 import { useState } from 'react';
 import { TimelinePanel } from './timeline-pannel';
-
-function JsonView({ data, indent = 0 }: { data: unknown; indent?: number }) {
-  if (data === null || data === undefined) return <span className="text-muted-foreground">null</span>;
-  if (typeof data === 'string') return <span className="text-success">"{data}"</span>;
-  if (typeof data === 'number') return <span className="text-warning">{data}</span>;
-  if (typeof data === 'boolean') return <span className="text-primary">{String(data)}</span>;
-
-  if (Array.isArray(data)) {
-    if (data.length === 0) return <span>[]</span>;
-    return (
-      <span>
-        {'[\n'}
-        {data.map((item, i) => (
-          <span key={i}>
-            {'  '.repeat(indent + 1)}
-            <JsonView data={item} indent={indent + 1} />
-            {i < data.length - 1 ? ',\n' : '\n'}
-          </span>
-        ))}
-        {'  '.repeat(indent)}{']'}
-      </span>
-    );
-  }
-
-  if (typeof data === 'object') {
-    const keys = Object.keys(data as object);
-    if (keys.length === 0) return <span>{'{}'}</span>;
-    return (
-      <span>
-        {'{\n'}
-        {keys.map((key, i) => (
-          <span key={key}>
-            {'  '.repeat(indent + 1)}
-            <span className="text-primary/80">"{key}"</span>
-            {': '}
-            <JsonView data={(data as Record<string, unknown>)[key]} indent={indent + 1} />
-            {i < keys.length - 1 ? ',\n' : '\n'}
-          </span>
-        ))}
-        {'  '.repeat(indent)}{'}'}
-      </span>
-    );
-  }
-
-  return <span>{String(data)}</span>;
-}
+import { JsonViewer } from './json-viewer';
+import { Button } from '@/components/ui/button';
+import { toast } from 'sonner';
 
 export function ResponsePanel() {
   const { response, connectionConfig, connectionStatus, selectedRequestId, connectedRequestId } = useStore();
   const [activeTab, setActiveTab] = useState<'pretty' | 'raw' | 'headers' | 'timeline'>('pretty');
+  const [isCopied, setIsCopied] = useState(false);
   const isSelectedRequestConnected =
     connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
 
@@ -70,6 +28,18 @@ export function ResponsePanel() {
     isSelectedRequestConnected && connectionConfig?.transport === 'http'
       ? connectionConfig.config.headers
       : null;
+
+  const handleCopy = async () => {
+    if (!response.result) return;
+    try {
+      await navigator.clipboard.writeText(JSON.stringify(response.result, null, 2));
+      setIsCopied(true);
+      toast.success('Response copied to clipboard');
+      setTimeout(() => setIsCopied(false), 2000);
+    } catch (err) {
+      toast.error('Failed to copy response');
+    }
+  };
 
   return (
     <div className="flex flex-col bg-card h-full min-h-0">
@@ -101,21 +71,37 @@ export function ResponsePanel() {
             </span>
           )}
         </div>
-        <div className="flex gap-0.5">
-          {tabs.map(tab => (
-            <button
-              key={tab}
-              onClick={() => setActiveTab(tab)}
-              className={cn(
-                'px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize',
-                activeTab === tab
-                  ? 'bg-muted text-foreground'
-                  : 'text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {tab}
-            </button>
-          ))}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-0.5">
+            {tabs.map(tab => (
+              <button
+                key={tab}
+                onClick={() => setActiveTab(tab)}
+                className={cn(
+                  'px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize',
+                  activeTab === tab
+                    ? 'bg-muted text-foreground'
+                    : 'text-muted-foreground hover:text-foreground'
+                )}
+              >
+                {tab}
+              </button>
+            ))}
+          </div>
+          {hasResult && (
+            <>
+              <div className="w-px h-4 bg-border mx-1" />
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                onClick={handleCopy}
+                title="Copy response"
+                className="text-muted-foreground hover:text-foreground"
+              >
+                {isCopied ? <Check size={12} className="text-success" /> : <Copy size={12} />}
+              </Button>
+            </>
+          )}
         </div>
       </div>
 
@@ -134,9 +120,7 @@ export function ResponsePanel() {
           hasError ? (
             <pre className="text-xs font-mono text-destructive whitespace-pre-wrap">{response.error}</pre>
           ) : (
-            <pre className="text-xs font-mono leading-relaxed whitespace-pre-wrap">
-              <JsonView data={response.result} />
-            </pre>
+            <JsonViewer data={response.result} />
           )
         ) : activeTab === 'raw' ? (
           hasError ? (
