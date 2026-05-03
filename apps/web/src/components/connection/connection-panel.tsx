@@ -5,7 +5,12 @@ import EnvironmentPanel from '../environments/environment-panel';
 import { ConfigurationPanel } from '../configuration/configuration-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import type { ConnectionConfig } from '@mcp-studio/types';
+import type { ConnectionConfig, HttpAuth } from '@mcp-studio/types';
+
+// Omit auth when it's "none" so stored JSON stays clean and comparison is stable
+function normalizeAuth(auth: HttpAuth): HttpAuth | undefined {
+  return auth.type === 'none' ? undefined : auth;
+}
 
 export function ConnectionPanel() {
   const {
@@ -18,6 +23,8 @@ export function ConnectionPanel() {
     connectingRequestId,
     transport,
     connectionUrl,
+    httpAuth,
+    httpHeaders,
     setTransport,
     setConnectionUrl,
     selectedRequestId,
@@ -60,7 +67,7 @@ export function ConnectionPanel() {
 
     const connectionConfig: ConnectionConfig =
       transport === 'http'
-        ? { transport: 'http', config: { url: connectionUrl, headers: {} } }
+        ? { transport: 'http', config: { url: connectionUrl, headers: httpHeaders, auth: normalizeAuth(httpAuth) } }
         : {
             transport: 'stdio',
             config: {
@@ -87,6 +94,8 @@ export function ConnectionPanel() {
     selectedRequest?.connectionConfig,
     connectionUrl,
     transport,
+    httpAuth,
+    httpHeaders,
     updateRequestConnection,
   ]);
 
@@ -113,7 +122,7 @@ export function ConnectionPanel() {
     const parts = connectionUrl.trim().split(/\s+/);
     const config: ConnectionConfig =
       transport === 'http'
-        ? { transport: 'http', config: { url: connectionUrl, headers: {} } }
+        ? { transport: 'http', config: { url: connectionUrl, headers: httpHeaders, auth: normalizeAuth(httpAuth) } }
         : {
             transport: 'stdio',
             config: { command: parts[0] ?? '', args: parts.slice(1), env: {}, inheritSystemEnv: true },
