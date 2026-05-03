@@ -7,6 +7,7 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, LogLevel } from "@mcp-studio
 export interface MCPClientOptions {
   onChunk?: (requestId: string, data: unknown) => void;
   onLog?: (level: LogLevel, source: "protocol" | "subprocess", text: string) => void;
+  onHttpResponse?: (requestId: string, status: number, headers: Record<string, string>) => void;
 }
 
 export interface MCPClientInterface {

@@ -10,6 +10,7 @@ import type {
   Environment,
   ServerMessage,
   ConnectionConfig,
+  HttpAuth,
 } from "@mcp-studio/types";
 import { transport } from "@/transport/websocket-transport";
 
@@ -32,6 +33,8 @@ interface ResponseState {
   isStreaming: boolean;
   startedAt: number | null;
   completedAt: number | null;
+  httpStatus: number | null;
+  httpResponseHeaders: Record<string, string> | null;
 }
 
 interface TimelineStep {
@@ -44,6 +47,8 @@ interface TimelineStep {
 interface ConnectionDraft {
   transport: "stdio" | "http";
   connectionUrl: string;
+  httpAuth?: HttpAuth;
+  httpHeaders?: Record<string, string>;
 }
 
 interface RequestWorkspaceState {
@@ -101,6 +106,8 @@ interface AppState {
   // Connection form (persisted in store so panels stay in sync)
   transport: "stdio" | "http";
   connectionUrl: string;
+  httpAuth: HttpAuth;
+  httpHeaders: Record<string, string>;
 
   // Environments
   environments: Environment[];
@@ -162,6 +169,8 @@ interface AppActions {
   // Connection form
   setTransport: (t: "stdio" | "http") => void;
   setConnectionUrl: (url: string) => void;
+  setHttpAuth: (auth: HttpAuth) => void;
+  setHttpHeaders: (headers: Record<string, string>) => void;
 
   // Environments
   loadEnvironments: () => Promise<void>;
@@ -192,11 +201,18 @@ const BLANK_RESPONSE = {
   isStreaming: false,
   startedAt: null,
   completedAt: null,
+  httpStatus: null,
+  httpResponseHeaders: null,
 } as const;
+
+const DEFAULT_HTTP_AUTH: HttpAuth = { type: "none" };
+const DEFAULT_HTTP_HEADERS: Record<string, string> = {};
 
 const DEFAULT_CONNECTION_DRAFT: ConnectionDraft = {
   transport: "stdio",
   connectionUrl: "",
+  httpAuth: DEFAULT_HTTP_AUTH,
+  httpHeaders: DEFAULT_HTTP_HEADERS,
 };
 
 function createBlankWorkspace(): RequestWorkspaceState {
@@ -234,6 +250,8 @@ function cloneWorkspace(workspace: RequestWorkspaceState): RequestWorkspaceState
       isStreaming: workspace.response.isStreaming,
       startedAt: workspace.response.startedAt,
       completedAt: workspace.response.completedAt,
+      httpStatus: workspace.response.httpStatus,
+      httpResponseHeaders: workspace.response.httpResponseHeaders,
     },
     timeline: [...workspace.timeline],
     logs: [...workspace.logs],
@@ -253,6 +271,8 @@ function connectionDraftFromConfig(config?: ConnectionConfig | null): Connection
     return {
       transport: "http",
       connectionUrl: config.config.url,
+      httpAuth: config.config.auth ?? DEFAULT_HTTP_AUTH,
+      httpHeaders: config.config.headers ?? DEFAULT_HTTP_HEADERS,
     };
   }
 
@@ -270,6 +290,8 @@ function readPersistedConnectionDraft(): ConnectionDraft {
     return {
       transport: parsed.transport === "http" ? "http" : "stdio",
       connectionUrl: parsed.connectionUrl ?? "",
+      httpAuth: parsed.httpAuth ?? DEFAULT_HTTP_AUTH,
+      httpHeaders: parsed.httpHeaders ?? DEFAULT_HTTP_HEADERS,
     };
   } catch {
     return { ...DEFAULT_CONNECTION_DRAFT };
@@ -399,6 +421,8 @@ export const useStore = create<AppState & AppActions>()(
       requestDrafts: {},
       transport: readPersistedConnectionDraft().transport,
       connectionUrl: readPersistedConnectionDraft().connectionUrl,
+      httpAuth: readPersistedConnectionDraft().httpAuth ?? DEFAULT_HTTP_AUTH,
+      httpHeaders: readPersistedConnectionDraft().httpHeaders ?? DEFAULT_HTTP_HEADERS,
       environments: [],
       config: (() => {
         const defaults: MCPConfig = {
@@ -564,6 +588,8 @@ export const useStore = create<AppState & AppActions>()(
           isStreaming: true,
           startedAt: now,
           completedAt: null,
+          httpStatus: null,
+          httpResponseHeaders: null,
         };
         const timeline: TimelineStep[] = [
           { label: "Request sent", detail: `Tool: ${tool}`, timestamp: fmtTime(now), status: "completed" },
@@ -598,6 +624,8 @@ export const useStore = create<AppState & AppActions>()(
           isStreaming: true,
           startedAt: now,
           completedAt: null,
+          httpStatus: null,
+          httpResponseHeaders: null,
         };
         const timeline: TimelineStep[] = [
           { label: "Request sent", detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), status: "completed" },
@@ -643,6 +671,8 @@ export const useStore = create<AppState & AppActions>()(
           selectedRequestId: request.id,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
+          httpAuth: draft.httpAuth ?? DEFAULT_HTTP_AUTH,
+          httpHeaders: draft.httpHeaders ?? DEFAULT_HTTP_HEADERS,
           requestDrafts: {
             ...state.requestDrafts,
             [request.id]: draft,
@@ -717,13 +747,22 @@ export const useStore = create<AppState & AppActions>()(
           );
           const selectedRequestDeleted = deletedReqIds.has(s.selectedRequestId ?? "");
           const connectedRequestDeleted = deletedReqIds.has(s.connectedRequestId ?? "");
+          const nextDrafts = { ...s.requestDrafts };
+          for (const rid of deletedReqIds) delete nextDrafts[rid];
           return {
             collections: s.collections.filter((c) => c.id !== id),
             selectedRequestId: selectedRequestDeleted ? null : s.selectedRequestId,
             connectedRequestId: connectedRequestDeleted ? null : s.connectedRequestId,
             connectingRequestId: connectedRequestDeleted ? null : s.connectingRequestId,
             connectedRequestCache: connectedRequestDeleted ? null : s.connectedRequestCache,
-            ...(selectedRequestDeleted ? blankWorkspacePatch() : {}),
+            requestDrafts: nextDrafts,
+            ...(selectedRequestDeleted ? {
+              ...blankWorkspacePatch(),
+              transport: "stdio" as const,
+              connectionUrl: "",
+              httpAuth: DEFAULT_HTTP_AUTH,
+              httpHeaders: DEFAULT_HTTP_HEADERS,
+            } : {}),
           };
         });
       },
@@ -793,6 +832,7 @@ export const useStore = create<AppState & AppActions>()(
         set((s) => {
           const deletingSelected = s.selectedRequestId === reqId;
           const deletingConnected = s.connectedRequestId === reqId;
+          const { [reqId]: _removed, ...nextDrafts } = s.requestDrafts;
           return {
             collections: s.collections.map((c) =>
               c.id === collectionId
@@ -803,7 +843,14 @@ export const useStore = create<AppState & AppActions>()(
             connectedRequestId: deletingConnected ? null : s.connectedRequestId,
             connectingRequestId: deletingConnected ? null : s.connectingRequestId,
             connectedRequestCache: deletingConnected ? null : s.connectedRequestCache,
-            ...(deletingSelected ? blankWorkspacePatch() : {}),
+            requestDrafts: nextDrafts,
+            ...(deletingSelected ? {
+              ...blankWorkspacePatch(),
+              transport: "stdio" as const,
+              connectionUrl: "",
+              httpAuth: DEFAULT_HTTP_AUTH,
+              httpHeaders: DEFAULT_HTTP_HEADERS,
+            } : {}),
           };
         });
       },
@@ -873,7 +920,12 @@ export const useStore = create<AppState & AppActions>()(
       // ---------- connection form ----------
       setTransport: (t) =>
         set((s) => {
-          const draft = { transport: t, connectionUrl: s.connectionUrl };
+          const draft: ConnectionDraft = {
+            transport: t,
+            connectionUrl: s.connectionUrl,
+            httpAuth: s.httpAuth,
+            httpHeaders: s.httpHeaders,
+          };
           persistConnectionDraft(draft);
           return {
             transport: t,
@@ -882,10 +934,43 @@ export const useStore = create<AppState & AppActions>()(
         }),
       setConnectionUrl: (url) =>
         set((s) => {
-          const draft = { transport: s.transport, connectionUrl: url };
+          const draft: ConnectionDraft = {
+            transport: s.transport,
+            connectionUrl: url,
+            httpAuth: s.httpAuth,
+            httpHeaders: s.httpHeaders,
+          };
           persistConnectionDraft(draft);
           return {
             connectionUrl: url,
+            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+          };
+        }),
+      setHttpAuth: (auth) =>
+        set((s) => {
+          const draft: ConnectionDraft = {
+            transport: s.transport,
+            connectionUrl: s.connectionUrl,
+            httpAuth: auth,
+            httpHeaders: s.httpHeaders,
+          };
+          persistConnectionDraft(draft);
+          return {
+            httpAuth: auth,
+            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+          };
+        }),
+      setHttpHeaders: (headers) =>
+        set((s) => {
+          const draft: ConnectionDraft = {
+            transport: s.transport,
+            connectionUrl: s.connectionUrl,
+            httpAuth: s.httpAuth,
+            httpHeaders: headers,
+          };
+          persistConnectionDraft(draft);
+          return {
+            httpHeaders: headers,
             ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
           };
         }),
@@ -1105,6 +1190,17 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case "log":
       addLog(msg.level, msg.source, msg.message);
+      break;
+
+    case "http_response":
+      useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
+        ...workspace,
+        response: {
+          ...workspace.response,
+          httpStatus: msg.status,
+          httpResponseHeaders: msg.headers,
+        },
+      })));
       break;
 
     case "tools_listed":

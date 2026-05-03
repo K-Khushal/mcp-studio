@@ -1,11 +1,13 @@
-import { StdioMCPClient, SSEMCPClient } from "@mcp-studio/mcp-client";
+import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
   ServerMessage,
   ConnectionStatus,
   ConnectionConfig,
+  HttpAuth,
 } from "@mcp-studio/types";
+import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { interpolateObject } from "../env/interpolate.js";
 import { nanoid } from "../utils/nanoid.js";
 
@@ -74,11 +76,13 @@ export class SessionManager {
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             })
-          : new SSEMCPClient(config.config, {
+          : new StreamableHTTPClient(config.config, {
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
+              onHttpResponse: (requestId, status, headers) =>
+                this.send({ type: "http_response", requestId, status, headers }),
             });
 
       const info = await this.client.connect();
@@ -94,11 +98,17 @@ export class SessionManager {
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch {}
       this.client = null;
-      this.send({
-        type: "ERROR",
-        message: err instanceof Error ? err.message : String(err),
-        code: "CONNECTION_FAILED",
-      });
+
+      const isHttpErr = err instanceof StreamableHTTPError;
+      const message = isHttpErr
+        ? `HTTP ${err.code}: ${err.message}`
+        : err instanceof Error ? err.message : String(err);
+
+      if (isHttpErr) {
+        this.send({ type: "log", level: "ERROR", source: "protocol", message, timestamp: Date.now() });
+      }
+
+      this.send({ type: "ERROR", message, code: "CONNECTION_FAILED" });
     }
   }
 
@@ -186,9 +196,19 @@ export class SessionManager {
         msg.config.headers as Record<string, unknown>,
         this.activeEnv
       );
+
+      let auth = msg.config.auth as HttpAuth | undefined;
+      if (auth?.type === "bearer") {
+        const { result } = interpolateObject({ token: auth.token }, this.activeEnv);
+        auth = { type: "bearer", token: result.token as string };
+      } else if (auth?.type === "apikey") {
+        const { result } = interpolateObject({ value: auth.value }, this.activeEnv);
+        auth = { ...auth, value: result.value as string };
+      }
+
       return {
         transport: "http",
-        config: { ...msg.config, headers: headers as Record<string, string> },
+        config: { ...msg.config, headers: headers as Record<string, string>, auth },
       };
     }
   }
