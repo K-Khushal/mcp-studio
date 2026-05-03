@@ -21,7 +21,7 @@ src/
 │   ├── collections/       # sidebar + request CRUD
 │   ├── tools/             # tool list + schema form + run
 │   ├── prompts/           # prompt list + args + run
-│   ├── response/          # response + timeline
+│   ├── response/          # response panel (see below)
 │   ├── logs/              # request console
 │   ├── environments/      # env manager
 │   ├── configuration/     # UI/config dialog
@@ -31,6 +31,56 @@ src/
 ├── transport/             # websocket transport
 └── lib/                   # helpers
 ```
+
+## Response Panel
+
+`src/components/response/` is the response viewer. It understands the MCP tool result content model and routes each content block type to the appropriate renderer.
+
+### File Map
+
+```text
+response/
+├── response-panel.tsx          # orchestrator: tab routing, store wiring
+├── response-header.tsx         # header bar: status badges + tab buttons
+├── pretty-tab.tsx              # pretty tab: dispatches over result shape
+├── headers-tab.tsx             # HTTP request/response headers tab
+├── timeline-panel.tsx          # invocation timeline tab
+├── json-viewer.tsx             # collapsible JSON tree viewer
+└── content-blocks/
+    ├── content-block-renderer.tsx  # routes ContentBlock to correct renderer
+    ├── text-block.tsx              # text: auto-detects JSON → tree, else <pre>
+    ├── resource-block.tsx          # embedded resource: URI card + text/blob
+    ├── resource-link-block.tsx     # resource link: URI card with name/description
+    ├── unsupported-block.tsx       # graceful fallback for image / audio / unknown
+    └── utils.ts                    # tryParseJson helper (shared by text/resource)
+```
+
+### Content Block Support
+
+| MCP type | Status | Notes |
+|----------|--------|-------|
+| `text` | ✅ | Auto-detects JSON → tree viewer; otherwise plain `<pre>` |
+| `resource` (embedded) | ✅ | Shows URI header; text content with JSON detection; blob placeholder |
+| `resource_link` | ✅ | Card with URI, name, description |
+| `image` | 🔲 | Placeholder — [#27](https://github.com/K-Khushal/mcp-studio/issues/27) |
+| `audio` | 🔲 | Placeholder — [#28](https://github.com/K-Khushal/mcp-studio/issues/28) |
+
+### Result Shape Dispatch (`pretty-tab.tsx`)
+
+`response.result` is `unknown` from the store. `PrettyTab` narrows it:
+
+1. `isCallToolResult(result)` → `CallToolResultView` — iterates `content[]`, renders each `ContentBlock`
+2. `isPromptMessages(result)` → `PromptMessagesView` — role-labelled message list
+3. Fallback → `JsonViewer` — generic tree
+
+Tool execution errors (`isError: true` in `CallToolResult`) show a red banner above the blocks and set the header badge to **Error**.
+
+### JSON Tree Viewer (`json-viewer.tsx`)
+
+- Expand/collapse nodes with chevrons; objects/arrays show item count when collapsed
+- First two levels auto-expanded on mount; keyed per invocation to reset stale state
+- Color scheme: keys rose · strings emerald · numbers amber · booleans sky · null muted
+- Copy button appears on hover next to each primitive value
 
 ## Core State Model
 
@@ -260,6 +310,7 @@ Run Tool
 
 - `src/components/response/response-panel.tsx`
   - request-scoped response/timeline
+  - understands MCP content block types
 
 - `src/components/logs/logs-panel.tsx`
   - request-scoped console
