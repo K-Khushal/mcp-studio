@@ -422,7 +422,7 @@ export const useStore = create<AppState & AppActions>()(
       errorCount: 0,
       connectedAt: null,
       activeView: "studio",
-      isLogsCollapsed: false,
+      isLogsCollapsed: true,
       isDarkMode: true,
       toasts: [],
 
