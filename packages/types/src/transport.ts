@@ -11,9 +11,15 @@ export interface StdioConfig {
   inheritSystemEnv: boolean;
 }
 
+export type HttpAuth =
+  | { type: "none" }
+  | { type: "bearer"; token: string }
+  | { type: "apikey"; key: string; value: string; in: "header" | "query" };
+
 export interface HttpConfig {
   url: string;
   headers: Record<string, string>;
+  auth?: HttpAuth;
 }
 
 export type ConnectionConfig =

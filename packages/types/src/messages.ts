@@ -43,4 +43,5 @@ export type ServerMessage =
       timestamp: number;
     }
   | { type: "disconnected" }
-  | { type: "status"; status: import("./mcp.js").ConnectionStatus };
+  | { type: "status"; status: import("./mcp.js").ConnectionStatus }
+  | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };
