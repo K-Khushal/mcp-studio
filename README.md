@@ -51,6 +51,30 @@ The CLI opens `http://localhost:3000`; the Studio Server serves the UI, REST API
 and `/ws` on that single port. `--port` changes it; `--no-open` suppresses the
 browser launch. Data is stored in `~/.mcp-studio/studio.db`.
 
+### Standalone binaries (no Bun required)
+
+When a release is published, download the matching binary from
+[GitHub Releases](https://github.com/K-Khushal/mcp-studio/releases):
+`mcp-studio-linux-x64`, `mcp-studio-linux-arm64`, `mcp-studio-darwin-arm64`,
+`mcp-studio-darwin-x64`, or `mcp-studio-windows-x64.exe`.
+
+On Linux/macOS:
+
+```bash
+chmod +x mcp-studio-linux-x64
+./mcp-studio-linux-x64 --port 4000 --no-open
+```
+
+On Windows, run `.\mcp-studio-windows-x64.exe --port 4000 --no-open` in PowerShell.
+Open `http://localhost:4000`. Web assets and database migrations are embedded;
+the binary extracts them to a temporary directory on startup. The database stays
+at `~/.mcp-studio/studio.db` (override with `STUDIO_DB_PATH`). STDIO MCP Servers
+still require their own runtimes and commands installed.
+
+Maintainers: version tag pushes build all five targets and attach binaries to a
+**draft** release. Manual workflow dispatch builds downloadable workflow artifacts
+only. Publishing a release remains a manual step.
+
 Run a production build from source today:
 
 ```bash

@@ -1,0 +1,63 @@
+name: Standalone binaries
+on:
+  push:
+    tags: ['v[0-9]*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux-x64, linux-arm64, darwin-arm64, darwin-x64, windows-x64]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.12
+      - run: bun install --frozen-lockfile
+      - run: bun run build
+      - name: Compile embedded assets and migrations
+        run: bun scripts/build-binary.ts bun-${{ matrix.target }}
+      - name: Smoke local binary from a clean directory
+        if: matrix.target == 'linux-x64'
+        run: bun scripts/smoke-cli.ts dist/mcp-studio-linux-x64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mcp-studio-${{ matrix.target }}
+          path: dist/mcp-studio-${{ matrix.target }}*
+          if-no-files-found: error
+
+  draft-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: mcp-studio-*
+          path: binaries
+          merge-multiple: true
+      - name: Refuse to modify a published release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+        shell: bash
+        run: |
+          if draft=$(gh release view "$TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            test "$draft" = true || { echo 'Release already published'; exit 1; }
+          fi
+      - uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: binaries/*
+          fail_on_unmatched_files: true
