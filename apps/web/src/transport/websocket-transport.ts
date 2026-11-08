@@ -8,6 +8,7 @@ const WS_URL = import.meta.env["VITE_WS_URL"] ?? (import.meta.env.DEV ? "ws://lo
  */
 export class WebSocketTransport implements StudioTransport {
   private ws: WebSocket | null = null;
+  private intentionalClose = false;
   private handlers = new Set<(msg: ServerMessage) => void>();
 
   get isConnected(): boolean {
@@ -28,6 +29,7 @@ export class WebSocketTransport implements StudioTransport {
   }
 
   async disconnect(): Promise<void> {
+    this.intentionalClose = true;
     this.send({ type: "disconnect" });
     this.ws?.close();
   }
@@ -60,12 +62,13 @@ export class WebSocketTransport implements StudioTransport {
     }
 
     return new Promise((resolve, reject) => {
+      this.intentionalClose = false;
       this.ws = new WebSocket(WS_URL);
 
       this.ws.onopen = () => resolve();
       this.ws.onerror = () => reject(new Error("WebSocket connection failed"));
       this.ws.onclose = () => {
-        this.dispatch({ type: "disconnected" });
+        this.dispatch({ type: "disconnected", ...(this.intentionalClose ? {} : { reason: "Studio Server connection closed unexpectedly" }) });
       };
       this.ws.onmessage = (e) => {
         try {

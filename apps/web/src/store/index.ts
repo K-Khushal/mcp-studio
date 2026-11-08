@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type {
@@ -137,7 +138,6 @@ interface AppState {
   isLogsCollapsed: boolean;
   logsHeight: number;
 
-  toasts: Array<{ id: string; title: string; description?: string; variant?: "destructive" }>;
 }
 
 interface AppActions {
@@ -195,8 +195,6 @@ interface AppActions {
   // UI
   toggleLogs: () => void;
   setLogsHeight: (height: number) => void;
-  addToast: (t: Omit<AppState["toasts"][number], "id">) => void;
-  removeToast: (id: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +441,6 @@ export const useStore = create<AppState & AppActions>()(
       connectedAt: null,
       isLogsCollapsed: true,
       logsHeight: LOGS_DEFAULT_HEIGHT,
-      toasts: [],
 
       // ---------- connection ----------
       connect: async (config) => {
@@ -477,7 +474,11 @@ export const useStore = create<AppState & AppActions>()(
           connectingConnectionId: selectedConnectionId,
         });
         transport.onMessage(handleServerMessage);
-        await transport.connect(config);
+        try {
+          await transport.connect(config);
+        } catch (err) {
+          handleServerMessage({ type: "error", code: "CONNECTION_FAILED", message: err instanceof Error ? err.message : String(err) });
+        }
       },
 
       disconnect: async () => {
@@ -575,7 +576,7 @@ export const useStore = create<AppState & AppActions>()(
       invokeTool: async (tool, params) => {
         const state = get();
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
-          state.addToast({ title: "Not connected", description: "Connect the selected Connection first.", variant: "destructive" });
+          toast.error("Not connected", { description: "Connect the selected Connection first." });
           return;
         }
 
@@ -611,7 +612,7 @@ export const useStore = create<AppState & AppActions>()(
       invokePrompt: async (prompt, args) => {
         const state = get();
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
-          state.addToast({ title: "Not connected", description: "Connect the selected Connection first.", variant: "destructive" });
+          toast.error("Not connected", { description: "Connect the selected Connection first." });
           return;
         }
 
@@ -975,12 +976,7 @@ export const useStore = create<AppState & AppActions>()(
       toggleLogs: () => set((s) => ({ isLogsCollapsed: !s.isLogsCollapsed })),
       setLogsHeight: (height) =>
         set({ logsHeight: clampLogsHeight(height, Math.round(window.innerHeight * 0.7)) }),
-      addToast: (t) =>
-        set((s) => ({
-          toasts: [...s.toasts, { ...t, id: `toast_${Date.now()}` }],
-        })),
-      removeToast: (id) =>
-        set((s) => ({ toasts: s.toasts.filter((t) => t.id !== id) })),
+
     }),
     { name: "mcp-studio" }
   )
@@ -1007,7 +1003,7 @@ function handleServerMessage(msg: ServerMessage): void {
       };
 
       if (!s.connectedConnectionCache) {
-        return { logIdCounter: nextLogIdCounter };
+        return { logIdCounter: nextLogIdCounter, logs: [...s.logs, nextLog].slice(-500) };
       }
 
       const nextLogs = [...s.connectedConnectionCache.logs, nextLog].slice(-500);
@@ -1070,6 +1066,11 @@ function handleServerMessage(msg: ServerMessage): void {
     }
 
     case "disconnected":
+      if (msg.reason) {
+        toast.error("Session disconnected", { description: msg.reason });
+        useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
+        addLog("ERROR", "protocol", msg.reason);
+      }
       useStore.setState((s) => ({
         connectionStatus: "disconnected",
         connectionConfig: null,
@@ -1080,7 +1081,7 @@ function handleServerMessage(msg: ServerMessage): void {
         connectingConnectionId: null,
         connectedConnectionCache: null,
         connectedAt: null,
-        ...(s.selectedConnectionId === s.connectedConnectionId ? blankWorkspacePatch() : {}),
+        ...(s.selectedConnectionId === s.connectedConnectionId ? { tools: [], prompts: [], response: { ...s.response, isStreaming: false } } : {}),
       }));
       break;
 
@@ -1098,6 +1099,7 @@ function handleServerMessage(msg: ServerMessage): void {
         const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
+          errorCount: s.errorCount + (typeof msg.data === "object" && msg.data !== null && "isError" in msg.data && msg.data.isError === true ? 1 : 0),
           ...syncConnectedWorkspace(s, (workspace) => ({
             ...workspace,
             response: { ...workspace.response, result: msg.data, isStreaming: false, completedAt },
@@ -1145,7 +1147,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     }
 
-    case "ERROR":
+    case "error":
       if (msg.code === "CONNECTION_FAILED") {
         useStore.setState({
           connectionStatus: "error",
@@ -1159,7 +1161,8 @@ function handleServerMessage(msg: ServerMessage): void {
           connectedAt: null,
           ...blankWorkspacePatch(),
         });
-        useStore.getState().addToast({ title: "Connection failed", description: msg.message, variant: "destructive" });
+        toast.error("Connection failed", { description: msg.message });
+        useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
         const errorAt = Date.now();
         useStore.setState((s) => {

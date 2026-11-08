@@ -50,6 +50,15 @@ export class SessionManager {
     }
   }
 
+  private connectionClosed(): void {
+    if (this.status !== "connected") return;
+    const reason = "MCP Server connection closed unexpectedly";
+    this.client = null;
+    this.send({ type: "log", level: "ERROR", source: "protocol", message: reason, timestamp: Date.now() });
+    this.setStatus("disconnected");
+    this.send({ type: "disconnected", reason });
+  }
+
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
     this.send({ type: "status", status });
@@ -61,7 +70,9 @@ export class SessionManager {
     try {
       config = this.interpolateConfig(msg);
     } catch (err) {
-      this.send({ type: "ERROR", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
+      this.setStatus("error");
+      this.send({ type: "log", level: "ERROR", source: "protocol", message: String(err), timestamp: Date.now() });
+      this.send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
       return;
     }
 
@@ -75,12 +86,14 @@ export class SessionManager {
       this.client =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
+              onClose: () => this.connectionClosed(),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             })
           : new StreamableHTTPClient(config.config, {
+              onClose: () => this.connectionClosed(),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
@@ -110,17 +123,15 @@ export class SessionManager {
         ? `HTTP ${err.code}: ${err.message}`
         : err instanceof Error ? err.message : String(err);
 
-      if (isHttpErr) {
-        this.send({ type: "log", level: "ERROR", source: "protocol", message, timestamp: Date.now() });
-      }
+      this.send({ type: "log", level: "ERROR", source: "protocol", message, timestamp: Date.now() });
 
-      this.send({ type: "ERROR", message, code: "CONNECTION_FAILED" });
+      this.send({ type: "error", message, code: "CONNECTION_FAILED" });
     }
   }
 
   private async invoke(tool: string, rawParams: Record<string, unknown>): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
 
@@ -133,7 +144,7 @@ export class SessionManager {
       this.send({ type: "result", requestId, data: result });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      this.send({ type: "ERROR", requestId, message, code: "TOOL_ERROR" });
+      this.send({ type: "error", requestId, message, code: "TOOL_ERROR" });
     }
   }
 
@@ -142,7 +153,7 @@ export class SessionManager {
     args: Record<string, string>
   ): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
 
@@ -153,7 +164,7 @@ export class SessionManager {
       this.send({ type: "prompt_result", requestId, messages });
     } catch (err) {
       this.send({
-        type: "ERROR",
+        type: "error",
         requestId,
         message: err instanceof Error ? err.message : String(err),
         code: "PROMPT_ERROR",
@@ -163,7 +174,7 @@ export class SessionManager {
 
   private async listTools(): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
     const tools = await this.client.listTools();
@@ -172,7 +183,7 @@ export class SessionManager {
 
   private async listPrompts(): Promise<void> {
     if (!this.client?.isConnected) {
-      this.send({ type: "ERROR", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
     const prompts = await this.client.listPrompts();
@@ -181,9 +192,10 @@ export class SessionManager {
 
   async disconnect(): Promise<void> {
     if (this.status === "disconnected") return;
-    await this.client?.disconnect();
+    const client = this.client;
     this.client = null;
     this.setStatus("disconnected");
+    await client?.disconnect();
     this.send({ type: "disconnected" });
   }
 

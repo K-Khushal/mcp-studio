@@ -30,6 +30,11 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       setProtocolVersion?.(version);
       this.protocolVersion = version;
     };
+    client.onclose = () => {
+      const wasConnected = this._isConnected;
+      this._isConnected = false;
+      if (wasConnected) this.options.onClose?.();
+    };
     await client.connect(transport);
   }
 
@@ -125,6 +130,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   }
 
   async disconnect(): Promise<void> {
+    this._isConnected = false;
     await this.teardownTransport();
     this.client = null;
     this._isConnected = false;

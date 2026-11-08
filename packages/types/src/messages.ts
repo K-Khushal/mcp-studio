@@ -34,7 +34,7 @@ export type ServerMessage =
       requestId: string;
       messages: MCPPromptMessage[];
     }
-  | { type: "ERROR"; requestId?: string; message: string; code?: string }
+  | { type: "error"; requestId?: string; message: string; code?: string }
   | {
       type: "log";
       level: LogLevel;
@@ -42,6 +42,6 @@ export type ServerMessage =
       message: string;
       timestamp: number;
     }
-  | { type: "disconnected" }
+  | { type: "disconnected"; reason?: string }
   | { type: "status"; status: ConnectionStatus }
   | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };

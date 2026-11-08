@@ -28,7 +28,7 @@ test("Session substitutes URL and tool arguments; unresolved Variables never rea
     ] as const) {
       const count = http.requests.length;
       await session.send(message);
-      expect(await session.waitFor("ERROR")).toMatchObject({ message: "Unresolved Variables: FIRST, SECOND", requestId: expect.any(String) });
+      expect(await session.waitFor("error")).toMatchObject({ message: "Unresolved Variables: FIRST, SECOND", requestId: expect.any(String) });
       expect(http.requests.length).toBe(count);
     }
   } finally { await session.close(); await http.close(); }
@@ -39,7 +39,7 @@ test("unresolved connection Variables block all network traffic", async () => {
   const session = new SessionHarness();
   try {
     await session.send({ ...http.connection, config: { ...http.connection.config, headers: { Authorization: "{{TOKEN}}" }, auth: { type: "apikey", key: "X-Key", value: "{{KEY}}", in: "header" } } });
-    expect(await session.waitFor("ERROR")).toMatchObject({ message: "Unresolved Variables: TOKEN, KEY" });
+    expect(await session.waitFor("error")).toMatchObject({ message: "Unresolved Variables: TOKEN, KEY" });
     expect(http.requests).toEqual([]);
   } finally { await session.close(); await http.close(); }
 });
@@ -57,7 +57,7 @@ test("unresolved STDIO cwd blocks spawn and preserves the live Session", async (
         type: "connect", transport: "stdio",
         config: { command: "definitely-not-an-executable", args: [], env: {}, inheritSystemEnv: true, cwd: "{{X}}" },
       });
-      expect(await session.waitFor("ERROR")).toMatchObject({
+      expect(await session.waitFor("error")).toMatchObject({
         code: "CONNECTION_FAILED", message: "Unresolved Variables: X",
       });
       expect(spawn).not.toHaveBeenCalled();
