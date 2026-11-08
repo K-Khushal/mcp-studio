@@ -13,6 +13,9 @@ import type {
   ServerMessage,
   ConnectionConfig,
   HttpAuth,
+  LogLevel,
+  LogSource,
+  LogPayload,
 } from "@mcp-studio/types";
 import { transport } from "@/transport/websocket-transport";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
@@ -35,12 +38,13 @@ export function clampLogsHeight(height: number, max: number): number {
 // State shape
 // ---------------------------------------------------------------------------
 
-interface LogEntry {
+export interface LogEntry {
   id: string;
-  level: "DEBUG" | "INFO" | "WARN" | "ERROR";
-  source: "protocol" | "subprocess";
+  level: LogLevel;
+  source: LogSource;
   message: string;
   timestamp: number;
+  payload?: LogPayload;
 }
 
 interface ResponseState {
@@ -498,9 +502,10 @@ export const useStore = create<AppState & AppActions>()(
           connectionStatus: "connecting",
           connectingConnectionId: selectedConnectionId,
         });
+        handshakeLogs = [];
         transport.onMessage(handleServerMessage);
         try {
-          await transport.connect(config);
+          await transport.connect(config, get().config.verboseLogging);
         } catch (err) {
           handleServerMessage({ type: "error", code: "CONNECTION_FAILED", message: err instanceof Error ? err.message : String(err) });
         }
@@ -932,12 +937,16 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       // ---------- configuration ----------
-      setConfig: (partial) => set((s) => {
-        const config = { ...s.config, ...partial };
+      setConfig: (partial) => {
+        const previous = get().config;
+        const config = { ...previous, ...partial };
         persistConfig(config);
-        if (config.theme !== s.config.theme) applyTheme(config.theme);
-        return { config };
-      }),
+        if (config.theme !== previous.theme) applyTheme(config.theme);
+        if (config.verboseLogging !== previous.verboseLogging && transport.isConnected) {
+          transport.setVerbose(config.verboseLogging);
+        }
+        set({ config });
+      },
 
       // ---------- connection form ----------
       setTransport: (t) =>
@@ -1035,8 +1044,11 @@ import.meta.hot?.dispose(stopWatchingSystemTheme);
 // Module-level server message handler
 // ---------------------------------------------------------------------------
 
+/** Logs that arrive while connecting, before the connected cache exists; adopted when the Session connects. */
+let handshakeLogs: LogEntry[] = [];
+
 function handleServerMessage(msg: ServerMessage): void {
-  const addLog = (level: LogEntry["level"], source: LogEntry["source"], message: string) => {
+  const addLog = (level: LogLevel, source: LogSource, message: string, payload?: LogPayload, timestamp = Date.now()) => {
     useStore.setState((s) => {
       const nextLogIdCounter = s.logIdCounter + 1;
       const nextLog: LogEntry = {
@@ -1044,10 +1056,12 @@ function handleServerMessage(msg: ServerMessage): void {
         level,
         source,
         message,
-        timestamp: Date.now(),
+        timestamp,
+        ...(payload ? { payload } : {}),
       };
 
       if (!s.connectedConnectionCache) {
+        if (s.connectionStatus === "connecting") handshakeLogs = [...handshakeLogs, nextLog].slice(-500);
         return { logIdCounter: nextLogIdCounter, logs: [...s.logs, nextLog].slice(-500) };
       }
 
@@ -1088,9 +1102,11 @@ function handleServerMessage(msg: ServerMessage): void {
       const nextCache: ConnectedConnectionCache = {
         connectionId,
         ...createBlankWorkspace(),
+        logs: handshakeLogs,
         tools: msg.tools,
         prompts: msg.prompts,
       };
+      handshakeLogs = [];
 
       useStore.setState({
         connectionStatus: "connected",
@@ -1106,7 +1122,7 @@ function handleServerMessage(msg: ServerMessage): void {
         latency: 0,
         ...(state.selectedConnectionId === connectionId ? connectionWorkspacePatch(nextCache) : blankWorkspacePatch()),
       });
-      addLog("INFO", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
+      addLog("INFO", "studio", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
       break;
     }
 
@@ -1244,7 +1260,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
 
     case "log":
-      addLog(msg.level, msg.source, msg.message);
+      addLog(msg.level, msg.source, msg.message, msg.payload, msg.timestamp);
       break;
 
     case "http_response":

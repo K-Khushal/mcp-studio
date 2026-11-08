@@ -39,3 +39,11 @@ _Avoid_: profile, config
 **Variable**:
 A key-value pair in an Environment, referenced as `{{NAME}}` in connection fields and Call arguments and substituted at use time.
 _Avoid_: secret, placeholder
+
+**Log entry**:
+One line in the logs panel: a level, a source, a message, and optionally a structured payload (JSON-RPC direction, method, id, body).
+_Avoid_: log line, event
+
+**Log source**:
+Where a Log entry came from: Protocol (JSON-RPC frames, only with verbose logging on), Server (MCP Server `notifications/message` and subprocess stderr), or Studio (MCP Studio's own lifecycle events).
+_Avoid_: origin, channel

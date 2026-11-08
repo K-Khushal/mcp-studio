@@ -76,7 +76,7 @@ export function ConfigurationPanel() {
               onCheckedChange={(v) => setConfig({ autoScrollLogs: v })}
             />
           </Row>
-          <Row label="Verbose logging" hint="Include protocol detail in logs.">
+          <Row label="Verbose logging" hint="Log every JSON-RPC message sent and received.">
             <Switch
               aria-label="Verbose logging"
               checked={config.verboseLogging}

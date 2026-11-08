@@ -54,3 +54,59 @@ describe("LogsPanel", () => {
     vi.unstubAllGlobals();
   });
 });
+
+describe("LogsPanel source, level and search filters", () => {
+  const mixed = [
+    { id: "a", level: "DEBUG" as const, source: "protocol" as const, message: "→ tools/call #2", timestamp: 1, payload: { direction: "out" as const, method: "tools/call", id: 2, body: { jsonrpc: "2.0", id: 2, method: "tools/call", params: { name: "echo" } } } },
+    { id: "b", level: "INFO" as const, source: "server" as const, message: "[db] ready", timestamp: 2 },
+    { id: "c", level: "ERROR" as const, source: "server" as const, message: "[db] crashed", timestamp: 3 },
+    { id: "d", level: "INFO" as const, source: "studio" as const, message: "Connected", timestamp: 4 },
+  ];
+  const visible = () => screen.queryAllByText(/tools\/call #2|\[db\]|Connected/).map((n) => n.textContent);
+
+  beforeEach(() => useStore.setState({ logs: mixed }));
+
+  it("filters by source", () => {
+    render(<LogsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
+    expect(visible()).toEqual(["[db] ready", "[db] crashed"]);
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
+    expect(visible()).toHaveLength(4);
+  });
+
+  it("combines source with level and search", () => {
+    render(<LogsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: "Server" }));
+    fireEvent.click(screen.getByRole("button", { name: "ERROR" }));
+    expect(visible()).toEqual(["[db] crashed"]);
+    fireEvent.click(screen.getByRole("button", { name: "ERROR" }));
+    fireEvent.change(screen.getByPlaceholderText("Filter logs..."), { target: { value: "ready" } });
+    expect(visible()).toEqual(["[db] ready"]);
+    fireEvent.click(screen.getByRole("button", { name: "Studio" }));
+    expect(visible()).toEqual([]);
+  });
+
+  it("searches inside a structured payload", () => {
+    render(<LogsPanel />);
+    fireEvent.change(screen.getByPlaceholderText("Filter logs..."), { target: { value: "echo" } });
+    expect(visible()).toEqual(["→ tools/call #2"]);
+  });
+
+  it("expands a JSON-RPC entry to show its body, and collapses it again", () => {
+    render(<LogsPanel />);
+    const row = screen.getByRole("button", { name: /tools\/call #2/ });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText(/"jsonrpc": "2.0"/)).toBeNull();
+    fireEvent.click(row);
+    expect(row.getAttribute("aria-expanded")).toBe("true");
+    expect(document.getElementById(row.getAttribute("aria-controls")!)!.textContent).toContain('"name": "echo"');
+    fireEvent.click(row);
+    expect(screen.queryByText(/"jsonrpc": "2.0"/)).toBeNull();
+  });
+
+  it("renders plain entries without an expander", () => {
+    render(<LogsPanel />);
+    expect(screen.queryByRole("button", { name: /Connected/ })).toBeNull();
+  });
+});
+

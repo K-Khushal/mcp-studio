@@ -52,9 +52,10 @@ Browser → WebSocketTransport → Bun WS server
 **Zustand store** (`apps/web/src/store/index.ts`) — `handleServerMessage()` at bottom is sole mutation point for `ServerMessage` events; registered via `transport.onMessage()` at connect time.
 
 ### Message protocol
-`ClientMessage` → server: `connect` (stdio|http), `invoke`, `invoke_prompt`, `disconnect`, `list_tools`, `list_prompts`  
+`ClientMessage` → server: `connect` (stdio|http, optional `verbose`), `set_verbose`, `invoke`, `invoke_prompt`, `disconnect`, `list_tools`, `list_prompts`  
 `ServerMessage` → browser: `connected`, `chunk`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`  
 `requestId` ties `chunk`/`result`/`error` back to originating `invoke`.
+`log` carries `source` (`protocol`|`server`|`studio`) + optional `payload` (`direction`,`method`,`id`,`body`). With `verbose` on, `BaseMCPClient` taps transport send/onmessage and logs every JSON-RPC frame as a protocol-source DEBUG entry (live-toggle via `set_verbose`); `notifications/message` → server source (levels mapped in `mcp-client/src/log.ts`), STDIO stderr → server INFO. Store buffers logs arriving during connect (`handshakeLogs`) and adopts them on `connected`.
 
 ### Persistence
 SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `connections`, `environments`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `Connection` (table renamed from `requests` in migration `0002`, rows preserved) has no `tool`/`params` fields — tools fetched live from MCP after connect (dropped in migration `0001`).
@@ -78,7 +79,7 @@ Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()
 Tool metadata (title, icons, annotations, outputSchema) passes through the MCP client to the web. Each Call captures its output schema in ResponseState; Pretty validates structuredContent with Ajv (2020-12 by default, draft-07 only when explicitly declared; unsupported dialects report Cannot validate) and ajv-formats, preserving content blocks alongside validation feedback.
 
 ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
-Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme: dark|light|system`) persisted to `localStorage` key `mcp-studio-config` via `store/config.ts` (field-validated read, unknown keys dropped); `setConfig` writes store + localStorage and re-applies theme (`lib/theme.ts`). `index.html` inline script applies saved theme before paint. `requestTimeout`/`verboseLogging` stored only, not yet consumed. Logs panel height is `logsHeight` in store (clamped, drag/arrow-key resize). Environments are global (not per-collection/Connection).
+Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme: dark|light|system`) persisted to `localStorage` key `mcp-studio-config` via `store/config.ts` (field-validated read, unknown keys dropped); `setConfig` writes store + localStorage and re-applies theme (`lib/theme.ts`). `index.html` inline script applies saved theme before paint. `requestTimeout` stored only, not yet consumed; `verboseLogging` is sent with `connect` and on change (`setConfig` → `transport.setVerbose`). Logs panel height is `logsHeight` in store (clamped, drag/arrow-key resize). Environments are global (not per-collection/Connection).
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`
