@@ -95,7 +95,7 @@ Update after any session with: new package/route/transport, schema change, arch 
 ## Gotchas
 - **`exactOptionalPropertyTypes` disabled** — MCP SDK returns `string | undefined`; enabling breaks mcp-client type assignments.
 - **`tsc -b` removed from web build** — `tsconfig.node.json` (`composite: true`) conflicted with Vite's DOM types. `bun typecheck` is separate; `bun run build` calls `vite build` directly.
-- **`getServerVersion()` missing `protocolVersion`** — SDK doesn't expose it. Hardcoded `"2024-11-05"` in both clients.
+- **Negotiated protocol version** — BaseMCPClient captures the SDK initialize result through transport.setProtocolVersion, preserving the transport callback; SessionManager includes it in connected. getServerVersion() only describes the MCP Server implementation.
 - **`cwd` must be spread conditionally** — `StdioClientTransport` uses `exactOptionalPropertyTypes` internally: `...(cwd ? { cwd } : {})`.
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
 - **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
