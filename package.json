@@ -1,12 +1,12 @@
 {
   "name": "mcp-studio",
   "devDependencies": {
-    "@eslint/js": "9",
-    "@types/node": "^22.15.3",
-    "eslint": "9",
-    "turbo": "^2.5.3",
-    "typescript": "^5.8.3",
-    "typescript-eslint": "8"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^26.6.6",
+    "eslint": "^10.14.0",
+    "turbo": "^2.11.10",
+    "typescript": "~6.0.3",
+    "typescript-eslint": "^8.72.1"
   },
   "engines": {
     "node": ">=20",

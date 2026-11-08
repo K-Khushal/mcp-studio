@@ -1,3 +1,4 @@
+import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-studio/types";
 import type { MCPClientInterface, MCPClientOptions, ConnectedServerInfo } from "./types.js";
@@ -19,6 +20,19 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     return this._isConnected;
   }
 
+  private protocolVersion: string | undefined;
+
+  /** Capture the SDK's initialize result while preserving transport negotiation. */
+  protected async connectTransport(client: Client, transport: Transport): Promise<void> {
+    this.protocolVersion = undefined;
+    const setProtocolVersion = transport.setProtocolVersion?.bind(transport);
+    transport.setProtocolVersion = (version) => {
+      setProtocolVersion?.(version);
+      this.protocolVersion = version;
+    };
+    await client.connect(transport);
+  }
+
   /** Create and connect the transport, return the connected SDK Client. */
   protected abstract setupTransport(): Promise<Client>;
 
@@ -29,13 +43,13 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     this.client = await this.setupTransport();
 
     const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
+    if (!this.protocolVersion) throw new Error("MCP initialize did not negotiate a protocol version");
     this._isConnected = true;
-
     const serverInfo = this.client.getServerVersion();
     return {
       serverName: serverInfo?.name,
       serverVersion: serverInfo?.version,
-      protocolVersion: "2024-11-05",
+      protocolVersion: this.protocolVersion,
       tools,
       prompts,
     };

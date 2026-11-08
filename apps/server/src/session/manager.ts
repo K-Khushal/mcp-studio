@@ -90,6 +90,7 @@ export class SessionManager {
 
       this.send({
         type: "connected",
+        protocolVersion: info.protocolVersion,
         tools: info.tools,
         prompts: info.prompts,
         serverInfo: { name: info.serverName, version: info.serverVersion },
