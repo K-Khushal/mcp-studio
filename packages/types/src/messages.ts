@@ -6,6 +6,7 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, ConnectionStatus } from "./m
 // ---------------------------------------------------------------------------
 
 export type ClientMessage =
+  | ({ type: "elicitation_response"; elicitationId: string } & ElicitationResult)
   | ({ type: "connect" } & ConnectionConfig)
   | { type: "invoke"; tool: string; params: Record<string, unknown> }
   | {
@@ -24,6 +25,8 @@ export type ClientMessage =
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export type ServerMessage =
+  | { type: "elicitation_request"; elicitationId: string; message: string; requestedSchema: Record<string, unknown> }
+  | { type: "elicitation_closed"; elicitationId: string }
   | { type: "connected"; httpVariant?: "streamable" | "sse"; protocolVersion?: string; tools: MCPTool[]; prompts: MCPPrompt[]; serverInfo?: { name?: string; version?: string } }
   | { type: "tools_listed"; tools: MCPTool[] }
   | { type: "prompts_listed"; prompts: MCPPrompt[] }
@@ -45,3 +48,5 @@ export type ServerMessage =
   | { type: "disconnected"; reason?: string }
   | { type: "status"; status: ConnectionStatus }
   | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };
+
+export interface ElicitationResult { action: "accept" | "decline" | "cancel"; content?: Record<string, string | number | boolean | string[]>; }

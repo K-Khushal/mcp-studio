@@ -84,7 +84,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
       fetch: wrappedFetch,
     });
 
-    let client = new Client({ name: "mcp-studio", version: "0.0.1" });
+    let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
     this.options.onLog?.("INFO", "protocol", `Connecting via Streamable HTTP to ${url.toString()}`);
     this.variant = "streamable";
     try {
@@ -100,7 +100,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
         fetch: wrappedFetch,
       });
-      client = new Client({ name: "mcp-studio", version: "0.0.1" });
+      client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
       try {
         await this.connectTransport(client, this.transport);
         this.variant = "sse";

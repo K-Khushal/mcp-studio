@@ -1,3 +1,4 @@
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-studio/types";
@@ -24,6 +25,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
   /** Capture the SDK's initialize result while preserving transport negotiation. */
   protected async connectTransport(client: Client, transport: Transport): Promise<void> {
+    client.onclose = () => this.options.onClose?.();
     this.protocolVersion = undefined;
     const setProtocolVersion = transport.setProtocolVersion?.bind(transport);
     transport.setProtocolVersion = (version) => {
@@ -35,6 +37,10 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       this._isConnected = false;
       if (wasConnected) this.options.onClose?.();
     };
+    client.setRequestHandler(ElicitRequestSchema, async (request) => {
+      if ("url" in request.params) return { action: "cancel" as const };
+      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }) ?? { action: "cancel" as const }) };
+    });
     await client.connect(transport);
   }
 

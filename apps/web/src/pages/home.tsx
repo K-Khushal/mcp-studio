@@ -1,3 +1,4 @@
+import { ElicitationDialog } from "@/components/tools/elicitation-dialog";
 import { useEffect } from "react";
 import { useStore } from "@/store";
 import { StatusBar } from "@/components/shell/status-bar";
@@ -18,6 +19,7 @@ export default function Home() {
   return (
     <div className="flex flex-col h-screen w-screen overflow-hidden bg-background">
       <TopNav />
+      <ElicitationDialog />
       <SidebarProvider className="flex-1 min-h-0">
         <CollectionsView />
         <SidebarInset className="min-w-0 min-h-0 rounded-none shadow-none">

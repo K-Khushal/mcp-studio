@@ -1,3 +1,4 @@
+import type { ElicitationResult } from "@mcp-studio/types";
 import type { MCPTool, MCPPrompt, MCPPromptMessage, LogLevel } from "@mcp-studio/types";
 
 // ---------------------------------------------------------------------------
@@ -6,6 +7,7 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, LogLevel } from "@mcp-studio
 
 export interface MCPClientOptions {
   onClose?: () => void;
+  onElicitation?: (request: { message: string; requestedSchema: Record<string, unknown> }) => Promise<ElicitationResult>;
   onChunk?: (requestId: string, data: unknown) => void;
   onLog?: (level: LogLevel, source: "protocol" | "subprocess", text: string) => void;
   onHttpResponse?: (requestId: string, status: number, headers: Record<string, string>) => void;

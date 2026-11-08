@@ -1,4 +1,5 @@
 import { toast } from "sonner";
+import type { ElicitationResult } from "@mcp-studio/types";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type {
@@ -81,6 +82,7 @@ interface ConnectedConnectionCache extends ConnectionWorkspaceState {
 }
 
 interface AppState {
+  elicitations: Extract<ServerMessage, { type: "elicitation_request" }>[];
   // Connection
   connectionStatus: ConnectionStatus;
   connectionConfig: ConnectionConfig | null;
@@ -141,6 +143,7 @@ interface AppState {
 }
 
 interface AppActions {
+  respondToElicitation: (elicitationId: string, result: ElicitationResult) => void;
   // Connection
   connect: (config: ConnectionConfig) => Promise<void>;
   disconnect: () => Promise<void>;
@@ -415,6 +418,11 @@ export const useStore = create<AppState & AppActions>()(
   devtools(
     (set, get) => ({
       // ---------- initial state ----------
+      respondToElicitation: (elicitationId, result) => {
+        transport.send({ type: "elicitation_response", elicitationId, ...result });
+        set(s => ({ elicitations: s.elicitations.filter(r => r.elicitationId !== elicitationId) }));
+      },
+      elicitations: [],
       connectionStatus: "disconnected",
       connectionConfig: null,
       serverInfo: null,
@@ -485,7 +493,8 @@ export const useStore = create<AppState & AppActions>()(
         const clearedWorkspace = blankWorkspacePatch();
         set({
           ...clearedWorkspace,
-          connectionStatus: "disconnected",
+          elicitations: [],
+      connectionStatus: "disconnected",
           connectionConfig: null,
           serverInfo: null,
           protocolVersion: null,
@@ -1065,13 +1074,20 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     }
 
+    case "elicitation_request":
+      useStore.setState(s => ({ elicitations: [...s.elicitations, msg] }));
+      break;
+    case "elicitation_closed":
+      useStore.setState(s => ({ elicitations: s.elicitations.filter(r => r.elicitationId !== msg.elicitationId) }));
+      break;
     case "disconnected":
       if (msg.reason) {
         toast.error("Session disconnected", { description: msg.reason });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       }
       useStore.setState((s) => ({
-        connectionStatus: "disconnected",
+        elicitations: [],
+      connectionStatus: "disconnected",
         connectionConfig: null,
         serverInfo: null,
         protocolVersion: null,

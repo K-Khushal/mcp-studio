@@ -1,3 +1,4 @@
+import type { ElicitationResult } from "@mcp-studio/types";
 import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface } from "@mcp-studio/mcp-client";
 import type {
@@ -17,6 +18,27 @@ type Send = (msg: ServerMessage) => void;
  * One instance per WebSocket connection.
  */
 export class SessionManager {
+  private pendingElicitations = new Map<string, (result: ElicitationResult) => void>();
+
+  private requestElicitation = (request: { message: string; requestedSchema: Record<string, unknown> }): Promise<ElicitationResult> => {
+    const elicitationId = nanoid();
+    return new Promise(resolve => {
+      const finish = (result: ElicitationResult) => {
+        clearTimeout(timer);
+        this.pendingElicitations.delete(elicitationId);
+        this.send({ type: "elicitation_closed", elicitationId });
+        resolve(result);
+      };
+      const timer = setTimeout(() => finish({ action: "cancel" }), 120_000);
+      this.pendingElicitations.set(elicitationId, finish);
+      this.send({ type: "elicitation_request", elicitationId, ...request });
+    });
+  };
+
+  private clearElicitations = (): void => {
+    for (const finish of this.pendingElicitations.values()) finish({ action: "cancel" });
+  };
+
   private client: MCPClientInterface | null = null;
   private status: ConnectionStatus = "disconnected";
   private activeEnv: Record<string, string> = {};
@@ -29,6 +51,9 @@ export class SessionManager {
 
   async handle(msg: ClientMessage): Promise<void> {
     switch (msg.type) {
+      case "elicitation_response":
+        this.pendingElicitations.get(msg.elicitationId)?.({ action: msg.action, ...(msg.action === "accept" ? { content: msg.content } : {}) });
+        break;
       case "connect":
         await this.connect(msg);
         break;
@@ -52,6 +77,7 @@ export class SessionManager {
 
   private connectionClosed(): void {
     if (this.status !== "connected") return;
+    this.clearElicitations();
     const reason = "MCP Server connection closed unexpectedly";
     this.client = null;
     this.send({ type: "log", level: "ERROR", source: "protocol", message: reason, timestamp: Date.now() });
@@ -86,6 +112,7 @@ export class SessionManager {
       this.client =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
+              onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
@@ -93,6 +120,7 @@ export class SessionManager {
                 this.send({ type: "chunk", requestId, data }),
             })
           : new StreamableHTTPClient(config.config, {
+              onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
@@ -192,6 +220,7 @@ export class SessionManager {
 
   async disconnect(): Promise<void> {
     if (this.status === "disconnected") return;
+    this.clearElicitations();
     const client = this.client;
     this.client = null;
     this.setStatus("disconnected");
