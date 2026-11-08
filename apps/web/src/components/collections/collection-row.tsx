@@ -20,9 +20,10 @@ interface CollectionRowProps {
   collection: Collection;
   selectedConnectionId: string | null;
   onSelectConnection: (conn: Connection) => void;
+  onConnectConnection: (conn: Connection) => void;
 }
 
-export function CollectionRow({ collection, selectedConnectionId, onSelectConnection }: CollectionRowProps) {
+export function CollectionRow({ collection, selectedConnectionId, onSelectConnection, onConnectConnection }: CollectionRowProps) {
   const { renameCollection, deleteCollection, deleteConnection } = useStore();
   const [expanded, setExpanded] = useState(true);
   const [isRenaming, setIsRenaming] = useState(false);
@@ -125,6 +126,7 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
             )}
             onClick={() => onSelectConnection(conn)}
+            onDoubleClick={() => onConnectConnection(conn)}
           >
             <FileText size={11} className="shrink-0" />
             <span className="flex-1 min-w-0 text-xs truncate">{conn.name}</span>

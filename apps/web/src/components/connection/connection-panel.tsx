@@ -4,12 +4,8 @@ import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
-import type { ConnectionConfig, HttpAuth } from '@mcp-studio/types';
-
-// Omit auth when it's "none" so stored JSON stays clean and comparison is stable
-function normalizeAuth(auth: HttpAuth): HttpAuth | undefined {
-  return auth.type === 'none' ? undefined : auth;
-}
+import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
+import { StdioForm } from './stdio-form';
 
 export function ConnectionPanel() {
   const {
@@ -22,10 +18,12 @@ export function ConnectionPanel() {
     connectingConnectionId,
     transport,
     connectionUrl,
+    stdio,
     httpAuth,
     httpHeaders,
     setTransport,
     setConnectionUrl,
+    setStdio,
     selectedConnectionId,
     collections,
   } = useStore();
@@ -34,6 +32,19 @@ export function ConnectionPanel() {
   const renameRef = useRef<HTMLInputElement>(null);
   // Enter and the blur that follows it both commit; only the first may PATCH
   const isCommittingRename = useRef(false);
+  // Debounced autosave not yet sent; flushed on switch and Connect so edits are never dropped
+  const pendingSave = useRef<{ timeoutId: number; save: () => void; connectionId: string } | null>(null);
+
+  const flushPendingSave = () => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timeoutId);
+    pendingSave.current = null;
+    pending.save();
+  };
+
+  // Unmount: send the pending edit only if its Connection still exists
+  useEffect(() => () => flushPendingSave(), []);
 
   const isConnected = connectionStatus === 'connected';
   const isSelectedConnectionConnected =
@@ -63,37 +74,34 @@ export function ConnectionPanel() {
   }, [isRenaming]);
 
   useEffect(() => {
+    if (pendingSave.current && pendingSave.current.connectionId !== selectedConnection?.id) flushPendingSave();
     if (!selectedConnection || !selectedCollection) return;
-    if (!connectionUrl.trim() && !selectedConnection.connectionConfig) return;
-
-    const connectionConfig: ConnectionConfig =
-      transport === 'http'
-        ? { transport: 'http', config: { url: connectionUrl, headers: httpHeaders, auth: normalizeAuth(httpAuth) } }
-        : {
-            transport: 'stdio',
-            config: {
-              command: connectionUrl.trim().split(/\s+/)[0] ?? '',
-              args: connectionUrl.trim().split(/\s+/).slice(1),
-              env: {},
-              inheritSystemEnv: true,
-            },
-          };
+    const connectionConfig = buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth });
+    if (!isConnectable(connectionConfig) && !selectedConnection.connectionConfig) return;
 
     const currentConfig = selectedConnection.connectionConfig;
     if (JSON.stringify(currentConfig ?? null) === JSON.stringify(connectionConfig)) {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
+    if (pendingSave.current) window.clearTimeout(pendingSave.current.timeoutId);
+    const save = () => {
+      pendingSave.current = null;
+      const exists = useStore.getState().collections.some((c) => c.connections.some((r) => r.id === selectedConnection.id));
+      if (!exists) return;
       updateConnectionConfig(selectedCollection.id, selectedConnection.id, connectionConfig).catch(console.error);
-    }, 250);
-
-    return () => window.clearTimeout(timeoutId);
+    };
+    pendingSave.current = {
+      timeoutId: window.setTimeout(save, 250),
+      save,
+      connectionId: selectedConnection.id,
+    };
   }, [
     selectedCollection?.id,
     selectedConnection?.id,
     selectedConnection?.connectionConfig,
     connectionUrl,
+    stdio,
     transport,
     httpAuth,
     httpHeaders,
@@ -121,19 +129,15 @@ export function ConnectionPanel() {
     }
   };
 
+  const canConnect = isConnectable(buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth }));
+
   const handleConnect = () => {
     if (isSelectedConnectionConnected) {
       disconnect();
       return;
     }
-    const parts = connectionUrl.trim().split(/\s+/);
-    const config: ConnectionConfig =
-      transport === 'http'
-        ? { transport: 'http', config: { url: connectionUrl, headers: httpHeaders, auth: normalizeAuth(httpAuth) } }
-        : {
-            transport: 'stdio',
-            config: { command: parts[0] ?? '', args: parts.slice(1), env: {}, inheritSystemEnv: true },
-          };
+    flushPendingSave();
+    const config = buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth });
     connect(config);
   };
 
@@ -205,28 +209,31 @@ export function ConnectionPanel() {
         </div>
 
         <Input
-          value={connectionUrl}
-          onChange={(e) => setConnectionUrl(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isSelectedConnectionConnected && !isSelectedConnectionConnecting && handleConnect()}
-          placeholder={transport === 'stdio' ? 'npx @test/test-mcp' : 'http://localhost:4000'}
-          className="flex-1"
+          value={transport === 'stdio' ? stdio.command : connectionUrl}
+          onChange={(e) => (transport === 'stdio' ? setStdio({ command: e.target.value }) : setConnectionUrl(e.target.value))}
+          onKeyDown={(e) => e.key === 'Enter' && canConnect && !isSelectedConnectionConnected && !isSelectedConnectionConnecting && handleConnect()}
+          aria-label={transport === 'stdio' ? 'Command' : 'Server URL'}
+          placeholder={transport === 'stdio' ? 'npx' : 'http://localhost:4000'}
+          className="flex-1 font-mono"
         />
 
         <button
           onClick={handleConnect}
-          disabled={isConnecting}
+          disabled={isConnecting || (!canConnect && !isSelectedConnectionConnected)}
           className={cn(
             'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
             isSelectedConnectionConnected
               ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
-            isConnecting && 'opacity-50 cursor-not-allowed'
+            (isConnecting || (!canConnect && !isSelectedConnectionConnected)) && 'opacity-50 cursor-not-allowed'
           )}
         >
           {isSelectedConnectionConnecting ? <Loader2 size={14} className="animate-spin" /> : isSelectedConnectionConnected ? <Unplug size={14} /> : <Plug size={14} />}
           {isSelectedConnectionConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
+
+      {transport === 'stdio' && <StdioForm />}
     </div>
   );
 }

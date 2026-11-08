@@ -211,77 +211,13 @@ describe("loadConnection", () => {
     expect(state.selectedConnectionId).toBe("conn-2");
     expect(state.connectedConnectionId).toBe("conn-1");
     expect(state.transport).toBe("stdio");
-    expect(state.connectionUrl).toBe("npx @test/test-mcp");
+    expect(state.stdio).toMatchObject({ command: "npx", args: ["@test/test-mcp"] });
     expect(state.tools).toEqual([]);
     expect(state.prompts).toEqual([]);
     expect(state.selectedTool).toBeNull();
     expect(state.response.result).toBeNull();
     expect(state.timeline).toEqual([]);
     expect(state.logs).toEqual([]);
-  });
-
-  it("restores the cached live workspace when returning to the connected Connection", () => {
-    const cachedLogs = [{ id: "log_1", level: "INFO", source: "protocol", message: "connected", timestamp: 1 }] as const;
-    useStore.setState({
-      connectedConnectionId: "conn-1",
-      connectedConnectionCache: {
-        connectionId: "conn-1",
-        tools: [{ name: "tool-a" }] as never,
-        prompts: [{ name: "prompt-a" }] as never,
-        selectedTool: { name: "tool-a" } as never,
-        selectedPrompt: null,
-        toolSearch: "find",
-        promptSearch: "",
-        pendingParams: null,
-        toolFormValues: { query: "abc" },
-        promptArgValues: {},
-        response: {
-          chunks: [],
-          result: { ok: true },
-          error: null,
-          isStreaming: false,
-          startedAt: 1,
-          completedAt: 2,
-          httpStatus: null,
-          httpResponseHeaders: null,
-        },
-        timeline: [{ label: "done", detail: "ok", timestamp: "00:00:00", status: "completed" }],
-        logs: [...cachedLogs],
-      },
-      selectedConnectionId: "conn-2",
-      tools: [],
-      prompts: [],
-      selectedTool: null,
-      selectedPrompt: null,
-      toolSearch: "",
-      pendingParams: null,
-      toolFormValues: {},
-      response: {
-        chunks: [],
-        result: null,
-        error: null,
-        isStreaming: false,
-        startedAt: null,
-        completedAt: null,
-      httpStatus: null,
-      httpResponseHeaders: null,
-      },
-      timeline: [],
-      logs: [],
-    });
-
-    const firstConnection = useStore.getState().collections[0]!.connections[0]!;
-    useStore.getState().loadConnection(firstConnection);
-
-    const state = useStore.getState();
-    expect(state.selectedConnectionId).toBe("conn-1");
-    expect(state.connectedConnectionId).toBe("conn-1");
-    expect(state.tools).toHaveLength(1);
-    expect(state.prompts).toHaveLength(1);
-    expect(state.selectedTool?.name).toBe("tool-a");
-    expect(state.toolFormValues).toEqual({ query: "abc" });
-    expect(state.response.result).toEqual({ ok: true });
-    expect(state.logs).toEqual(cachedLogs);
   });
 });
 

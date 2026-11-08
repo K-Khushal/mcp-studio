@@ -17,6 +17,12 @@ import type {
 import { transport } from "@/transport/websocket-transport";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
+import {
+  DEFAULT_STDIO_DRAFT,
+  stdioDraftFromCommandLine,
+  stdioDraftFromConfig,
+  type StdioDraft,
+} from "./connection-form";
 
 export const LOGS_MIN_HEIGHT = 96;
 export const LOGS_DEFAULT_HEIGHT = 208;
@@ -58,6 +64,7 @@ interface TimelineStep {
 interface ConnectionDraft {
   transport: "stdio" | "http";
   connectionUrl: string;
+  stdio?: StdioDraft;
   httpAuth?: HttpAuth;
   httpHeaders?: Record<string, string>;
 }
@@ -119,7 +126,9 @@ interface AppState {
 
   // Connection form (persisted in store so panels stay in sync)
   transport: "stdio" | "http";
+  /** HTTP endpoint URL; STDIO fields live in `stdio`. */
   connectionUrl: string;
+  stdio: StdioDraft;
   httpAuth: HttpAuth;
   httpHeaders: Record<string, string>;
 
@@ -181,6 +190,7 @@ interface AppActions {
 
   // Connection form
   setTransport: (t: "stdio" | "http") => void;
+  setStdio: (patch: Partial<StdioDraft>) => void;
   setConnectionUrl: (url: string) => void;
   setHttpAuth: (auth: HttpAuth) => void;
   setHttpHeaders: (headers: Record<string, string>) => void;
@@ -221,6 +231,7 @@ const DEFAULT_HTTP_HEADERS: Record<string, string> = {};
 const DEFAULT_CONNECTION_DRAFT: ConnectionDraft = {
   transport: "stdio",
   connectionUrl: "",
+  stdio: DEFAULT_STDIO_DRAFT,
   httpAuth: DEFAULT_HTTP_AUTH,
   httpHeaders: DEFAULT_HTTP_HEADERS,
 };
@@ -288,7 +299,8 @@ function connectionDraftFromConfig(config?: ConnectionConfig | null): Connection
 
   return {
     transport: "stdio",
-    connectionUrl: [config.config.command, ...config.config.args].join(" ").trim(),
+    connectionUrl: "",
+    stdio: stdioDraftFromConfig(config.config),
   };
 }
 
@@ -297,9 +309,11 @@ function readPersistedConnectionDraft(): ConnectionDraft {
     const raw = localStorage.getItem("mcp-studio-connection");
     if (!raw) return { ...DEFAULT_CONNECTION_DRAFT };
     const parsed = JSON.parse(raw) as Partial<ConnectionDraft>;
+    const transport = parsed.transport === "http" ? "http" : "stdio";
     return {
-      transport: parsed.transport === "http" ? "http" : "stdio",
-      connectionUrl: parsed.connectionUrl ?? "",
+      transport,
+      connectionUrl: transport === "http" ? parsed.connectionUrl ?? "" : "",
+      stdio: parsed.stdio ?? (transport === "stdio" ? stdioDraftFromCommandLine(parsed.connectionUrl ?? "") : DEFAULT_STDIO_DRAFT),
       httpAuth: parsed.httpAuth ?? DEFAULT_HTTP_AUTH,
       httpHeaders: parsed.httpHeaders ?? DEFAULT_HTTP_HEADERS,
     };
@@ -438,6 +452,7 @@ export const useStore = create<AppState & AppActions>()(
       connectionDrafts: {},
       transport: readPersistedConnectionDraft().transport,
       connectionUrl: readPersistedConnectionDraft().connectionUrl,
+      stdio: readPersistedConnectionDraft().stdio ?? DEFAULT_STDIO_DRAFT,
       httpAuth: readPersistedConnectionDraft().httpAuth ?? DEFAULT_HTTP_AUTH,
       httpHeaders: readPersistedConnectionDraft().httpHeaders ?? DEFAULT_HTTP_HEADERS,
       environments: [],
@@ -666,16 +681,12 @@ export const useStore = create<AppState & AppActions>()(
 
         persistConnectionDraft(draft);
 
-        const workspace =
-          state.connectedConnectionId === connection.id && state.connectedConnectionCache
-            ? connectionWorkspacePatch(state.connectedConnectionCache)
-            : blankWorkspacePatch();
-
         set({
-          ...workspace,
+          ...blankWorkspacePatch(),
           selectedConnectionId: connection.id,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
+          stdio: draft.stdio ?? DEFAULT_STDIO_DRAFT,
           httpAuth: draft.httpAuth ?? DEFAULT_HTTP_AUTH,
           httpHeaders: draft.httpHeaders ?? DEFAULT_HTTP_HEADERS,
           connectionDrafts: {
@@ -765,6 +776,7 @@ export const useStore = create<AppState & AppActions>()(
               ...blankWorkspacePatch(),
               transport: "stdio" as const,
               connectionUrl: "",
+              stdio: DEFAULT_STDIO_DRAFT,
               httpAuth: DEFAULT_HTTP_AUTH,
               httpHeaders: DEFAULT_HTTP_HEADERS,
             } : {}),
@@ -853,6 +865,7 @@ export const useStore = create<AppState & AppActions>()(
               ...blankWorkspacePatch(),
               transport: "stdio" as const,
               connectionUrl: "",
+              stdio: DEFAULT_STDIO_DRAFT,
               httpAuth: DEFAULT_HTTP_AUTH,
               httpHeaders: DEFAULT_HTTP_HEADERS,
             } : {}),
@@ -929,6 +942,7 @@ export const useStore = create<AppState & AppActions>()(
           const draft: ConnectionDraft = {
             transport: t,
             connectionUrl: s.connectionUrl,
+            stdio: s.stdio,
             httpAuth: s.httpAuth,
             httpHeaders: s.httpHeaders,
           };
@@ -938,11 +952,28 @@ export const useStore = create<AppState & AppActions>()(
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
+      setStdio: (patch) =>
+        set((s) => {
+          const stdio = { ...s.stdio, ...patch };
+          const draft: ConnectionDraft = {
+            transport: s.transport,
+            connectionUrl: s.connectionUrl,
+            stdio,
+            httpAuth: s.httpAuth,
+            httpHeaders: s.httpHeaders,
+          };
+          persistConnectionDraft(draft);
+          return {
+            stdio,
+            ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
+          };
+        }),
       setConnectionUrl: (url) =>
         set((s) => {
           const draft: ConnectionDraft = {
             transport: s.transport,
             connectionUrl: url,
+            stdio: s.stdio,
             httpAuth: s.httpAuth,
             httpHeaders: s.httpHeaders,
           };
@@ -957,6 +988,7 @@ export const useStore = create<AppState & AppActions>()(
           const draft: ConnectionDraft = {
             transport: s.transport,
             connectionUrl: s.connectionUrl,
+            stdio: s.stdio,
             httpAuth: auth,
             httpHeaders: s.httpHeaders,
           };
@@ -971,6 +1003,7 @@ export const useStore = create<AppState & AppActions>()(
           const draft: ConnectionDraft = {
             transport: s.transport,
             connectionUrl: s.connectionUrl,
+            stdio: s.stdio,
             httpAuth: s.httpAuth,
             httpHeaders: headers,
           };
