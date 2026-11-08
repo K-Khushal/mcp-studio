@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtempSync, realpathSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ClientMessage } from "@mcp-studio/types";
@@ -20,15 +20,18 @@ async function probe(message: ClientMessage) {
     await session.send({ type: "invoke", tool: "runtime", params: {} });
     const result = await session.waitFor("result");
     const content = (result.data as { content: { text: string }[] }).content;
-    return JSON.parse(content[0]!.text) as { cwd: string; env: Record<string, string | undefined> };
+    return JSON.parse(content[0]!.text) as { cwd: string; env: Record<string, string | undefined>; args: string[] };
   } finally { await session.close(); }
 }
 
 test("STDIO cwd, args and env reach the subprocess", async () => {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), "studio-cwd-")));
-  const seen = await probe(stdio({ cwd, env: { STUDIO_FIXTURE_VAR: "from-connection" } }));
-  expect(seen.cwd).toBe(cwd);
-  expect(seen.env.STUDIO_FIXTURE_VAR).toBe("from-connection");
+  try {
+    const seen = await probe(stdio({ cwd, args: [runtimeServer, "--fixture", "value with spaces"], env: { STUDIO_FIXTURE_VAR: "from-connection" } }));
+    expect(seen.cwd).toBe(cwd);
+    expect(seen.args).toEqual(["--fixture", "value with spaces"]);
+    expect(seen.env.STUDIO_FIXTURE_VAR).toBe("from-connection");
+  } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
 
 test("inheritSystemEnv=false hides the Studio Server environment; true merges it under Connection env", async () => {

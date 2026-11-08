@@ -6,6 +6,6 @@ import { CallToolRequestSchema, ListToolsRequestSchema } from "@modelcontextprot
 const server = new Server({ name: "runtime-fixture", version: "1" }, { capabilities: { tools: {} } });
 server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [{ name: "runtime", inputSchema: { type: "object" as const } }] }));
 server.setRequestHandler(CallToolRequestSchema, async () => ({
-  content: [{ type: "text" as const, text: JSON.stringify({ cwd: process.cwd(), env: process.env }) }],
+  content: [{ type: "text" as const, text: JSON.stringify({ cwd: process.cwd(), env: process.env, args: process.argv.slice(2) }) }],
 }));
 await server.connect(new StdioServerTransport());
