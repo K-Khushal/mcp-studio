@@ -1,0 +1,3 @@
+# A Connection is a saved recipe for reaching a server, not a saved Call
+
+The PRD defined a saved "request" as tool name + parameters + environment. We deliberately store only how to reach the MCP Server (migration `0001` dropped `tool`/`params`); tools and prompts are discovered live after connecting, so saved arguments can never go stale against a changed server. The saved entity is named **Connection** (formerly "request" in code) — not "Server", which would conflate the recipe with the MCP Server itself. Collections are libraries of Connections, not replayable test cases.

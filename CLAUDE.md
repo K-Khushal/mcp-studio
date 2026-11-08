@@ -39,8 +39,8 @@ packages/mcp-client/ MCP SDK wrapper, no Bun/browser deps
 
 ```
 Browser → WebSocketTransport → Bun WS server
-       → SessionManager → StdioMCPClient | SSEMCPClient
-       → MCP process (STDIO) or remote (SSE)
+       → SessionManager → StdioMCPClient | StreamableHTTPClient
+       → MCP process (STDIO) or remote (HTTP)
 ```
 
 **`SessionManager`** (`apps/server/src/session/manager.ts`) — owns single active MCP connection, handles all `ClientMessage` types, interpolates `{{VAR_NAME}}` before every invoke.
@@ -48,7 +48,7 @@ Browser → WebSocketTransport → Bun WS server
 **Zustand store** (`apps/web/src/store/index.ts`) — `handleServerMessage()` at bottom is sole mutation point for `ServerMessage` events; registered via `transport.onMessage()` at connect time.
 
 ### Message protocol
-`ClientMessage` → server: `connect` (stdio|sse), `invoke`, `invoke_prompt`, `disconnect`, `list_tools`, `list_prompts`  
+`ClientMessage` → server: `connect` (stdio|http), `invoke`, `invoke_prompt`, `disconnect`, `list_tools`, `list_prompts`  
 `ServerMessage` → browser: `connected`, `chunk`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`  
 `requestId` ties `chunk`/`result`/`error` back to originating `invoke`.
 
@@ -81,6 +81,9 @@ ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → 
 
 ### TS config
 Root `tsconfig.base.json` extended by all packages. Web: `moduleResolution: Bundler`, `@/*` → `src/`. Server adds `bun-types`. `exactOptionalPropertyTypes` disabled (see Gotchas).
+
+## Domain docs
+Vocabulary: `GLOSSARY.md` (use its terms; saved entity = **Connection**, formerly "request"). Decisions: `docs/adr/`. Read both before changing domain behaviour.
 
 ## Self-Maintenance
 Update after any session with: new package/route/transport, schema change, arch decision, or bug >15 min to diagnose. One-two sentences, drop oldest if bloated.
