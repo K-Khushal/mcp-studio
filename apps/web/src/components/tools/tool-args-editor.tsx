@@ -40,7 +40,7 @@ export function ToolArgsEditor({ schema, args, onChange, onValidChange }: ToolAr
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">Arguments</span>
-        <ModeToggle mode={mode} onChange={setMode} canLeaveJson={isValid} />
+        <ModeToggle mode={mode} onChange={setMode} valid={isValid} />
       </div>
       {mode === 'form' ? (
         <FieldValidityContext.Provider value={reportField}>
@@ -63,11 +63,11 @@ export function ToolArgsEditor({ schema, args, onChange, onValidChange }: ToolAr
 function ModeToggle({
   mode,
   onChange,
-  canLeaveJson,
+  valid,
 }: {
   mode: Mode;
   onChange: (mode: Mode) => void;
-  canLeaveJson: boolean;
+  valid: boolean;
 }) {
   const options: { value: Mode; label: string }[] = [
     { value: 'form', label: 'Form' },
@@ -76,14 +76,15 @@ function ModeToggle({
   return (
     <div role="group" aria-label="Arguments editor mode" className="inline-flex rounded-md bg-muted p-0.5">
       {options.map(({ value, label }) => {
-        const disabled = value === 'form' && mode === 'json' && !canLeaveJson;
+        const disabled = !valid && value !== mode;
+        const hint = value === 'json' ? 'Fix or remove invalid items first' : 'Fix the JSON to switch back to the form';
         return (
           <button
             key={value}
             type="button"
             aria-pressed={mode === value}
             disabled={disabled}
-            title={disabled ? 'Fix the JSON to switch back to the form' : undefined}
+            title={disabled ? hint : undefined}
             onClick={() => onChange(value)}
             className={cn(
               'rounded-[5px] px-2.5 py-0.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',

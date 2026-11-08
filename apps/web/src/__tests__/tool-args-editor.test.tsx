@@ -381,6 +381,21 @@ describe("integer array item left blank", () => {
     expect(args()).toEqual({ ids: [7] });
   });
 
+  it("blocks switching to JSON while an item draft is invalid", async () => {
+    renderEditor(schema);
+    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "4");
+    const jsonToggle = screen.getByRole("button", { name: "JSON" });
+    expect(jsonToggle).toBeEnabled();
+
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
+    expect(jsonToggle).toBeDisabled();
+    expect(jsonToggle).toHaveAttribute("title", expect.stringMatching(/fix or remove invalid items/i));
+
+    await userEvent.click(screen.getByRole("button", { name: "Remove ids item 1" }));
+    expect(jsonToggle).toBeEnabled();
+  });
+
   it("keeps a cleared string item as an empty string", async () => {
     const strings: Schema = {
       type: "object",
