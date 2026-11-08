@@ -78,7 +78,16 @@ describe("getCopyText", () => {
     expect(getCopyText("headers", result, null, { a: "b" })).toBe(JSON.stringify({ a: "b" }, null, 2));
     expect(getCopyText("headers", result, null, null)).toBeNull();
   });
-  it("timeline has nothing to copy", () => {
-    expect(getCopyText("timeline", result, null, null)).toBeNull();
+  it("timeline copies label, timestamp and detail per entry", () => {
+    const timeline = [
+      { label: "Request sent", detail: "tools/call x", timestamp: "+0ms" },
+      { label: "Response", detail: "ok", timestamp: "+12ms" },
+    ];
+    expect(getCopyText("timeline", result, null, null, timeline)).toBe(
+      "Request sent (+0ms)\ntools/call x\n\nResponse (+12ms)\nok",
+    );
+  });
+  it("empty timeline has nothing to copy", () => {
+    expect(getCopyText("timeline", result, null, null, [])).toBeNull();
   });
 });

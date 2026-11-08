@@ -41,14 +41,25 @@ function prettyText(result: unknown): string {
   return JSON.stringify(result, null, 2);
 }
 
+interface TimelineEntry {
+  label: string;
+  detail: string;
+  timestamp: string;
+}
+
 /** Text the copy button yields for the active tab; null when there is nothing to copy. */
 export function getCopyText(
   tab: ResponseTab,
   result: unknown,
   error: string | null,
   responseHeaders: Record<string, string> | null,
+  timeline: TimelineEntry[] = [],
 ): string | null {
-  if (tab === 'timeline') return null;
+  if (tab === 'timeline') {
+    return timeline.length === 0
+      ? null
+      : timeline.map((s) => `${s.label} (${s.timestamp})\n${s.detail}`).join('\n\n');
+  }
   if (tab === 'headers') return responseHeaders ? JSON.stringify(responseHeaders, null, 2) : null;
   if (error !== null) return error;
   if (result === null) return null;

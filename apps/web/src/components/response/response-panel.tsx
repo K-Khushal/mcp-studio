@@ -15,6 +15,7 @@ export function ResponsePanel() {
     connectionConfig,
     httpAuth,
     httpHeaders,
+    timeline,
   } = useStore();
   const [activeTab, setActiveTab] = useState<ResponseTab>('pretty');
 
@@ -33,6 +34,7 @@ export function ResponsePanel() {
     response.result,
     response.error,
     response.httpResponseHeaders,
+    timeline,
   );
 
   const isHttp = connectionConfig?.transport === 'http';
