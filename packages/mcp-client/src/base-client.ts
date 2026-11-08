@@ -43,9 +43,8 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     this.client = await this.setupTransport();
 
     const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
-    this._isConnected = true;
-
     if (!this.protocolVersion) throw new Error("MCP initialize did not negotiate a protocol version");
+    this._isConnected = true;
     const serverInfo = this.client.getServerVersion();
     return {
       serverName: serverInfo?.name,
