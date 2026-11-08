@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
-import { ConfigurationPanel } from '../configuration/configuration-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import type { ConnectionConfig, HttpAuth } from '@mcp-studio/types';
@@ -180,7 +179,6 @@ export function ConnectionPanel() {
         </div>
         <div className="flex-1" />
         <EnvironmentPanel />
-        <ConfigurationPanel />
       </div>
 
       {/* Connection controls */}

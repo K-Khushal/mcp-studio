@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { useStore } from '@/store';
 import { ChevronUp, ChevronDown, Search, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -19,8 +19,11 @@ function formatTimestamp(ts: number): string {
 }
 
 export function LogsPanel() {
-  const { logs, isLogsCollapsed, toggleLogs } = useStore();
+  const { logs, isLogsCollapsed, toggleLogs, logsHeight, setLogsHeight } = useStore();
+  const autoScroll = useStore((s) => s.config.autoScrollLogs);
   const logsOpen = !isLogsCollapsed;
+  const [isDragging, setIsDragging] = useState(false);
+  const listRef = useRef<HTMLDivElement>(null);
   const [filter, setFilter] = useState<string | null>(null);
   const [search, setSearch] = useState("");
 
@@ -30,13 +33,56 @@ export function LogsPanel() {
       (!search || l.message.toLowerCase().includes(search.toLowerCase())),
   );
 
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (autoScroll && list) list.scrollTop = list.scrollHeight;
+  }, [autoScroll, logsOpen, logs, filter, search]);
+
+  const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
+    const startY = e.clientY;
+    const startHeight = logsHeight;
+    const target = e.currentTarget;
+    target.setPointerCapture(e.pointerId);
+    setIsDragging(true);
+    const onMove = (ev: PointerEvent) => setLogsHeight(startHeight + (startY - ev.clientY));
+    const onUp = () => {
+      setIsDragging(false);
+      target.removeEventListener("pointermove", onMove);
+      target.removeEventListener("pointerup", onUp);
+      target.removeEventListener("pointercancel", onUp);
+    };
+    target.addEventListener("pointermove", onMove);
+    target.addEventListener("pointerup", onUp);
+    target.addEventListener("pointercancel", onUp);
+  };
+
+  const resizeWithKeys = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowUp" && e.key !== "ArrowDown") return;
+    e.preventDefault();
+    setLogsHeight(logsHeight + (e.key === "ArrowUp" ? 24 : -24));
+  };
+
   return (
     <div
-      className={cn(
-        "border-t border-border bg-card transition-all",
-        logsOpen ? "h-52" : "h-8",
-      )}
+      className="relative shrink-0 border-t border-border bg-card"
+      style={{ height: logsOpen ? logsHeight : 32 }}
     >
+      {logsOpen && (
+        <div
+          role="separator"
+          aria-orientation="horizontal"
+          aria-label="Resize logs panel"
+          aria-valuenow={logsHeight}
+          tabIndex={0}
+          onPointerDown={startResize}
+          onKeyDown={resizeWithKeys}
+          className={cn(
+            "absolute inset-x-0 -top-1 z-10 h-2 cursor-row-resize touch-none outline-hidden transition-colors duration-150",
+            "hover:bg-primary/40 focus-visible:bg-primary/40",
+            isDragging && "bg-primary/60",
+          )}
+        />
+      )}
       <button
         onClick={toggleLogs}
         className="w-full flex items-center justify-between px-4 h-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
@@ -96,7 +142,7 @@ export function LogsPanel() {
               <Copy size={12} />
             </button>
           </div>
-          <div className="flex-1 overflow-y-auto px-3 py-1 font-mono text-[11px] leading-5">
+          <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-1 font-mono text-[11px] leading-5">
             {filtered.map((log) => (
               <div key={log.id} className="flex gap-2">
                 <span className="text-muted-foreground shrink-0">

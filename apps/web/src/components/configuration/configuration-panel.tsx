@@ -1,117 +1,123 @@
-import { useState } from 'react';
-import { useStore } from '@/store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Switch } from '@/components/ui/switch';
-import { Settings2 } from 'lucide-react';
-import { toast } from 'sonner';
+import { useState } from "react";
+import { Settings } from "lucide-react";
+import type { ThemePreference } from "@mcp-studio/types";
+import { useStore } from "@/store";
+import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
+const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
+  { value: "dark", label: "Dark" },
+  { value: "light", label: "Light" },
+  { value: "system", label: "System" },
+];
+
+/** Settings dialog. Every control applies immediately and persists; there is no save step. */
 export function ConfigurationPanel() {
-  const { config, setConfig } = useStore();
-  const [open, setOpen] = useState(false);
+  const config = useStore((s) => s.config);
+  const setConfig = useStore((s) => s.setConfig);
+  const [timeoutDraft, setTimeoutDraft] = useState<string | null>(null);
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
-          <Settings2 size={13} />
-          Configuration
-        </button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md bg-card border-border">
+    <Dialog onOpenChange={() => setTimeoutDraft(null)}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <DialogTrigger asChild>
+            <button
+              type="button"
+              aria-label="Settings"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] duration-150 ease-out outline-hidden hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.96]"
+            >
+              <Settings size={16} />
+            </button>
+          </DialogTrigger>
+        </TooltipTrigger>
+        <TooltipContent side="bottom" sideOffset={6}>
+          Settings
+        </TooltipContent>
+      </Tooltip>
+      <DialogContent className="max-w-md gap-0 bg-card" onOpenAutoFocus={(e) => e.preventDefault()}>
         <DialogHeader>
-          <DialogTitle className="text-sm font-semibold text-foreground">Configuration</DialogTitle>
+          <DialogTitle className="text-sm font-semibold text-foreground">Settings</DialogTitle>
+          <DialogDescription className="text-xs">Changes apply immediately.</DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-5">
-          {/* Transport Settings */}
-          {/*<Section title="Transport Settings">
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5 block">Transport Type</label>
-                <div className="flex gap-1 rounded-md overflow-hidden border border-border w-fit">
-                  {(['stdio', 'http'] as const).map(t => (
-                    <button
-                      key={t}
-                      onClick={() => setTransport(t)}
-                      className={cn(
-                        'px-3 py-1 text-xs font-medium transition-colors uppercase',
-                        transport === t
-                          ? 'bg-primary text-primary-foreground'
-                          : 'bg-muted text-muted-foreground hover:text-foreground'
-                      )}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5 block">
-                  {transport === 'stdio' ? 'STDIO Command' : 'HTTP Endpoint'}
-                </label>
-                <Input
-                  value={connectionUrl}
-                  onChange={e => setConnectionUrl(e.target.value)}
-                  className="h-8 text-xs font-mono bg-muted border-border"
-                  placeholder={transport === 'stdio' ? 'npx @test/test-mcp' : 'http://localhost:4000'}
-                />
-              </div>
+        <div className="mt-4 divide-y divide-border">
+          <Row label="Request timeout" hint="Seconds to wait for a Call before giving up.">
+            <Input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              step={1}
+              aria-label="Request timeout in seconds"
+              value={timeoutDraft ?? String(config.requestTimeout)}
+              onChange={(e) => {
+                setTimeoutDraft(e.target.value);
+                const n = Number(e.target.value);
+                if (Number.isInteger(n) && n > 0) setConfig({ requestTimeout: n });
+              }}
+              onBlur={() => setTimeoutDraft(null)}
+              className="h-8 w-20 font-mono text-xs tabular-nums"
+            />
+          </Row>
+          <Row label="Auto-scroll logs" hint="Follow new log lines as they arrive.">
+            <Switch
+              aria-label="Auto-scroll logs"
+              checked={config.autoScrollLogs}
+              onCheckedChange={(v) => setConfig({ autoScrollLogs: v })}
+            />
+          </Row>
+          <Row label="Verbose logging" hint="Include protocol detail in logs.">
+            <Switch
+              aria-label="Verbose logging"
+              checked={config.verboseLogging}
+              onCheckedChange={(v) => setConfig({ verboseLogging: v })}
+            />
+          </Row>
+          <Row label="Theme" hint="System follows your OS.">
+            <div role="radiogroup" aria-label="Theme" className="flex rounded-lg border border-border bg-muted p-0.5">
+              {THEME_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="radio"
+                  aria-checked={config.theme === value}
+                  onClick={() => setConfig({ theme: value })}
+                  className={cn(
+                    "rounded-md px-2.5 py-1 text-xs font-medium transition-[background-color,color] duration-150 ease-out outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50",
+                    config.theme === value
+                      ? "bg-background text-foreground shadow-sm"
+                      : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
-          </Section>*/}
-
-          {/* Execution Settings */}
-          <Section title="Execution Settings">
-            <div className="space-y-3">
-              <div>
-                <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-1.5 block">Request Timeout (seconds)</label>
-                <Input
-                  type="number"
-                  value={config.requestTimeout}
-                  onChange={e => setConfig({ requestTimeout: Number(e.target.value) })}
-                  className="h-8 text-xs font-mono bg-muted border-border w-24"
-                />
-              </div>
-              <ToggleRow label="Auto Scroll Logs" checked={config.autoScrollLogs} onChange={v => setConfig({ autoScrollLogs: v })} />
-              <ToggleRow label="Stream Responses" checked={config.streamResponses} onChange={v => setConfig({ streamResponses: v })} />
-            </div>
-          </Section>
-
-          {/* Debug Settings */}
-          <Section title="Debugging">
-            <div className="space-y-3">
-              <ToggleRow label="Verbose Logging" checked={config.verboseLogging} onChange={v => setConfig({ verboseLogging: v })} />
-              <ToggleRow label="Show Reasoning Steps" checked={config.showReasoning} onChange={v => setConfig({ showReasoning: v })} />
-              <ToggleRow label="Show Tool Lifecycle Timeline" checked={config.showTimeline} onChange={v => setConfig({ showTimeline: v })} />
-            </div>
-          </Section>
+          </Row>
         </div>
-
-        <button
-          onClick={() => { toast.success('Configuration saved'); setOpen(false); }}
-          className="w-full mt-2 py-2 rounded-md bg-primary text-primary-foreground text-xs font-medium hover:bg-primary/90 transition-colors"
-        >
-          Save Configuration
-        </button>
       </DialogContent>
     </Dialog>
   );
 }
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+function Row({ label, hint, children }: { label: string; hint: string; children: React.ReactNode }) {
   return (
-    <div>
-      <h3 className="text-xs font-semibold text-foreground mb-3 pb-1.5 border-b border-border">{title}</h3>
+    <div className="flex items-center justify-between gap-6 py-3 first:pt-0 last:pb-0">
+      <div className="min-w-0">
+        <div className="text-sm font-medium text-foreground">{label}</div>
+        <div className="text-xs text-muted-foreground">{hint}</div>
+      </div>
       {children}
-    </div>
-  );
-}
-
-function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <div className="flex items-center justify-between">
-      <span className="text-xs text-muted-foreground">{label}</span>
-      <Switch checked={checked} onCheckedChange={onChange} />
     </div>
   );
 }

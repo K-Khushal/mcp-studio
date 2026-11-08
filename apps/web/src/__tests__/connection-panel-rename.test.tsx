@@ -3,9 +3,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import type { Collection } from "@mcp-studio/types";
 
 vi.mock("../components/environments/environment-panel", () => ({ default: () => null }));
-vi.mock("../components/configuration/configuration-panel", () => ({
-  ConfigurationPanel: () => null,
-}));
 
 const { useStore } = await import("../store/index.js");
 const { ConnectionPanel } = await import("../components/connection/connection-panel.js");
