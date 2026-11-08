@@ -1,6 +1,6 @@
 import type { ElicitationResult } from "@mcp-studio/types";
 import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
-import type { MCPClientInterface, MCPClientOptions } from "@mcp-studio/mcp-client";
+import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
   ServerMessage,
@@ -9,9 +9,25 @@ import type {
 } from "@mcp-studio/types";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { interpolate } from "../env/interpolate.js";
+import type { OAuthRedirects } from "../oauth/redirects.js";
 import { nanoid } from "../utils/nanoid.js";
 
 type Send = (msg: ServerMessage) => void;
+
+export interface SessionOptions {
+  /** Enables OAuth sign-in for HTTP Connections. */
+  oauth?: {
+    redirectUrl: string;
+    redirects: OAuthRedirects;
+    storage(connectionId: string, serverUrl: string): OAuthStorage;
+  };
+}
+
+/** Stand-in storage for a connect without a saved Connection: credentials last one Session. */
+function sessionStorage(): OAuthStorage {
+  let credentials = {};
+  return { load: async () => credentials, save: async (next) => { credentials = next; } };
+}
 
 /**
  * SessionManager — owns the single MCP connection lifecycle.
@@ -52,8 +68,10 @@ export class SessionManager {
   private verbose = false;
   private calls = new Map<string, AbortController>();
   private callClocks = new Map<string, { pause(): void; resume(): void }>();
+  /** Aborts a sign-in still waiting on the browser when the Session is disconnected. */
+  private signInAbort: AbortController | null = null;
 
-  constructor(private readonly send: Send) {}
+  constructor(private readonly send: Send, private readonly options: SessionOptions = {}) {}
 
   setActiveEnv(env: Record<string, string>): void {
     this.activeEnv = env;
@@ -150,6 +168,7 @@ export class SessionManager {
               onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
+              oauth: this.oauthSignIn(msg.connectionId, config.config.url),
             });
 
       this.client = client;
@@ -276,7 +295,28 @@ export class SessionManager {
     this.send({ type: "prompts_listed", prompts });
   }
 
+  private oauthSignIn(connectionId: string | undefined, serverUrl: string): OAuthSignIn | undefined {
+    const oauth = this.options.oauth;
+    if (!oauth) return undefined;
+    return {
+      redirectUrl: oauth.redirectUrl,
+      storage: connectionId ? oauth.storage(connectionId, serverUrl) : sessionStorage(),
+      authorize: async (authorizationUrl, state) => {
+        this.signInAbort = new AbortController();
+        const code = oauth.redirects.wait(state, this.signInAbort.signal);
+        this.send({ type: "log", level: "INFO", source: "protocol", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
+        this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
+        try {
+          return await code;
+        } finally {
+          this.signInAbort = null;
+        }
+      },
+    };
+  }
+
   async disconnect(): Promise<void> {
+    this.signInAbort?.abort();
     if (this.status === "disconnected") return;
     this.clearElicitations();
     for (const call of this.calls.values()) call.abort("cancelled");
