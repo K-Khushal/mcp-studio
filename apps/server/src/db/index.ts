@@ -19,7 +19,8 @@ sqlite.exec("PRAGMA foreign_keys = ON;");
 export const db = drizzle(sqlite, { schema });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = join(__dirname, "../../drizzle");
+const bundledMigrations = join(__dirname, "drizzle");
+const migrationsFolder = existsSync(bundledMigrations) ? bundledMigrations : join(__dirname, "../../drizzle");
 
 migrate(db, { migrationsFolder });
 console.log("[db] Migrations applied");

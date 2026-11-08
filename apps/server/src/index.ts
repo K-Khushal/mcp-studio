@@ -1,3 +1,5 @@
+import { resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { SessionManager } from "./session/manager.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
@@ -5,15 +7,33 @@ import { createConnection, deleteConnection, updateConnection } from "./db/queri
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
-const CORS_ORIGIN = process.env["CORS_ORIGIN"] ?? "http://localhost:5173";
+const production = process.env["STUDIO_PRODUCTION"] === "1";
+const CORS_ORIGIN = process.env["CORS_ORIGIN"] ?? (production ? "" : "http://localhost:5173");
+const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
 
 console.log(`[mcp-studio/server] Starting on ws://localhost:${PORT}`);
 
 const server = Bun.serve<{ session: SessionManager | null }>({
   port: PORT,
+  hostname: "localhost",
 
   async fetch(req, server) {
     const url = new URL(req.url);
+    const origin = req.headers.get("Origin");
+    const host = req.headers.get("Host") ?? "";
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/i.test(host)) {
+      return new Response("Host not allowed", { status: 403 });
+    }
+    const allowedOrigins = [
+      ...["localhost", "127.0.0.1", "[::1]"].map((hostname) => `http://${hostname}:${server.port}`),
+      CORS_ORIGIN,
+      ...(!production ? ["http://localhost:5173"] : []),
+    ];
+    if (origin !== null && !allowedOrigins.includes(origin)) {
+      return new Response("Origin not allowed", { status: 403 });
+    }
+    // Keep the development /api proxy and production browser URLs identical.
+    url.pathname = url.pathname.replace(/^\/api(?=\/)/, "");
 
     if (req.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders() });
@@ -111,6 +131,18 @@ const server = Bun.serve<{ session: SessionManager | null }>({
       return undefined;
     }
 
+    if (production && (req.method === "GET" || req.method === "HEAD")) {
+      let pathname: string;
+      try { pathname = decodeURIComponent(url.pathname); }
+      catch { return new Response("Bad path", { status: 400 }); }
+      const path = resolve(webRoot, pathname === "/" ? "index.html" : `.${pathname}`);
+      if (path.startsWith(resolve(webRoot) + sep)) {
+        const file = Bun.file(path);
+        if (await file.exists()) return new Response(req.method === "HEAD" ? null : file, {
+          headers: { "Content-Type": file.type },
+        });
+      }
+    }
     return new Response("Not found", { status: 404 });
   },
 
@@ -148,7 +180,7 @@ const server = Bun.serve<{ session: SessionManager | null }>({
 
 function corsHeaders(): Record<string, string> {
   return {
-    "Access-Control-Allow-Origin": CORS_ORIGIN,
+    ...(CORS_ORIGIN ? { "Access-Control-Allow-Origin": CORS_ORIGIN } : {}),
     "Access-Control-Allow-Methods": "GET, POST, PATCH, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type",
   };

@@ -40,29 +40,29 @@ packages/
 
 ## Getting started
 
-**Prerequisites:** [Bun](https://bun.sh) >= 1.0, Node >= 20
+Requires [Bun](https://bun.sh). Once the npm package is published:
 
 ```bash
-git clone git@github.com:K-Khushal/mcp-studio.git
-cd mcp-studio
-bun install
-
-# Terminal 1 — backend
-cd apps/server && bun dev
-
-# Terminal 2 — frontend
-cd apps/web && bun dev
-
-# Or both via turbo (Start everything)
-bun dev
-
-# View db
-cd apps/server && bun drizzle-kit studio
-
-# Or individually
-bun --filter @mcp-studio/server dev   # backend  → ws://localhost:3000
-bun --filter @mcp-studio/web dev      # frontend → http://localhost:5173
+bunx mcp-studio
+bunx mcp-studio --port 4000 --no-open
 ```
+
+The CLI opens `http://localhost:3000`; the Studio Server serves the UI, REST API,
+and `/ws` on that single port. `--port` changes it; `--no-open` suppresses the
+browser launch. Data is stored in `~/.mcp-studio/studio.db`.
+
+Run a production build from source today:
+
+```bash
+bun install
+bun run build
+bun dist/cli.js --port 4000 --no-open
+bun run smoke
+npm pack --dry-run
+```
+
+For development, run `bun dev` (web on 5173, Studio Server on 3000).
+The Vite REST proxy remains unchanged. Bun is required; `npx` is unsupported.
 
 ---
 

@@ -1,6 +1,6 @@
 import type { StudioTransport, ServerMessage, ConnectionConfig } from "@mcp-studio/types";
 
-const WS_URL = import.meta.env["VITE_WS_URL"] ?? "ws://localhost:3000/ws";
+const WS_URL = import.meta.env["VITE_WS_URL"] ?? (import.meta.env.DEV ? "ws://localhost:3000/ws" : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
 
 /**
  * WebSocketTransport — the live implementation of StudioTransport.
