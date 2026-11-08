@@ -7,7 +7,8 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, ConnectionStatus } from "./m
 
 export type ClientMessage =
   | ({ type: "elicitation_response"; elicitationId: string } & ElicitationResult)
-  | ({ type: "connect" } & ConnectionConfig)
+  | ({ type: "connect"; verbose?: boolean } & ConnectionConfig)
+  | { type: "set_verbose"; verbose: boolean }
   | { type: "invoke"; tool: string; params: Record<string, unknown> }
   | {
       type: "invoke_prompt";
@@ -23,6 +24,17 @@ export type ClientMessage =
 // ---------------------------------------------------------------------------
 
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
+
+/** Protocol = JSON-RPC frames, Server = MCP Server output (notifications/message, stderr), Studio = MCP Studio's own events. */
+export type LogSource = "protocol" | "server" | "studio";
+
+/** Structured detail of one JSON-RPC frame. `out` = Studio → MCP Server, `in` = MCP Server → Studio. */
+export interface LogPayload {
+  direction: "in" | "out";
+  method?: string;
+  id?: string | number;
+  body: unknown;
+}
 
 export type ServerMessage =
   | { type: "elicitation_request"; elicitationId: string; message: string; requestedSchema: Record<string, unknown> }
@@ -41,9 +53,10 @@ export type ServerMessage =
   | {
       type: "log";
       level: LogLevel;
-      source: "protocol" | "subprocess";
+      source: LogSource;
       message: string;
       timestamp: number;
+      payload?: LogPayload;
     }
   | { type: "disconnected"; reason?: string }
   | { type: "status"; status: ConnectionStatus }

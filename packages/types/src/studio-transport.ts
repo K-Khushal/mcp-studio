@@ -7,7 +7,9 @@ import type { ServerMessage } from "./messages.js";
 // ---------------------------------------------------------------------------
 
 export interface StudioTransport {
-  connect(config: ConnectionConfig): Promise<void>;
+  connect(config: ConnectionConfig, verbose?: boolean): Promise<void>;
+  /** Apply the verbose logging setting to the live Session without reconnecting. */
+  setVerbose(verbose: boolean): void;
   invoke(tool: string, params: Record<string, unknown>): Promise<void>;
   invokePrompt(prompt: string, args: Record<string, string>): Promise<void>;
   disconnect(): Promise<void>;

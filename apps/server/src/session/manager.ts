@@ -1,6 +1,6 @@
 import type { ElicitationResult } from "@mcp-studio/types";
 import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
-import type { MCPClientInterface } from "@mcp-studio/mcp-client";
+import type { MCPClientInterface, MCPClientOptions } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
   ServerMessage,
@@ -42,6 +42,7 @@ export class SessionManager {
   private client: MCPClientInterface | null = null;
   private status: ConnectionStatus = "disconnected";
   private activeEnv: Record<string, string> = {};
+  private verbose = false;
 
   constructor(private readonly send: Send) {}
 
@@ -56,6 +57,10 @@ export class SessionManager {
         break;
       case "connect":
         await this.connect(msg);
+        break;
+      case "set_verbose":
+        this.verbose = msg.verbose;
+        this.client?.setVerbose(msg.verbose);
         break;
       case "invoke":
         await this.invoke(msg.tool, msg.params);
@@ -81,10 +86,12 @@ export class SessionManager {
     if (this.status !== "connected") return;
     const reason = "MCP Server connection closed unexpectedly";
     this.client = null;
-    this.send({ type: "log", level: "ERROR", source: "protocol", message: reason, timestamp: Date.now() });
+    this.send({ type: "log", level: "ERROR", source: "studio", message: reason, timestamp: Date.now() });
     this.setStatus("disconnected");
     this.send({ type: "disconnected", reason });
   }
+  private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) =>
+    this.send({ type: "log", level, source, message, timestamp: Date.now(), ...(payload ? { payload } : {}) });
 
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
@@ -93,12 +100,13 @@ export class SessionManager {
 
   private async connect(msg: Extract<ClientMessage, { type: "connect" }>): Promise<void> {
     if (this.status === "connecting") return;
+    this.verbose = msg.verbose ?? this.verbose;
     let config: ReturnType<SessionManager["interpolateConfig"]>;
     try {
       config = this.interpolateConfig(msg);
     } catch (err) {
       if (!this.client?.isConnected) this.setStatus("error");
-      this.send({ type: "log", level: "ERROR", source: "protocol", message: String(err), timestamp: Date.now() });
+      this.send({ type: "log", level: "ERROR", source: "studio", message: String(err), timestamp: Date.now() });
       this.send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
       return;
     }
@@ -115,16 +123,16 @@ export class SessionManager {
           ? new StdioMCPClient(config.config, {
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
-              onLog: (level, source, message) =>
-                this.send({ type: "log", level, source, message, timestamp: Date.now() }),
+              verbose: this.verbose,
+              onLog: this.forwardLog,
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             })
           : new StreamableHTTPClient(config.config, {
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
-              onLog: (level, source, message) =>
-                this.send({ type: "log", level, source, message, timestamp: Date.now() }),
+              verbose: this.verbose,
+              onLog: this.forwardLog,
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
               onHttpResponse: (requestId, status, headers) =>
@@ -154,7 +162,7 @@ export class SessionManager {
         ? `HTTP ${err.code}: ${err.message}`
         : err instanceof Error ? err.message : String(err);
 
-      this.send({ type: "log", level: "ERROR", source: "protocol", message, timestamp: Date.now() });
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
 
       this.send({ type: "error", message, code: "CONNECTION_FAILED" });
     }
