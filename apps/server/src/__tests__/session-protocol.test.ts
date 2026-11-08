@@ -67,3 +67,29 @@ test("Session connects again after disconnecting over HTTP", async () => {
     await http.close();
   }
 });
+
+test("HTTP Session reports the Streamable HTTP variant", async () => {
+  const http = await startHTTPFixture();
+  const session = new SessionHarness();
+  try {
+    await session.send(http.connection);
+    expect(await session.waitFor("connected")).toMatchObject({ httpVariant: "streamable" });
+  } finally {
+    await session.close();
+    await http.close();
+  }
+});
+
+test("HTTP Session falls back to legacy SSE and reports its variant", async () => {
+  const http = await startHTTPFixture("sse");
+  const session = new SessionHarness();
+  try {
+    await session.send(http.connection);
+    expect(await session.waitFor("connected")).toMatchObject({ httpVariant: "sse", serverInfo: { name: "protocol-fixture" } });
+    await session.send({ type: "invoke", tool: "echo", params: { text: "legacy" } });
+    expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ type: "text", text: "legacy" }] } });
+  } finally {
+    await session.close();
+    await http.close();
+  }
+});

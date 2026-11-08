@@ -21,6 +21,7 @@ export function SessionInfo() {
   const status = useStore((s) => s.connectionStatus);
   const serverInfo = useStore((s) => s.serverInfo);
   const protocolVersion = useStore((s) => s.protocolVersion);
+  const httpVariant = useStore((s) => s.httpVariant);
   const transport = useStore((s) => s.connectionConfig?.transport ?? null);
 
   const { label, dot } = STATUS[status];
@@ -40,7 +41,7 @@ export function SessionInfo() {
           {serverInfo?.version && (
             <span className="shrink-0 font-mono text-muted-foreground">v{serverInfo.version}</span>
           )}
-          {transport && <Chip>{transport.toUpperCase()}</Chip>}
+          {transport && <Chip>{transport.toUpperCase()}{transport === "http" && httpVariant ? ` · ${httpVariant === "streamable" ? "Streamable HTTP" : "SSE"}` : ""}</Chip>}
           {protocolVersion && <Chip>MCP {protocolVersion}</Chip>}
         </>
       )}

@@ -1,6 +1,8 @@
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
+import { createServer } from "node:http";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { SessionManager } from "../../session/manager";
 import { createProtocolServer } from "./protocol-server";
 
@@ -52,14 +54,14 @@ export const stdioFixture: ClientMessage = {
   },
 };
 
-/** Real SDK Streamable HTTP on an OS-assigned loopback port. Legacy SSE is stubbed (501). */
-export async function startHTTPFixture() {
+/** Real SDK HTTP transports on OS-assigned loopback ports. */
+export async function startHTTPFixture(mode: "streamable" | "sse" = "streamable") {
+  if (mode === "sse") return startSSEFixture();
   const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
   const protocols = new Set<ReturnType<typeof createProtocolServer>>();
   const versions: (string | null)[] = [];
   const requests: unknown[] = [];
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
-    if (new URL(request.url).pathname === "/sse") return new Response("Legacy SSE fixture not implemented", { status: 501 });
     versions.push(request.headers.get("mcp-protocol-version"));
     if (request.method === "POST") requests.push(await request.clone().json());
     const sessionId = request.headers.get("mcp-session-id");
@@ -86,6 +88,48 @@ export async function startHTTPFixture() {
     async close() {
       await Promise.all([...protocols].map(protocol => protocol.close()));
       await server.stop(true);
+    },
+  };
+}
+
+
+async function startSSEFixture() {
+  const sessions = new Map<string, SSEServerTransport>();
+  const protocols = new Set<ReturnType<typeof createProtocolServer>>();
+  const versions: (string | null)[] = [];
+  const server = createServer(async (request, response) => {
+    try {
+      const url = new URL(request.url!, "http://localhost");
+      if (url.pathname === "/sse" && request.method === "GET") {
+        const transport = new SSEServerTransport("/messages", response);
+        const protocol = createProtocolServer();
+        sessions.set(transport.sessionId, transport);
+        protocols.add(protocol);
+        response.on("close", () => sessions.delete(transport.sessionId));
+        await protocol.connect(transport);
+      } else if (url.pathname === "/messages" && request.method === "POST") {
+        const transport = sessions.get(url.searchParams.get("sessionId") ?? "");
+        if (transport) await transport.handlePostMessage(request, response);
+        else { response.writeHead(404); response.end(); }
+      } else {
+        response.writeHead(405);
+        response.end("Use legacy SSE");
+      }
+    } catch {
+      if (!response.headersSent) response.writeHead(500);
+      response.end();
+    }
+  });
+  await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
+  const address = server.address();
+  if (!address || typeof address === "string") throw new Error("Missing fixture port");
+  return {
+    connection: { type: "connect", transport: "http", config: { url: `http://127.0.0.1:${address.port}/sse`, headers: {} } } satisfies ClientMessage,
+    versions,
+    async close() {
+      await Promise.all([...protocols].map(protocol => protocol.close()));
+      server.closeAllConnections();
+      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
     },
   };
 }
