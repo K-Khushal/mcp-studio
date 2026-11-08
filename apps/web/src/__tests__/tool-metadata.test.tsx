@@ -2,6 +2,7 @@ import { afterEach, expect, it } from "vitest";
 import { cleanup, render, screen, within } from "@testing-library/react";
 import "@testing-library/jest-dom/vitest";
 import userEvent from "@testing-library/user-event";
+import { ToolIcon } from "../components/tools/tool-metadata";
 import ToolPanel from "../components/tools/tool-panel";
 import { useStore } from "../store";
 import type { MCPTool } from "@mcp-studio/types";
@@ -33,4 +34,9 @@ it("falls back to the name and omits unspecified hints", () => {
   render(<ToolPanel />);
   expect(screen.getByRole("heading", { name: "ping" })).toBeVisible();
   expect(screen.queryByText("Read-only")).not.toBeInTheDocument();
+});
+
+it("rejects insecure HTTP icon sources", () => {
+  render(<ToolIcon tool={{ ...tool, icons: [{ src: "http://example.com/tool.png" }] }} />);
+  expect(screen.queryByRole("img")).not.toBeInTheDocument();
 });

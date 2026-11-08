@@ -6,7 +6,7 @@ export const toolTitle = (tool: MCPTool) => tool.title || tool.annotations?.titl
 
 export function ToolIcon({ tool }: { tool: MCPTool }) {
   const [failedSrc, setFailedSrc] = useState<string>();
-  const src = tool.icons?.find(icon => /^(https?:\/\/|data:image\/)/i.test(icon.src))?.src;
+  const src = tool.icons?.find(icon => /^(https:\/\/|data:image\/)/i.test(icon.src))?.src;
   return src && failedSrc !== src
     ? <img src={src} alt={`${toolTitle(tool)} icon`} width={16} height={16} className="size-4 shrink-0 object-contain" referrerPolicy="no-referrer" onError={() => setFailedSrc(src)} />
     : <Wrench size={16} className="shrink-0 text-muted-foreground" aria-hidden="true" />;

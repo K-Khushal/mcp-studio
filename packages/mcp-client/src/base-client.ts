@@ -1,4 +1,4 @@
-import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
+import { ElicitRequestSchema, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-studio/types";
@@ -21,6 +21,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     return this._isConnected;
   }
 
+  private requiredTaskTools = new Set<string>();
   private protocolVersion: string | undefined;
 
   /** Capture the SDK's initialize result while preserving transport negotiation. */
@@ -71,6 +72,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     const response = await this.client.listTools();
     this.options.onLog?.("DEBUG", "protocol", `tools/list → ${response.tools.length} tools`);
 
+    this.requiredTaskTools = new Set(response.tools.filter(t => t.execution?.taskSupport === "required").map(t => t.name));
     return response.tools.map((t) => ({
       name: t.name,
       title: t.title,
@@ -91,7 +93,15 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
     this.options.onLog?.("INFO", "protocol", `tools/call → ${name} (requestId: ${requestId})`);
 
-    const result = await this.client.callTool({ name, arguments: params });
+    if (this.requiredTaskTools.has(name)) {
+      throw new Error(`Tool "${name}" requires task-based execution`);
+    }
+    // callTool also rejects missing structuredContent before invoking our validator.
+    // Keep wire-result validation, but leave outputSchema diagnostics to Pretty.
+    const result = await this.client.request(
+      { method: "tools/call", params: { name, arguments: params } },
+      CallToolResultSchema,
+    );
 
     this.options.onLog?.("INFO", "protocol", `tools/call ← ${name} complete`);
     this.options.onChunk?.(requestId, result);

@@ -1,3 +1,4 @@
+import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import type { StdioConfig } from "@mcp-studio/types";
@@ -41,7 +42,7 @@ export class StdioMCPClient extends BaseMCPClient {
     };
     this.transport.stderr?.on("data", this.stderrHandler);
 
-    const client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
+    const client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
     this.options.onLog?.("INFO", "protocol", "Connecting via STDIO transport…");
     await this.connectTransport(client, this.transport);
     this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");

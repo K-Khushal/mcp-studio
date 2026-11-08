@@ -27,3 +27,21 @@ for (const transport of ["stdio", "http"] as const) {
     }
   });
 }
+
+for (const transport of ["stdio", "http", "sse"] as const) {
+  test(`Session preserves mismatching structured output over ${transport}`, async () => {
+    const http = transport === "stdio" ? undefined : (transport === "sse" ? await startHTTPFixture("sse") : await startHTTPFixture());
+    const session = new SessionHarness();
+    try {
+      await session.send(http?.connection ?? stdioFixture);
+      await session.waitFor("connected");
+      await session.send({ type: "invoke", tool: "structured-bad", params: {} });
+      expect(await session.waitFor("result")).toMatchObject({ data: { structuredContent: { answer: "wrong" } } });
+      await session.send({ type: "invoke", tool: "structured-missing", params: {} });
+      expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ type: "text", text: "Missing structured content" }] } });
+    } finally {
+      await session.close();
+      await http?.close();
+    }
+  });
+}

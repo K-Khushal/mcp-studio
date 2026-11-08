@@ -42,3 +42,32 @@ it("preserves tool error rendering without a spurious missing-content warning", 
   expect(screen.getByText("Tool execution error")).toBeVisible();
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
+
+it("defaults to 2020-12 and flags a prefixItems mismatch", () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { values: [42] } }} error={null} outputSchema={{
+    type: "object", properties: { values: { type: "array", prefixItems: [{ type: "string" }] } },
+  }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent(/output schema mismatch.*values\/0.*string/i);
+});
+
+it("uses explicit draft-07 tuple validation", () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { values: [42] } }} error={null} outputSchema={{
+    $schema: "http://json-schema.org/draft-07/schema#", type: "object",
+    properties: { values: { type: "array", items: [{ type: "string" }] } },
+  }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent(/output schema mismatch.*string/i);
+});
+it("does not claim validation for unsupported dialects", () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { answer: 42 } }} error={null} outputSchema={{
+    $schema: "https://example.com/2020-12/custom", type: "object",
+  }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent("Cannot validate output schema");
+});
+it("collapses a text mirror even when object keys have a different order", () => {
+  const { container } = render(<PrettyTab result={{
+    content: [{ type: "text", text: '{"nested":{"b":2,"a":[1]}}' }],
+    structuredContent: { nested: { a: [1], b: 2 } },
+  }} error={null} />);
+  expect(screen.getByText("Content (text mirror)")).toBeVisible();
+  expect(container.querySelector("details")).not.toHaveAttribute("open");
+});

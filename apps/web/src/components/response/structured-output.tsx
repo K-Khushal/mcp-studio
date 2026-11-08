@@ -1,9 +1,27 @@
 import { useMemo } from 'react';
-import Ajv from 'ajv';
+import Ajv, { type ValidateFunction } from 'ajv';
 import Ajv2020 from 'ajv/dist/2020';
 import addFormats from 'ajv-formats';
 import type { CallToolResult } from '@mcp-studio/types';
 import { JsonViewer } from './json-viewer';
+
+const validators = new WeakMap<Record<string, unknown>, ValidateFunction>();
+
+function compiledValidator(schema: Record<string, unknown>) {
+  const cached = validators.get(schema);
+  if (cached) return cached;
+  const dialect = schema.$schema;
+  const draft07 = dialect === 'http://json-schema.org/draft-07/schema#' || dialect === 'https://json-schema.org/draft-07/schema#';
+  if (dialect !== undefined && !draft07 && dialect !== 'https://json-schema.org/draft/2020-12/schema') {
+    throw new Error(`Unsupported JSON Schema dialect: ${String(dialect)}`);
+  }
+  const Validator = draft07 ? Ajv : Ajv2020;
+  const ajv = new Validator({ allErrors: true, strict: false, validateFormats: true });
+  addFormats(ajv);
+  const validate = ajv.compile(schema);
+  validators.set(schema, validate);
+  return validate;
+}
 
 function validateOutput(schema: Record<string, unknown> | undefined, result: CallToolResult) {
   if (!schema) return null;
@@ -11,10 +29,7 @@ function validateOutput(schema: Record<string, unknown> | undefined, result: Cal
     return result.isError ? null : 'Output schema mismatch: structured content is missing.';
   }
   try {
-    const Validator = typeof schema.$schema === 'string' && schema.$schema.includes('2020-12') ? Ajv2020 : Ajv;
-    const ajv = new Validator({ allErrors: true, strict: false, validateFormats: true });
-    addFormats(ajv);
-    const validate = ajv.compile(schema);
+    const validate = compiledValidator(schema);
     if (validate(result.structuredContent)) return 'Matches output schema';
     return 'Output schema mismatch: ' + (validate.errors ?? []).map(error =>
       `${error.instancePath || '/'} ${error.message}`).join('; ');

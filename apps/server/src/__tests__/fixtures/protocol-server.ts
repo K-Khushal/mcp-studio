@@ -8,6 +8,7 @@ export function createProtocolServer() {
   const server = new Server({ name: "protocol-fixture", version: "1" }, { capabilities: { tools: {}, prompts: {}, logging: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
     ...["echo", "error", "slow", "elicit", "log", "stderr", "crash"].map(name => ({ name, inputSchema: { type: "object" as const, properties: { text: { type: "string" }, steps: { type: "integer", minimum: 1, maximum: 100 } } } })),
+    ...["structured-bad", "structured-missing"].map(name => ({ name, inputSchema: { type: "object" as const }, outputSchema: { type: "object" as const, properties: { answer: { type: "number" } }, required: ["answer"] } })),
     { name: "structured", title: "Structured answer",
       description: "Returns a structured answer with an output schema.",
       icons: [{ src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", mimeType: "image/png" }],
@@ -19,6 +20,8 @@ export function createProtocolServer() {
     switch (request.params.name) {
       case "echo": return text(String(args.text ?? "hello"));
       case "error": return { ...text("Fixture tool error"), isError: true };
+      case "structured-bad": return { ...text('{"answer":"wrong"}'), structuredContent: { answer: "wrong" } };
+      case "structured-missing": return text("Missing structured content");
       case "structured": return { ...text('{"answer":42}'), structuredContent: { answer: 42 } };
       case "slow": {
         const steps = Math.max(1, Math.min(100, Number(args.steps) || 5));

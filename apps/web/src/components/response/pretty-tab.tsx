@@ -18,14 +18,38 @@ function MultiBlockSeparator() {
   return <div className="h-px bg-border/50 my-3" />;
 }
 
+function jsonEqual(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (!left || !right || typeof left !== 'object' || typeof right !== 'object') return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  const a = left as Record<string, unknown>;
+  const b = right as Record<string, unknown>;
+  return Object.keys(a).length === Object.keys(b).length &&
+    Object.keys(a).every(key => Object.hasOwn(b, key) && jsonEqual(a[key], b[key]));
+}
+
+function isTextMirror(result: CallToolResult): boolean {
+  const [block] = result.content;
+  if (result.structuredContent === undefined || result.content.length !== 1 || block?.type !== 'text') return false;
+  try {
+    return jsonEqual(JSON.parse(block.text), result.structuredContent);
+  } catch {
+    return false;
+  }
+}
+
 function CallToolResultView({ result, outputSchema }: { result: CallToolResult; outputSchema?: Record<string, unknown> }) {
   const blocks = result.content;
+  const textMirror = isTextMirror(result);
 
   return (
     <div>
       {result.isError && <ToolErrorBanner />}
       <StructuredOutput result={result} schema={outputSchema} />
-      {blocks.map((block, i) => (
+      {textMirror ? <details className="text-xs">
+        <summary className="cursor-pointer text-muted-foreground">Content (text mirror)</summary>
+        <ContentBlockRenderer block={blocks[0]!} />
+      </details> : blocks.map((block, i) => (
         <div key={i}>
           {i > 0 && <MultiBlockSeparator />}
           <ContentBlockRenderer block={block} />

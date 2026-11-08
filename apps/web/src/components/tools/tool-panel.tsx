@@ -76,7 +76,7 @@ export default function ToolPanel() {
         ) : (
           <>
             <div>
-              <h3 aria-label={toolTitle(selectedTool)} className="flex items-center gap-2 text-sm font-semibold text-foreground"><ToolIcon tool={selectedTool} />{toolTitle(selectedTool)}</h3>
+              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><span aria-hidden="true"><ToolIcon tool={selectedTool} /></span>{toolTitle(selectedTool)}</h3>
               {toolTitle(selectedTool) !== selectedTool.name && <p className="mt-1 font-mono text-xs text-muted-foreground">{selectedTool.name}</p>}
               <ToolBadges tool={selectedTool} />
               {selectedTool.description && (
