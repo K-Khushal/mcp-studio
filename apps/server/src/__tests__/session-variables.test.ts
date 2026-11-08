@@ -1,4 +1,4 @@
-import { expect, test } from "bun:test";
+import { expect, spyOn, test } from "bun:test";
 import { SessionHarness, startHTTPFixture, stdioFixture } from "./fixtures/session-harness";
 
 test("Session substitutes command, args and prompt arguments", async () => {
@@ -41,5 +41,29 @@ test("unresolved connection Variables block all network traffic", async () => {
     await session.send({ ...http.connection, config: { ...http.connection.config, headers: { Authorization: "{{TOKEN}}" }, auth: { type: "apikey", key: "X-Key", value: "{{KEY}}", in: "header" } } });
     expect(await session.waitFor("ERROR")).toMatchObject({ message: "Unresolved Variables: TOKEN, KEY" });
     expect(http.requests).toEqual([]);
+  } finally { await session.close(); await http.close(); }
+});
+
+test("unresolved STDIO cwd blocks spawn and preserves the live Session", async () => {
+  const http = await startHTTPFixture();
+  const session = new SessionHarness();
+  try {
+    await session.send(http.connection);
+    await session.waitFor("connected");
+    const count = session.messages.length;
+    const spawn = spyOn(Bun, "spawn");
+    try {
+      await session.send({
+        type: "connect", transport: "stdio",
+        config: { command: "definitely-not-an-executable", args: [], env: {}, inheritSystemEnv: true, cwd: "{{X}}" },
+      });
+      expect(await session.waitFor("ERROR")).toMatchObject({
+        code: "CONNECTION_FAILED", message: "Unresolved Variables: X",
+      });
+      expect(spawn).not.toHaveBeenCalled();
+    } finally { spawn.mockRestore(); }
+    expect(session.messages.slice(count).some(message => message.type === "connected" || message.type === "disconnected")).toBe(false);
+    await session.send({ type: "invoke", tool: "echo", params: { text: "still connected" } });
+    expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ text: "still connected" }] } });
   } finally { await session.close(); await http.close(); }
 });

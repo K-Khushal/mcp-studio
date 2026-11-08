@@ -57,6 +57,14 @@ export class SessionManager {
 
   private async connect(msg: Extract<ClientMessage, { type: "connect" }>): Promise<void> {
     if (this.status === "connecting") return;
+    let config: ReturnType<SessionManager["interpolateConfig"]>;
+    try {
+      config = this.interpolateConfig(msg);
+    } catch (err) {
+      this.send({ type: "ERROR", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
+      return;
+    }
+
     if (this.client?.isConnected) {
       await this.disconnect();
     }
@@ -64,9 +72,6 @@ export class SessionManager {
     this.setStatus("connecting");
 
     try {
-      // Interpolate env vars in config before connecting
-      const config = this.interpolateConfig(msg);
-
       this.client =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {

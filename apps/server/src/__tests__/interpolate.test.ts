@@ -12,3 +12,25 @@ test("resolver resolves nested objects and arrays and reports unique missing Var
   });
   expect(input.command).toBe("{{COMMAND}}");
 });
+
+test("lowercase names are Variable references", () => {
+  expect(interpolate("{{foo}}", { foo: "value" })).toEqual({ result: "value", missing: [] });
+});
+
+test("missing Variable in a top-level string is reported", () => {
+  expect(interpolate("{{MISSING}}", {})).toEqual({ result: "{{MISSING}}", missing: ["MISSING"] });
+});
+
+test("whitespace inside braces is literal", () => {
+  expect(interpolate("{{ NAME }}", { NAME: "Ada" })).toEqual({ result: "{{ NAME }}", missing: [] });
+});
+
+test("inherited property names are missing Variables", () => {
+  expect(interpolate("{{constructor}}/{{toString}}", {})).toEqual({
+    result: "{{constructor}}/{{toString}}", missing: ["constructor", "toString"],
+  });
+});
+
+test("empty Variable values resolve", () => {
+  expect(interpolate("{{EMPTY}}", { EMPTY: "" })).toEqual({ result: "", missing: [] });
+});
