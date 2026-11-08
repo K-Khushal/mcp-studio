@@ -39,12 +39,12 @@ for (const transport of ["stdio", "http"] as const) {
 test("Session harness waits for future messages and times out missing messages", async () => {
   const session = new SessionHarness();
   try {
-    const error = session.waitFor("ERROR", message => message.code === "NOT_CONNECTED");
+    const error = session.waitFor("error", message => message.code === "NOT_CONNECTED");
     await session.send({ type: "invoke", tool: "echo", params: {} });
     expect(await error).toMatchObject({ code: "NOT_CONNECTED" });
     await expect(session.waitFor("connected", undefined, 10)).rejects.toThrow("Timed out awaiting connected");
     // The matched error was consumed; a second wait must not reuse it.
-    await expect(session.waitFor("ERROR", undefined, 10)).rejects.toThrow("Timed out awaiting ERROR");
+    await expect(session.waitFor("error", undefined, 10)).rejects.toThrow("Timed out awaiting error");
   } finally {
     await session.close();
   }
@@ -111,7 +111,7 @@ for (const status of [401, 405]) {
     const session = new SessionHarness();
     try {
       await session.send({ type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } });
-      const error = await session.waitFor("ERROR");
+      const error = await session.waitFor("error");
       expect(error.code).toBe("CONNECTION_FAILED");
       if (status === 401) {
         expect(methods).toEqual(["POST"]);
@@ -128,3 +128,33 @@ for (const status of [401, 405]) {
     }
   });
 }
+test("bad command reports a connection error and error status", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send({ type: "connect", transport: "stdio", config: { command: "/missing-mcp-command", args: [], env: {}, inheritSystemEnv: false } });
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    expect(session.messages).toContainEqual({ type: "status", status: "error" });
+    expect(session.messages.some(m => m.type === "log" && m.level === "ERROR")).toBe(true);
+  } finally { await session.close(); }
+});
+
+test("crash mid-Session reports disconnected with a reason", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.send({ type: "invoke", tool: "crash", params: {} });
+    expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
+    expect(session.messages).toContainEqual({ type: "status", status: "disconnected" });
+  } finally { await session.close(); }
+});
+
+test("a rejected replacement Connection preserves live Session crash detection", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.send({ type: "connect", transport: "http", config: { url: "{{MISSING_URL}}", headers: {} } });
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    await session.send({ type: "invoke", tool: "crash", params: {} });
+    expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
+  } finally { await session.close(); }
+});

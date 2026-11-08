@@ -111,7 +111,7 @@ export function StatusBar() {
       {/* Total requests */}
       <div className="flex items-center gap-1">
         <Activity size={11} />
-        <span className="tabular-nums">{requestCount} req</span>
+        <span className="tabular-nums">{requestCount} calls</span>
       </div>
 
       {/* Error count — only shown when non-zero */}
