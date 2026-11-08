@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useStore } from '@/store';
-import { ChevronUp, ChevronDown, Search, Copy, X } from "lucide-react";
+import { ChevronUp, ChevronDown, Search, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const levelColors: Record<string, string> = {

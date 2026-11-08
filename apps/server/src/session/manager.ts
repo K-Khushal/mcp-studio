@@ -96,7 +96,7 @@ export class SessionManager {
       });
     } catch (err) {
       this.setStatus("error");
-      try { await this.client?.disconnect(); } catch {}
+      try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
       this.client = null;
 
       const isHttpErr = err instanceof StreamableHTTPError;

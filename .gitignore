@@ -41,3 +41,8 @@ vitest.cache/
 # MCP Studio runtime data (local only)
 ~/.mcp-studio/
 .codex/config.toml
+
+# TypeScript / Vite generated config artefacts
+*.tsbuildinfo
+apps/web/vite.config.js
+apps/web/vite.config.d.ts

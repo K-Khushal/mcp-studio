@@ -301,7 +301,7 @@ function readPersistedConnectionDraft(): ConnectionDraft {
 function persistConnectionDraft(draft: ConnectionDraft): void {
   try {
     localStorage.setItem("mcp-studio-connection", JSON.stringify(draft));
-  } catch {}
+  } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
 }
 
 function requestWorkspacePatch(workspace: RequestWorkspaceState): Pick<
@@ -913,7 +913,7 @@ export const useStore = create<AppState & AppActions>()(
       // ---------- configuration ----------
       setConfig: (partial) => set((s) => {
         const config = { ...s.config, ...partial };
-        try { localStorage.setItem("mcp-studio-config", JSON.stringify(config)); } catch {}
+        try { localStorage.setItem("mcp-studio-config", JSON.stringify(config)); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
         return { config };
       }),
 

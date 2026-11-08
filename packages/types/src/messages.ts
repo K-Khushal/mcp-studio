@@ -1,5 +1,5 @@
 import type { ConnectionConfig } from "./transport.js";
-import type { MCPTool, MCPPrompt, MCPPromptMessage } from "./mcp.js";
+import type { MCPTool, MCPPrompt, MCPPromptMessage, ConnectionStatus } from "./mcp.js";
 
 // ---------------------------------------------------------------------------
 // Browser → Bun Server messages
@@ -43,5 +43,5 @@ export type ServerMessage =
       timestamp: number;
     }
   | { type: "disconnected" }
-  | { type: "status"; status: import("./mcp.js").ConnectionStatus }
+  | { type: "status"; status: ConnectionStatus }
   | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };
