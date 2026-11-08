@@ -5,10 +5,9 @@ import type {
   ServerMessage,
   ConnectionStatus,
   ConnectionConfig,
-  HttpAuth,
 } from "@mcp-studio/types";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { interpolateObject } from "../env/interpolate.js";
+import { interpolate } from "../env/interpolate.js";
 import { nanoid } from "../utils/nanoid.js";
 
 type Send = (msg: ServerMessage) => void;
@@ -120,9 +119,9 @@ export class SessionManager {
     }
 
     const requestId = nanoid();
-    const { result: params } = interpolateObject(rawParams, this.activeEnv);
 
     try {
+      const params = this.resolveVariables(rawParams);
       const result = await this.client.callTool(tool, params, requestId);
 
       this.send({ type: "result", requestId, data: result });
@@ -144,7 +143,7 @@ export class SessionManager {
     const requestId = nanoid();
 
     try {
-      const messages = await this.client.callPrompt(prompt, args, requestId);
+      const messages = await this.client.callPrompt(prompt, this.resolveVariables(args), requestId);
       this.send({ type: "prompt_result", requestId, messages });
     } catch (err) {
       this.send({
@@ -182,35 +181,15 @@ export class SessionManager {
     this.send({ type: "disconnected" });
   }
 
-  // Interpolate {{VAR}} in config strings before handing to the client
+  private resolveVariables<T>(value: T): T {
+    const { result, missing } = interpolate(value, this.activeEnv);
+    if (missing.length) throw new Error(`Unresolved Variables: ${missing.join(", ")}`);
+    return result;
+  }
+
   private interpolateConfig(
     msg: Extract<ClientMessage, { type: "connect" }>
   ): ConnectionConfig {
-    if (msg.transport === "stdio") {
-      const { result: env } = interpolateObject(
-        msg.config.env as Record<string, unknown>,
-        this.activeEnv
-      );
-      return { transport: "stdio", config: { ...msg.config, env: env as Record<string, string> } };
-    } else {
-      const { result: headers } = interpolateObject(
-        msg.config.headers as Record<string, unknown>,
-        this.activeEnv
-      );
-
-      let auth = msg.config.auth as HttpAuth | undefined;
-      if (auth?.type === "bearer") {
-        const { result } = interpolateObject({ token: auth.token }, this.activeEnv);
-        auth = { type: "bearer", token: result.token as string };
-      } else if (auth?.type === "apikey") {
-        const { result } = interpolateObject({ value: auth.value }, this.activeEnv);
-        auth = { ...auth, value: result.value as string };
-      }
-
-      return {
-        transport: "http",
-        config: { ...msg.config, headers: headers as Record<string, string>, auth },
-      };
-    }
+    return this.resolveVariables({ transport: msg.transport, config: msg.config } as ConnectionConfig);
   }
 }
