@@ -70,13 +70,12 @@ Frontend proxies via Vite → `localhost:3000`.
 `{{VAR_NAME}}` → `apps/server/src/env/interpolate.ts`. Runs before invoke + connect. `interpolateObject()` recurses into nested objects/arrays.
 
 ### Frontend structure
-Views: `apps/web/src/views/`, switched by `activeView` in store.  
-Shell: `src/components/shell/` (TopNav, IconSidebar, StatusBar).  
-Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,shared}/`  
-`activeView` values: `studio | collections | logs | settings` (history removed).  
-Collections CRUD in `CollectionsView`; clicking a saved Connection calls `loadConnection()` → sets `selectedConnectionId`, `transport`, `connectionUrl`, `selectedTool`, `pendingParams` → ToolPanel pre-fills. Home shows blank state when `selectedConnectionId === null`.  
+Single screen (`pages/home.tsx`), no view switching — `activeView` and the icon sidebar are gone.  
+Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar). TopNav `SessionInfo` shows MCP Server name/version, Transport, negotiated protocol version, status from store `serverInfo`/`protocolVersion`/`connectionConfig`.  
+Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,configuration,shared}/`  
+Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()` → sets `selectedConnectionId`, `transport`, `connectionUrl`, `selectedTool`, `pendingParams` → ToolPanel pre-fills. Home shows blank state when `selectedConnectionId === null`.  
 ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
-`MCPConfig` persisted to `localStorage` (key: `mcp-studio-config`); `setConfig` writes atomically to store + localStorage. Environments are global (not per-collection/Connection).
+Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme: dark|light|system`) persisted to `localStorage` key `mcp-studio-config` via `store/config.ts` (field-validated read, unknown keys dropped); `setConfig` writes store + localStorage and re-applies theme (`lib/theme.ts`). `index.html` inline script applies saved theme before paint. `requestTimeout`/`verboseLogging` stored only, not yet consumed. Logs panel height is `logsHeight` in store (clamped, drag/arrow-key resize). Environments are global (not per-collection/Connection).
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`
