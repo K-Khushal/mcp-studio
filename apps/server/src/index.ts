@@ -9,7 +9,9 @@ import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnviron
 const PORT = Number(process.env["PORT"] ?? 3000);
 const production = process.env["STUDIO_PRODUCTION"] === "1";
 const CORS_ORIGIN = process.env["CORS_ORIGIN"] ?? (production ? "" : "http://localhost:5173");
-const webRoot = fileURLToPath(new URL("./web/", import.meta.url));
+const webRoot = process.env["STUDIO_RESOURCE_DIR"]
+  ? resolve(process.env["STUDIO_RESOURCE_DIR"], "web")
+  : fileURLToPath(new URL("./web/", import.meta.url));
 
 console.log(`[mcp-studio/server] Starting on ws://localhost:${PORT}`);
 

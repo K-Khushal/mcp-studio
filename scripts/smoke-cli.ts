@@ -13,9 +13,10 @@ for (const name of ["xdg-open", "open"]) {
   await Bun.write(file, `#!/bin/sh\necho "$1" > '${marker}'\n`);
   await chmod(file, 0o755);
 }
-const child = Bun.spawn([process.execPath, resolve("dist/cli.js"), "--port", String(port), "--no-open"], {
+const command = process.argv[2] ? [resolve(process.argv[2])] : [process.execPath, resolve("dist/cli.js")];
+const child = Bun.spawn([...command, "--port", String(port), "--no-open"], {
   cwd: dir,
-  env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, STUDIO_DB_PATH: ":memory:" },
+  env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, STUDIO_DB_PATH: process.env["STUDIO_DB_PATH"] ?? join(dir, "studio.db") },
   stdout: "inherit", stderr: "inherit",
 });
 try {

@@ -64,7 +64,7 @@ REST (granular CRUD, no bulk replace):
 - `POST /collections/:id/connections`, `PATCH|DELETE /collections/:id/connections/:connId`
 - `GET/POST /environments`, `PATCH/DELETE /environments/:id`
 
-Frontend proxies via Vite → `localhost:3000` in development. Production CLI serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. The package build bundles the CLI and copies web assets and Drizzle migrations into `dist/`; keep these paths relative to the bundle, independent of the working directory.
+Frontend proxies via Vite → `localhost:3000` in development. Production CLI serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. The package build bundles the CLI and copies web assets and Drizzle migrations into `dist/`; keep these paths relative to the bundle, independent of the working directory. `bun scripts/build-binary.ts` compiles a standalone CLI with embedded web assets and migrations, extracted to a temporary directory at startup; the release workflow builds five targets and creates draft releases only.
 
 ### Env interpolation
 `apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively in nested objects/arrays. Any `{{name}}` whose name matches `[A-Za-z0-9_]+` is a Variable reference, with no escape syntax; `{{ name }}` with spaces is not matched. Unresolved Variables block connect/Call. Only values are interpolated; object keys (header names, env-var names, apikey key) are not interpolated.

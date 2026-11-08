@@ -20,7 +20,9 @@ export const db = drizzle(sqlite, { schema });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledMigrations = join(__dirname, "drizzle");
-const migrationsFolder = existsSync(bundledMigrations) ? bundledMigrations : join(__dirname, "../../drizzle");
+const migrationsFolder = process.env["STUDIO_RESOURCE_DIR"]
+  ? join(process.env["STUDIO_RESOURCE_DIR"], "drizzle")
+  : existsSync(bundledMigrations) ? bundledMigrations : join(__dirname, "../../drizzle");
 
 migrate(db, { migrationsFolder });
 console.log("[db] Migrations applied");
