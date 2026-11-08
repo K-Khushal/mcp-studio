@@ -9,7 +9,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { LogsPanel } from "@/components/logs/logs-panel";
 
 export default function Home() {
-  const { loadCollections, loadEnvironments, selectedRequestId } = useStore();
+  const { loadCollections, loadEnvironments, selectedConnectionId } = useStore();
 
   useEffect(() => {
     Promise.all([loadCollections(), loadEnvironments()]).catch(console.error);
@@ -21,7 +21,7 @@ export default function Home() {
       <SidebarProvider className="flex-1 min-h-0">
         <CollectionsView />
         <SidebarInset className="min-w-0 min-h-0 rounded-none shadow-none">
-          {selectedRequestId ? (
+          {selectedConnectionId ? (
             <>
               <StudioView />
               <LogsPanel />
@@ -29,7 +29,7 @@ export default function Home() {
           ) : (
             <div className="flex-1 flex flex-col items-center justify-center gap-3 text-muted-foreground">
               <FolderOpen size={32} strokeWidth={1.5} />
-              <p className="text-sm">Select a request to get started</p>
+              <p className="text-sm">Select a Connection to get started</p>
             </div>
           )}
           <StatusBar />

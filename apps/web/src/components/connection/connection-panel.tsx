@@ -17,42 +17,44 @@ export function ConnectionPanel() {
     connectionStatus,
     connect,
     disconnect,
-    renameRequest,
-    updateRequestConnection,
-    connectedRequestId,
-    connectingRequestId,
+    renameConnection,
+    updateConnectionConfig,
+    connectedConnectionId,
+    connectingConnectionId,
     transport,
     connectionUrl,
     httpAuth,
     httpHeaders,
     setTransport,
     setConnectionUrl,
-    selectedRequestId,
+    selectedConnectionId,
     collections,
   } = useStore();
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const renameRef = useRef<HTMLInputElement>(null);
+  // Enter and the blur that follows it both commit; only the first may PATCH
+  const isCommittingRename = useRef(false);
 
   const isConnected = connectionStatus === 'connected';
-  const isSelectedRequestConnected =
-    selectedRequestId !== null && selectedRequestId === connectedRequestId && isConnected;
+  const isSelectedConnectionConnected =
+    selectedConnectionId !== null && selectedConnectionId === connectedConnectionId && isConnected;
   const isConnecting = connectionStatus === 'connecting';
-  const isSelectedRequestConnecting =
-    selectedRequestId !== null && selectedRequestId === connectingRequestId && isConnecting;
+  const isSelectedConnectionConnecting =
+    selectedConnectionId !== null && selectedConnectionId === connectingConnectionId && isConnecting;
 
-  const selectedRequest = selectedRequestId
-    ? collections.flatMap((c) => c.requests).find((r) => r.id === selectedRequestId)
+  const selectedConnection = selectedConnectionId
+    ? collections.flatMap((c) => c.connections).find((r) => r.id === selectedConnectionId)
     : null;
-  const selectedCollection = selectedRequestId
-    ? collections.find((collection) => collection.requests.some((request) => request.id === selectedRequestId))
+  const selectedCollection = selectedConnectionId
+    ? collections.find((collection) => collection.connections.some((connection) => connection.id === selectedConnectionId))
     : null;
 
   useEffect(() => {
     if (!isRenaming) {
-      setRenameValue(selectedRequest?.name ?? '');
+      setRenameValue(selectedConnection?.name ?? '');
     }
-  }, [selectedRequest?.id, selectedRequest?.name, isRenaming]);
+  }, [selectedConnection?.id, selectedConnection?.name, isRenaming]);
 
   useEffect(() => {
     if (isRenaming) {
@@ -62,8 +64,8 @@ export function ConnectionPanel() {
   }, [isRenaming]);
 
   useEffect(() => {
-    if (!selectedRequest || !selectedCollection) return;
-    if (!connectionUrl.trim() && !selectedRequest.connectionConfig) return;
+    if (!selectedConnection || !selectedCollection) return;
+    if (!connectionUrl.trim() && !selectedConnection.connectionConfig) return;
 
     const connectionConfig: ConnectionConfig =
       transport === 'http'
@@ -78,44 +80,50 @@ export function ConnectionPanel() {
             },
           };
 
-    const currentConfig = selectedRequest.connectionConfig;
+    const currentConfig = selectedConnection.connectionConfig;
     if (JSON.stringify(currentConfig ?? null) === JSON.stringify(connectionConfig)) {
       return;
     }
 
     const timeoutId = window.setTimeout(() => {
-      updateRequestConnection(selectedCollection.id, selectedRequest.id, connectionConfig).catch(console.error);
+      updateConnectionConfig(selectedCollection.id, selectedConnection.id, connectionConfig).catch(console.error);
     }, 250);
 
     return () => window.clearTimeout(timeoutId);
   }, [
     selectedCollection?.id,
-    selectedRequest?.id,
-    selectedRequest?.connectionConfig,
+    selectedConnection?.id,
+    selectedConnection?.connectionConfig,
     connectionUrl,
     transport,
     httpAuth,
     httpHeaders,
-    updateRequestConnection,
+    updateConnectionConfig,
   ]);
 
   const commitRename = async () => {
-    if (!selectedRequest || !selectedCollection) {
+    if (isCommittingRename.current) return;
+    if (!selectedConnection || !selectedCollection) {
       setIsRenaming(false);
       return;
     }
 
-    const trimmed = renameValue.trim();
-    if (trimmed && trimmed !== selectedRequest.name) {
-      await renameRequest(selectedCollection.id, selectedRequest.id, trimmed);
-    } else {
-      setRenameValue(selectedRequest.name);
+    isCommittingRename.current = true;
+    try {
+      const trimmed = renameValue.trim();
+      if (trimmed && trimmed !== selectedConnection.name) {
+        await renameConnection(selectedCollection.id, selectedConnection.id, trimmed);
+      } else {
+        setRenameValue(selectedConnection.name);
+      }
+      setIsRenaming(false);
+    } finally {
+      isCommittingRename.current = false;
     }
-    setIsRenaming(false);
   };
 
   const handleConnect = () => {
-    if (isSelectedRequestConnected) {
+    if (isSelectedConnectionConnected) {
       disconnect();
       return;
     }
@@ -132,9 +140,9 @@ export function ConnectionPanel() {
 
   return (
     <div className="border-b border-border bg-card">
-      {/* Header row: request name, status, env, config */}
+      {/* Header row: Connection name, status, env, config */}
       <div className="flex items-center gap-4 px-3 py-2 border-b border-border">
-        {isRenaming && selectedRequest ? (
+        {isRenaming && selectedConnection ? (
           <input
             ref={renameRef}
             value={renameValue}
@@ -143,7 +151,7 @@ export function ConnectionPanel() {
             onKeyDown={(e) => {
               if (e.key === 'Enter') void commitRename();
               if (e.key === 'Escape') {
-                setRenameValue(selectedRequest.name);
+                setRenameValue(selectedConnection.name);
                 setIsRenaming(false);
               }
             }}
@@ -151,23 +159,23 @@ export function ConnectionPanel() {
           />
         ) : (
           <span
-            onDoubleClick={() => selectedRequest && setIsRenaming(true)}
+            onDoubleClick={() => selectedConnection && setIsRenaming(true)}
             className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px] cursor-text"
           >
-            {selectedRequest?.name ?? 'untitled'}
+            {selectedConnection?.name ?? 'untitled'}
           </span>
         )}
         <div className="flex items-center gap-1.5">
           <div className={cn(
             'w-2 h-2 rounded-full',
-            isSelectedRequestConnected
+            isSelectedConnectionConnected
               ? 'bg-success'
-              : isSelectedRequestConnecting
+              : isSelectedConnectionConnecting
                 ? 'bg-warning animate-pulse'
                 : 'bg-destructive'
           )} />
           <span className="text-xs text-muted-foreground">
-            {isSelectedRequestConnected ? 'Connected' : isSelectedRequestConnecting ? 'Connecting...' : 'Disconnected'}
+            {isSelectedConnectionConnected ? 'Connected' : isSelectedConnectionConnecting ? 'Connecting...' : 'Disconnected'}
           </span>
         </div>
         <div className="flex-1" />
@@ -201,7 +209,7 @@ export function ConnectionPanel() {
         <Input
           value={connectionUrl}
           onChange={(e) => setConnectionUrl(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && !isSelectedRequestConnected && !isSelectedRequestConnecting && handleConnect()}
+          onKeyDown={(e) => e.key === 'Enter' && !isSelectedConnectionConnected && !isSelectedConnectionConnecting && handleConnect()}
           placeholder={transport === 'stdio' ? 'npx @test/test-mcp' : 'http://localhost:4000'}
           className="flex-1"
         />
@@ -211,14 +219,14 @@ export function ConnectionPanel() {
           disabled={isConnecting}
           className={cn(
             'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
-            isSelectedRequestConnected
+            isSelectedConnectionConnected
               ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
             isConnecting && 'opacity-50 cursor-not-allowed'
           )}
         >
-          {isSelectedRequestConnecting ? <Loader2 size={14} className="animate-spin" /> : isSelectedRequestConnected ? <Unplug size={14} /> : <Plug size={14} />}
-          {isSelectedRequestConnected ? 'Disconnect' : 'Connect'}
+          {isSelectedConnectionConnecting ? <Loader2 size={14} className="animate-spin" /> : isSelectedConnectionConnected ? <Unplug size={14} /> : <Plug size={14} />}
+          {isSelectedConnectionConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
     </div>

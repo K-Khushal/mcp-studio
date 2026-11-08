@@ -11,14 +11,14 @@ import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
 import type { Collection } from '@mcp-studio/types';
 
-interface AddRequestDialogProps {
+interface AddConnectionDialogProps {
   collection: Collection;
   open: boolean;
   onClose: () => void;
 }
 
-export function AddRequestDialog({ collection, open, onClose }: AddRequestDialogProps) {
-  const { addRequest } = useStore();
+export function AddConnectionDialog({ collection, open, onClose }: AddConnectionDialogProps) {
+  const { addConnection } = useStore();
   const [name, setName] = useState('');
   const [error, setError] = useState('');
 
@@ -31,8 +31,8 @@ export function AddRequestDialog({ collection, open, onClose }: AddRequestDialog
 
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
-    await addRequest(collection.id, { name: name.trim() });
-    toast.success(`Request "${name.trim()}" added`);
+    await addConnection(collection.id, { name: name.trim() });
+    toast.success(`Connection "${name.trim()}" added`);
     onClose();
   };
 
@@ -41,7 +41,7 @@ export function AddRequestDialog({ collection, open, onClose }: AddRequestDialog
       <DialogContent className="max-w-md bg-card border-border">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold">
-            Add Request to "{collection.name}"
+            Add Connection to "{collection.name}"
           </DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-3">
