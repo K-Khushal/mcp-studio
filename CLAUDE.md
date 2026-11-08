@@ -67,7 +67,7 @@ REST (granular CRUD, no bulk replace):
 Frontend proxies via Vite → `localhost:3000`.
 
 ### Env interpolation
-`{{VAR_NAME}}` → `apps/server/src/env/interpolate.ts`. Runs before invoke + connect. `interpolateObject()` recurses into nested objects/arrays.
+`apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively in nested objects/arrays. Any `{{name}}` whose name matches `[A-Za-z0-9_]+` is a Variable reference, with no escape syntax; `{{ name }}` with spaces is not matched. Unresolved Variables block connect/Call. Only values are interpolated; object keys (header names, env-var names, apikey key) are not interpolated.
 
 ### Frontend structure
 Views: `apps/web/src/views/`, switched by `activeView` in store.  

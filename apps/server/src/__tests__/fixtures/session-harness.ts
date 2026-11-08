@@ -18,6 +18,8 @@ export class SessionHarness {
     else this.pending.push(message);
   });
 
+  setActiveEnv(env: Record<string, string>) { this.session.setActiveEnv(env); }
+
   send(message: ClientMessage) { return this.session.handle(message); }
 
   waitFor<T extends ServerMessage["type"]>(type: T, predicate: (message: Extract<ServerMessage, { type: T }>) => boolean = () => true, timeout = 3000): Promise<Extract<ServerMessage, { type: T }>> {
@@ -55,9 +57,11 @@ export async function startHTTPFixture() {
   const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
   const protocols = new Set<ReturnType<typeof createProtocolServer>>();
   const versions: (string | null)[] = [];
+  const requests: unknown[] = [];
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     if (new URL(request.url).pathname === "/sse") return new Response("Legacy SSE fixture not implemented", { status: 501 });
     versions.push(request.headers.get("mcp-protocol-version"));
+    if (request.method === "POST") requests.push(await request.clone().json());
     const sessionId = request.headers.get("mcp-session-id");
     if (sessionId) {
       const transport = sessions.get(sessionId);
@@ -78,6 +82,7 @@ export async function startHTTPFixture() {
   return {
     connection: { type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } } satisfies ClientMessage,
     versions,
+    requests,
     async close() {
       await Promise.all([...protocols].map(protocol => protocol.close()));
       await server.stop(true);

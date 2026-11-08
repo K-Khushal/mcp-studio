@@ -134,7 +134,7 @@ const server = Bun.serve<{ session: SessionManager | null }>({
       }
 
       const activeEnv = await getActiveEnvironment();
-      if (activeEnv) ws.data.session.setActiveEnv(activeEnv.variables);
+      ws.data.session.setActiveEnv(activeEnv?.variables ?? {});
 
       await ws.data.session.handle(msg);
     },
