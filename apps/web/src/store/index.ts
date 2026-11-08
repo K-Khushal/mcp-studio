@@ -85,6 +85,7 @@ interface AppState {
   connectionConfig: ConnectionConfig | null;
   serverInfo: { name?: string; version?: string } | null;
   protocolVersion: string | null;
+  httpVariant?: "streamable" | "sse";
   connectedConnectionId: string | null;
   connectingConnectionId: string | null;
   connectedConnectionCache: ConnectedConnectionCache | null;
@@ -420,6 +421,7 @@ export const useStore = create<AppState & AppActions>()(
       connectionConfig: null,
       serverInfo: null,
       protocolVersion: null,
+      httpVariant: undefined,
       connectedConnectionId: null,
       connectingConnectionId: null,
       connectedConnectionCache: null,
@@ -457,6 +459,7 @@ export const useStore = create<AppState & AppActions>()(
           connectionConfig: config,
           serverInfo: null,
           protocolVersion: null,
+          httpVariant: undefined,
           connectionStatus: "connecting",
           requestCount: 0,
           errorCount: 0,
@@ -485,6 +488,7 @@ export const useStore = create<AppState & AppActions>()(
           connectionConfig: null,
           serverInfo: null,
           protocolVersion: null,
+          httpVariant: undefined,
           connectedConnectionId: null,
           connectingConnectionId: null,
           connectedConnectionCache: null,
@@ -1036,7 +1040,7 @@ function handleServerMessage(msg: ServerMessage): void {
       const state = useStore.getState();
       const connectionId = state.connectingConnectionId ?? state.selectedConnectionId;
       if (!connectionId) {
-        useStore.setState({ connectionStatus: "connected" });
+        useStore.setState({ connectionStatus: "connected", httpVariant: msg.httpVariant });
         return;
       }
 
@@ -1054,6 +1058,7 @@ function handleServerMessage(msg: ServerMessage): void {
         connectedConnectionCache: nextCache,
         serverInfo: msg.serverInfo ?? null,
         protocolVersion: msg.protocolVersion ?? null,
+        httpVariant: msg.httpVariant,
         connectedAt: Date.now(),
         requestCount: 0,
         errorCount: 0,
@@ -1070,6 +1075,7 @@ function handleServerMessage(msg: ServerMessage): void {
         connectionConfig: null,
         serverInfo: null,
         protocolVersion: null,
+        httpVariant: undefined,
         connectedConnectionId: null,
         connectingConnectionId: null,
         connectedConnectionCache: null,
@@ -1149,6 +1155,7 @@ function handleServerMessage(msg: ServerMessage): void {
           connectionConfig: null,
           serverInfo: null,
           protocolVersion: null,
+          httpVariant: undefined,
           connectedAt: null,
           ...blankWorkspacePatch(),
         });

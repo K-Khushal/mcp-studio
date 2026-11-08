@@ -45,6 +45,7 @@ UptimeTimer.displayName = 'UptimeTimer';
 export function StatusBar() {
   // Narrow per-field selectors — primitives, so reference-equal on no change
   const connectionStatus = useStore((s) => s.connectionStatus);
+  const httpVariant = useStore((s) => s.httpVariant);
   const latency          = useStore((s) => s.latency);
   const requestCount     = useStore((s) => s.requestCount);
   const errorCount       = useStore((s) => s.errorCount);
@@ -93,6 +94,10 @@ export function StatusBar() {
         <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusTone)} />
         <span>{statusLabel}</span>
       </div>
+
+      {connectionStatus === 'connected' && (
+        <span className="font-mono">{httpVariant ? `HTTP · ${httpVariant === 'streamable' ? 'Streamable HTTP' : 'SSE'}` : 'STDIO'}</span>
+      )}
 
       {/* Uptime — isolated component, never re-renders StatusBar */}
       {connectionStatus === 'connected' && connectedAt && <UptimeTimer connectedAt={connectedAt} />}

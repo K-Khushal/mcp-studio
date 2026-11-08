@@ -29,6 +29,7 @@ export interface MCPClientInterface {
 }
 
 export interface ConnectedServerInfo {
+  httpVariant?: "streamable" | "sse";
   serverName?: string;
   serverVersion?: string;
   protocolVersion: string;

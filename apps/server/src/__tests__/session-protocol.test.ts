@@ -67,3 +67,64 @@ test("Session connects again after disconnecting over HTTP", async () => {
     await http.close();
   }
 });
+
+test("HTTP Session reports the Streamable HTTP variant", async () => {
+  const http = await startHTTPFixture();
+  const session = new SessionHarness();
+  try {
+    await session.send(http.connection);
+    expect(await session.waitFor("connected")).toMatchObject({ httpVariant: "streamable" });
+  } finally {
+    await session.close();
+    await http.close();
+  }
+});
+
+test("HTTP Session falls back to legacy SSE and reports its variant", async () => {
+  const http = await startHTTPFixture("sse");
+  const session = new SessionHarness();
+  try {
+    await session.send(http.connection);
+    expect(await session.waitFor("connected")).toMatchObject({ httpVariant: "sse", serverInfo: { name: "protocol-fixture" } });
+    await session.send({ type: "invoke", tool: "echo", params: { text: "legacy" } });
+    expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ type: "text", text: "legacy" }] } });
+  } finally {
+    await session.close();
+    await http.close();
+  }
+});
+
+
+test("legacy SSE fixture teardown is idempotent", async () => {
+  const http = await startHTTPFixture("sse");
+  await Promise.all([http.close(), http.close()]);
+  await http.close();
+});
+
+for (const status of [401, 405]) {
+  test(`HTTP ${status} preserves connection failure diagnostics`, async () => {
+    const methods: string[] = [];
+    const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+      methods.push(request.method);
+      return new Response("Fixture rejected", { status: request.method === "POST" ? status : 503 });
+    } });
+    const session = new SessionHarness();
+    try {
+      await session.send({ type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } });
+      const error = await session.waitFor("ERROR");
+      expect(error.code).toBe("CONNECTION_FAILED");
+      if (status === 401) {
+        expect(methods).toEqual(["POST"]);
+        expect(error.message).toMatch(/401|Unauthorized/i);
+      } else {
+        expect(methods).toEqual(["POST", "GET"]);
+        expect(error.message).toContain("405");
+        expect(error.message).toContain("503");
+      }
+      expect(session.messages.some(message => message.type === "connected")).toBe(false);
+    } finally {
+      await session.close();
+      await server.stop(true);
+    }
+  });
+}

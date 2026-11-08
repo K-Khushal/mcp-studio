@@ -1,12 +1,13 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
-  private transport: StreamableHTTPClientTransport | null = null;
+  private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
   // Tracks the in-flight requestId so the fetch wrapper can tag response headers
   private activeRequestId: string | null = null;
 
@@ -43,6 +44,12 @@ export class StreamableHTTPClient extends BaseMCPClient {
     }
   }
 
+  override async connect() {
+    return { ...await super.connect(), httpVariant: this.variant };
+  }
+
+  private variant: "streamable" | "sse" = "streamable";
+
   protected async setupTransport(): Promise<Client> {
     const url = new URL(this.config.url);
 
@@ -77,9 +84,34 @@ export class StreamableHTTPClient extends BaseMCPClient {
       fetch: wrappedFetch,
     });
 
-    const client = new Client({ name: "mcp-studio", version: "0.0.1" });
+    let client = new Client({ name: "mcp-studio", version: "0.0.1" });
     this.options.onLog?.("INFO", "protocol", `Connecting via Streamable HTTP to ${url.toString()}`);
-    await this.connectTransport(client, this.transport);
+    this.variant = "streamable";
+    try {
+      await this.connectTransport(client, this.transport);
+    } catch (error) {
+      await client.close();
+      // Only protocol/endpoint rejection implies a legacy server. Auth, network,
+      // and server failures must retain their original error.
+      if (!(error instanceof StreamableHTTPError) || ![400, 404, 405].includes(error.code ?? 0)) throw error;
+      this.options.onLog?.("INFO", "protocol", "Streamable HTTP rejected; trying legacy SSE");
+      this.transport = new SSEClientTransport(url, {
+        requestInit: { headers },
+        eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
+        fetch: wrappedFetch,
+      });
+      client = new Client({ name: "mcp-studio", version: "0.0.1" });
+      try {
+        await this.connectTransport(client, this.transport);
+        this.variant = "sse";
+      } catch (fallbackError) {
+        await client.close();
+        throw new Error(
+          `Streamable HTTP rejected (HTTP ${error.code}); legacy SSE failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          { cause: fallbackError },
+        );
+      }
+    }
     this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
     return client;
   }
