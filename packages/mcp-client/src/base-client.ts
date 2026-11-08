@@ -19,8 +19,8 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   protected _isConnected = false;
 
   private verbose: boolean;
-  /** Method of each outgoing request still awaiting its response, so responses can show a method. */
-  private pendingMethods = new Map<string | number, string>();
+  /** Methods awaiting responses, indexed by request direction and typed id. */
+  private pendingMethods = new Map<string, string>();
 
   constructor(protected readonly options: MCPClientOptions = {}) {
     this.verbose = options.verbose ?? false;
@@ -67,7 +67,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   private captureFrames(transport: Transport): void {
     const send = transport.send.bind(transport);
     transport.send = (message, options) => {
-      this.logFrame("out", message);
+      try { this.logFrame("out", message); } catch { /* Logging must not interrupt transport delivery. */ }
       return send(message, options);
     };
 
@@ -77,7 +77,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       get: () => handler,
       set: (next: Transport["onmessage"]) => {
         handler = next && ((message, extra) => {
-          this.logFrame("in", message);
+          try { this.logFrame("in", message); } catch { /* Logging must not interrupt transport delivery. */ }
           next(message, extra);
         });
       },
@@ -89,10 +89,12 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     const isResponse = frame.method === undefined;
     let method = frame.method;
     if (frame.id !== undefined) {
-      if (direction === "out" && method) this.pendingMethods.set(frame.id, method);
+      const requestDirection = isResponse ? (direction === "out" ? "in" : "out") : direction;
+      const key = JSON.stringify([requestDirection, frame.id]);
+      if (method) this.pendingMethods.set(key, method);
       else if (isResponse) {
-        method = this.pendingMethods.get(frame.id);
-        this.pendingMethods.delete(frame.id);
+        method = this.pendingMethods.get(key);
+        this.pendingMethods.delete(key);
       }
     }
     if (!this.verbose) return;

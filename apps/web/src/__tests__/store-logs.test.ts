@@ -81,3 +81,15 @@ describe("verbose logging wiring", () => {
     expect(mockTransport.setVerbose).toHaveBeenCalledTimes(1);
   });
 });
+
+it("bounds retained frame bodies and searches the retained text case-insensitively", async () => {
+  const { filterLogs } = await import("../components/logs/filter-logs");
+  deliver({ type: "log", level: "DEBUG", source: "protocol", message: "Large frame", timestamp: 1,
+    payload: { direction: "in", method: "tools/call", id: 7, body: { content: "Needle" + "x".repeat(100_000) + "discarded-tail" } } });
+  const entry = useStore.getState().logs.at(-1)!;
+  expect(String(entry.payload?.body).length).toBeLessThanOrEqual(64 * 1024);
+  expect(entry.payload?.body).toContain("[truncated]");
+  expect(entry.searchText).toContain("needle");
+  expect(filterLogs([entry], { level: null, source: null, search: "NEEDLE" })).toEqual([entry]);
+  expect(filterLogs([entry], { level: null, source: null, search: "discarded-tail" })).toEqual([]);
+});

@@ -130,3 +130,38 @@ test("legacy SSE fallback captures tool frames and keeps lifecycle logs in Studi
     await http.close();
   }
 });
+
+test("stderr preserves lines and UTF-8 across chunks and flushes the final line", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.waitFor("connected");
+    await session.send({ type: "invoke", tool: "stderr", params: { text: "chunks" } });
+    await session.waitFor("result");
+    await session.close();
+    expect(logs(session).filter(l => l.source === "server").map(l => l.message)).toEqual(["booting", "€", "tail"]);
+  } finally {
+    await session.close();
+  }
+});
+
+test("HTTP connection logs redact the configured auth query parameter", async () => {
+  const http = await startHTTPFixture();
+  const session = new SessionHarness();
+  try {
+    await session.send({ ...http.connection, config: {
+      ...http.connection.config,
+      url: `${http.connection.config.url}?view=tools&credential=old-secret`,
+      auth: { type: "apikey", in: "query", key: "credential", value: "super-secret" },
+    } });
+    await session.waitFor("connected");
+    const entry = logs(session).find(l => l.message.startsWith("Connecting via Streamable HTTP"));
+    expect(entry?.message).toContain("view=tools");
+    expect(entry?.message).toContain("REDACTED");
+    expect(JSON.stringify(logs(session))).not.toContain("super-secret");
+    expect(JSON.stringify(logs(session))).not.toContain("old-secret");
+  } finally {
+    await session.close();
+    await http.close();
+  }
+});

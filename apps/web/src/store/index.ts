@@ -17,6 +17,7 @@ import type {
   LogSource,
   LogPayload,
 } from "@mcp-studio/types";
+import { prepareLog } from "@/components/logs/filter-logs";
 import { transport } from "@/transport/websocket-transport";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
@@ -45,6 +46,7 @@ export interface LogEntry {
   message: string;
   timestamp: number;
   payload?: LogPayload;
+  searchText?: string;
 }
 
 interface ResponseState {
@@ -1057,7 +1059,7 @@ function handleServerMessage(msg: ServerMessage): void {
         source,
         message,
         timestamp,
-        ...(payload ? { payload } : {}),
+        ...prepareLog(message, payload),
       };
 
       if (!s.connectedConnectionCache) {
@@ -1216,6 +1218,7 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case "error":
       if (msg.code === "CONNECTION_FAILED") {
+        handshakeLogs = [];
         useStore.setState({
           connectionStatus: "error",
           connectedConnectionId: null,

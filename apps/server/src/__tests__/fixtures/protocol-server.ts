@@ -39,7 +39,15 @@ export function createProtocolServer() {
       }
       case "elicit": return text(JSON.stringify(await server.elicitInput({ message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } })));
       case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Fixture log" }); return text("Logged");
-      case "stderr": process.stderr.write("Fixture stderr\n"); return text("Written to stderr");
+      case "stderr": {
+        if (args.text === "chunks") {
+          for (const chunk of [Buffer.from("boo"), Buffer.from("ting\n"), Buffer.from([0xe2]), Buffer.from([0x82, 0xac, 0x0a]), Buffer.from("tail")]) {
+            process.stderr.write(chunk);
+            await new Promise(resolve => setTimeout(resolve, 30));
+          }
+        } else process.stderr.write("Fixture stderr\n");
+        return text("Written to stderr");
+      }
       case "crash": return process.exit(23);
       default: throw new Error(`Unknown tool: ${request.params.name}`);
     }
