@@ -13,6 +13,15 @@ import type {
   HttpAuth,
 } from "@mcp-studio/types";
 import { transport } from "@/transport/websocket-transport";
+import { applyTheme, watchSystemTheme } from "@/lib/theme";
+import { persistConfig, readPersistedConfig } from "./config";
+
+export const LOGS_MIN_HEIGHT = 96;
+export const LOGS_DEFAULT_HEIGHT = 208;
+
+export function clampLogsHeight(height: number, max: number): number {
+  return Math.round(Math.min(Math.max(height, LOGS_MIN_HEIGHT), Math.max(max, LOGS_MIN_HEIGHT)));
+}
 
 // ---------------------------------------------------------------------------
 // State shape
@@ -74,7 +83,8 @@ interface AppState {
   // Connection
   connectionStatus: ConnectionStatus;
   connectionConfig: ConnectionConfig | null;
-  serverInfo: unknown;
+  serverInfo: { name?: string; version?: string } | null;
+  protocolVersion: string | null;
   connectedConnectionId: string | null;
   connectingConnectionId: string | null;
   connectedConnectionCache: ConnectedConnectionCache | null;
@@ -123,9 +133,8 @@ interface AppState {
   connectedAt: number | null;
 
   // UI
-  activeView: "studio" | "collections" | "logs" | "settings";
   isLogsCollapsed: boolean;
-  isDarkMode: boolean;
+  logsHeight: number;
 
   toasts: Array<{ id: string; title: string; description?: string; variant?: "destructive" }>;
 }
@@ -183,9 +192,8 @@ interface AppActions {
   setConfig: (partial: Partial<MCPConfig>) => void;
 
   // UI
-  setActiveView: (view: AppState["activeView"]) => void;
   toggleLogs: () => void;
-  toggleDarkMode: () => void;
+  setLogsHeight: (height: number) => void;
   addToast: (t: Omit<AppState["toasts"][number], "id">) => void;
   removeToast: (id: string) => void;
 }
@@ -411,6 +419,7 @@ export const useStore = create<AppState & AppActions>()(
       connectionStatus: "disconnected",
       connectionConfig: null,
       serverInfo: null,
+      protocolVersion: null,
       connectedConnectionId: null,
       connectingConnectionId: null,
       connectedConnectionCache: null,
@@ -424,30 +433,14 @@ export const useStore = create<AppState & AppActions>()(
       httpAuth: readPersistedConnectionDraft().httpAuth ?? DEFAULT_HTTP_AUTH,
       httpHeaders: readPersistedConnectionDraft().httpHeaders ?? DEFAULT_HTTP_HEADERS,
       environments: [],
-      config: (() => {
-        const defaults: MCPConfig = {
-          requestTimeout: 30,
-          autoScrollLogs: true,
-          streamResponses: true,
-          verboseLogging: false,
-          showReasoning: true,
-          showTimeline: true,
-        };
-        try {
-          const raw = localStorage.getItem("mcp-studio-config");
-          return raw ? { ...defaults, ...(JSON.parse(raw) as Partial<MCPConfig>) } : defaults;
-        } catch {
-          return defaults;
-        }
-      })(),
+      config: readPersistedConfig(),
       activeEnvironmentId: null,
       latency: 0,
       requestCount: 0,
       errorCount: 0,
       connectedAt: null,
-      activeView: "studio",
       isLogsCollapsed: true,
-      isDarkMode: true,
+      logsHeight: LOGS_DEFAULT_HEIGHT,
       toasts: [],
 
       // ---------- connection ----------
@@ -463,6 +456,7 @@ export const useStore = create<AppState & AppActions>()(
           connectedConnectionCache: null,
           connectionConfig: config,
           serverInfo: null,
+          protocolVersion: null,
           connectionStatus: "connecting",
           requestCount: 0,
           errorCount: 0,
@@ -490,6 +484,7 @@ export const useStore = create<AppState & AppActions>()(
           connectionStatus: "disconnected",
           connectionConfig: null,
           serverInfo: null,
+          protocolVersion: null,
           connectedConnectionId: null,
           connectingConnectionId: null,
           connectedConnectionCache: null,
@@ -647,10 +642,7 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- Connection loading ----------
       loadConnection: (connection) => {
-        if (get().selectedConnectionId === connection.id) {
-          set({ activeView: "studio" });
-          return;
-        }
+        if (get().selectedConnectionId === connection.id) return;
 
         const state = get();
         const draft =
@@ -667,7 +659,6 @@ export const useStore = create<AppState & AppActions>()(
 
         set({
           ...workspace,
-          activeView: "studio",
           selectedConnectionId: connection.id,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
@@ -913,7 +904,8 @@ export const useStore = create<AppState & AppActions>()(
       // ---------- configuration ----------
       setConfig: (partial) => set((s) => {
         const config = { ...s.config, ...partial };
-        try { localStorage.setItem("mcp-studio-config", JSON.stringify(config)); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
+        persistConfig(config);
+        if (config.theme !== s.config.theme) applyTheme(config.theme);
         return { config };
       }),
 
@@ -976,14 +968,9 @@ export const useStore = create<AppState & AppActions>()(
         }),
 
       // ---------- UI ----------
-      setActiveView: (view) => set({ activeView: view }),
       toggleLogs: () => set((s) => ({ isLogsCollapsed: !s.isLogsCollapsed })),
-      toggleDarkMode: () =>
-        set((s) => {
-          const next = !s.isDarkMode;
-          document.documentElement.classList.toggle("dark", next);
-          return { isDarkMode: next };
-        }),
+      setLogsHeight: (height) =>
+        set({ logsHeight: clampLogsHeight(height, Math.round(window.innerHeight * 0.7)) }),
       addToast: (t) =>
         set((s) => ({
           toasts: [...s.toasts, { ...t, id: `toast_${Date.now()}` }],
@@ -994,6 +981,9 @@ export const useStore = create<AppState & AppActions>()(
     { name: "mcp-studio" }
   )
 );
+
+applyTheme(useStore.getState().config.theme);
+watchSystemTheme(() => useStore.getState().config.theme);
 
 // ---------------------------------------------------------------------------
 // Module-level server message handler
@@ -1061,7 +1051,8 @@ function handleServerMessage(msg: ServerMessage): void {
         connectedConnectionId: connectionId,
         connectingConnectionId: null,
         connectedConnectionCache: nextCache,
-        serverInfo: msg.serverInfo,
+        serverInfo: msg.serverInfo ?? null,
+        protocolVersion: msg.protocolVersion ?? null,
         connectedAt: Date.now(),
         requestCount: 0,
         errorCount: 0,
@@ -1077,6 +1068,7 @@ function handleServerMessage(msg: ServerMessage): void {
         connectionStatus: "disconnected",
         connectionConfig: null,
         serverInfo: null,
+        protocolVersion: null,
         connectedConnectionId: null,
         connectingConnectionId: null,
         connectedConnectionCache: null,
@@ -1155,6 +1147,7 @@ function handleServerMessage(msg: ServerMessage): void {
           connectedConnectionCache: null,
           connectionConfig: null,
           serverInfo: null,
+          protocolVersion: null,
           connectedAt: null,
           ...blankWorkspacePatch(),
         });

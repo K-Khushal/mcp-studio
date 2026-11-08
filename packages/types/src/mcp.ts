@@ -39,13 +39,13 @@ export interface MCPResourceContent {
 
 export type ConnectionStatus = "disconnected" | "connecting" | "connected" | "error";
 
+export type ThemePreference = "dark" | "light" | "system";
+
 export interface MCPConfig {
   requestTimeout: number;
   autoScrollLogs: boolean;
-  streamResponses: boolean;
   verboseLogging: boolean;
-  showReasoning: boolean;
-  showTimeline: boolean;
+  theme: ThemePreference;
 }
 
 // ---------------------------------------------------------------------------

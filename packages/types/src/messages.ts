@@ -24,7 +24,7 @@ export type ClientMessage =
 export type LogLevel = "DEBUG" | "INFO" | "WARN" | "ERROR";
 
 export type ServerMessage =
-  | { type: "connected"; protocolVersion?: string; tools: MCPTool[]; prompts: MCPPrompt[]; serverInfo?: unknown }
+  | { type: "connected"; protocolVersion?: string; tools: MCPTool[]; prompts: MCPPrompt[]; serverInfo?: { name?: string; version?: string } }
   | { type: "tools_listed"; tools: MCPTool[] }
   | { type: "prompts_listed"; prompts: MCPPrompt[] }
   | { type: "chunk"; requestId: string; data: unknown }

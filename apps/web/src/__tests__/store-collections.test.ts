@@ -85,7 +85,6 @@ beforeEach(() => {
     },
     timeline: [],
     logs: [],
-    activeView: "studio",
     transport: "stdio",
     connectionUrl: "",
   });
@@ -135,7 +134,6 @@ describe("loadConnection", () => {
       selectedPrompt: { name: "old-prompt" } as never,
       pendingParams: { stale: true },
       selectedConnectionId: null,
-      activeView: "collections",
       transport: "stdio",
       connectionUrl: "stale",
     });
@@ -150,14 +148,12 @@ describe("loadConnection", () => {
     expect(useStore.getState().selectedTool).toBeNull();
     expect(useStore.getState().selectedPrompt).toBeNull();
     expect(useStore.getState().pendingParams).toBeNull();
-    expect(useStore.getState().activeView).toBe("studio");
 
     useStore.getState().loadConnection(connection);
 
     expect(useStore.getState().selectedConnectionId).toBe("conn-1");
     expect(useStore.getState().transport).toBe("http");
     expect(useStore.getState().connectionUrl).toBe("http://localhost:4000");
-    expect(useStore.getState().activeView).toBe("studio");
   });
 
   it("shows a blank workspace for a different selected Connection while another Connection stays connected", () => {
