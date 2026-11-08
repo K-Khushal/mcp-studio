@@ -1,5 +1,7 @@
 import { cn } from '@/lib/utils';
 import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
+import { CopyButton } from './copy-button';
+import { formatBytes } from './response-copy';
 
 export type ResponseTab = 'pretty' | 'raw' | 'headers' | 'timeline';
 
@@ -13,6 +15,8 @@ interface ResponseHeaderProps {
   isToolError: boolean;
   isStreaming: boolean;
   latencyMs: number | null;
+  sizeBytes: number | null;
+  copyText: string | null;
 }
 
 export function ResponseHeader({
@@ -23,6 +27,8 @@ export function ResponseHeader({
   isToolError,
   isStreaming,
   latencyMs,
+  sizeBytes,
+  copyText,
 }: ResponseHeaderProps) {
   return (
     <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
@@ -54,9 +60,13 @@ export function ResponseHeader({
             {latencyMs}ms
           </span>
         )}
+        {sizeBytes !== null && (
+          <span className="text-xs text-muted-foreground font-mono">{formatBytes(sizeBytes)}</span>
+        )}
       </div>
 
-      <div className="flex gap-0.5">
+      <div className="flex items-center gap-0.5">
+        <CopyButton text={copyText} />
         {TABS.map((tab) => (
           <button
             key={tab}

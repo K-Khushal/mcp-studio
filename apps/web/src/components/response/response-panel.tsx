@@ -1,10 +1,13 @@
 import { useStore } from '@/store';
-import { Inbox, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { TimelinePanel } from './timeline-panel';
 import { ResponseHeader, type ResponseTab } from './response-header';
 import { HeadersTab, buildEffectiveRequestHeaders } from './headers-tab';
 import { PrettyTab, hasToolError } from './pretty-tab';
+import { RawTab } from './raw-tab';
+import { EmptyState } from './empty-state';
+import { LoadingState } from './loading-state';
+import { getCopyText, getResponseSize } from './response-copy';
 
 export function ResponsePanel() {
   const {
@@ -12,6 +15,7 @@ export function ResponsePanel() {
     connectionConfig,
     httpAuth,
     httpHeaders,
+    timeline,
   } = useStore();
   const [activeTab, setActiveTab] = useState<ResponseTab>('pretty');
 
@@ -24,6 +28,14 @@ export function ResponsePanel() {
     response.completedAt && response.startedAt
       ? response.completedAt - response.startedAt
       : null;
+
+  const copyText = getCopyText(
+    activeTab,
+    response.result,
+    response.error,
+    response.httpResponseHeaders,
+    timeline,
+  );
 
   const isHttp = connectionConfig?.transport === 'http';
 
@@ -41,19 +53,15 @@ export function ResponsePanel() {
         isToolError={isToolError}
         isStreaming={response.isStreaming}
         latencyMs={latencyMs}
+        sizeBytes={getResponseSize(response.result, response.error)}
+        copyText={copyText}
       />
 
       <div className="flex-1 overflow-auto p-4">
         {response.isStreaming ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2">
-            <Loader2 size={20} className="animate-spin opacity-50" />
-            Waiting for response…
-          </div>
+          <LoadingState />
         ) : isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full text-muted-foreground text-sm gap-2">
-            <Inbox size={20} className="opacity-30" />
-            Send a request to see the response
-          </div>
+          <EmptyState />
         ) : activeTab === 'pretty' ? (
           <PrettyTab
             key={response.startedAt ?? 0}
@@ -61,15 +69,7 @@ export function ResponsePanel() {
             error={response.error}
           />
         ) : activeTab === 'raw' ? (
-          hasError ? (
-            <pre className="text-xs font-mono text-destructive whitespace-pre-wrap">
-              {response.error}
-            </pre>
-          ) : (
-            <pre className="text-xs font-mono leading-relaxed text-muted-foreground whitespace-pre-wrap">
-              {JSON.stringify(response.result, null, 2)}
-            </pre>
-          )
+          <RawTab result={response.result} error={response.error} />
         ) : activeTab === 'headers' ? (
           <HeadersTab
             isHttp={isHttp}

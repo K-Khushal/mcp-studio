@@ -2,6 +2,8 @@ import type { ContentBlock } from '@mcp-studio/types';
 import { TextBlock } from './text-block';
 import { ResourceBlock } from './resource-block';
 import { ResourceLinkBlock } from './resource-link-block';
+import { ImageBlock } from './image-block';
+import { AudioBlock } from './audio-block';
 import { UnsupportedBlock } from './unsupported-block';
 
 export function ContentBlockRenderer({ block }: { block: ContentBlock }) {
@@ -13,9 +15,9 @@ export function ContentBlockRenderer({ block }: { block: ContentBlock }) {
     case 'resource_link':
       return <ResourceLinkBlock block={block} />;
     case 'image':
-      return <UnsupportedBlock type="image" mimeType={block.mimeType} />;
+      return <ImageBlock block={block} />;
     case 'audio':
-      return <UnsupportedBlock type="audio" mimeType={block.mimeType} />;
+      return <AudioBlock block={block} />;
     default: {
       const _exhaustive: never = block; // compile-time exhaustiveness check
       const unknown = _exhaustive as { type?: string };
