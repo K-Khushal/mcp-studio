@@ -58,7 +58,7 @@ export default function ToolPanel() {
   if (!isSelectedConnectionConnected) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-        Connect to this Connection to load tools
+        Connect to load tools
       </div>
     );
   }

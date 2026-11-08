@@ -112,7 +112,7 @@ export function PromptPanel() {
   if (!isSelectedConnectionConnected) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-        Connect to this Connection to load prompts
+        Connect to load prompts
       </div>
     );
   }
