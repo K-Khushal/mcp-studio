@@ -13,17 +13,31 @@
     "bun": ">=1.0"
   },
   "packageManager": "bun@1.3.12",
-  "private": true,
   "scripts": {
     "dev": "turbo dev",
-    "build": "turbo build",
+    "build": "turbo build && bun scripts/build-package.ts",
     "test": "turbo test",
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
-    "clean": "turbo clean && rm -rf node_modules"
+    "clean": "turbo clean && rm -rf node_modules",
+    "smoke": "bun scripts/smoke-cli.ts",
+    "prepack": "bun run build"
   },
   "workspaces": [
     "apps/*",
     "packages/*"
-  ]
+  ],
+  "version": "0.1.0",
+  "description": "Local MCP server inspector powered by Bun",
+  "bin": {
+    "mcp-studio": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/K-Khushal/mcp-studio.git"
+  }
 }
