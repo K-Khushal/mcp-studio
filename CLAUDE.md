@@ -100,3 +100,10 @@ Update after any session with: new package/route/transport, schema change, arch 
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
 - **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
 - **AppState includes `selectedConnectionId`, `transport`, `connectionUrl`** — moved from local component state to store so connection panel and home page stay in sync.
+
+
+## Tests
+
+Session protocol seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`. `SessionHarness` in `src/__tests__/fixtures/session-harness.ts` drives the real SessionManager: `await harness.send(clientMessage)` then `await harness.waitFor("result", message => message.requestId === id, 3000)`. Waits consume matching events once, including already emitted events; `messages` retains the full stream for diagnostics. Start waits before sending when observing events during an unfinished Call; always close the harness and HTTP fixture in `finally`.
+
+`stdioFixture` launches the SDK fixture subprocess; `startHTTPFixture()` provides an isolated Streamable HTTP endpoint on an ephemeral loopback port and `close()`. Catalogue: echo (`text`), error (tool result with `isError`), slow (`steps`, 50ms ticks, progress when `_meta.progressToken` supplied, AbortSignal cancellation), structured (`answer: 42` + outputSchema), elicit (name form), log (info notification), stderr, crash (exit 23); prompt: greet (`name`). Advanced protocol features are available to later tickets but are not yet wired through SessionManager. Run crash only over STDIO: the in-process HTTP fixture would exit the test runner. Legacy SSE is explicitly stubbed at `/sse` with HTTP 501, not a real SSE implementation.
