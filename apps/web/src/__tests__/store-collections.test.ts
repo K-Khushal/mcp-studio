@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { Collection, SavedRequest } from "@mcp-studio/types";
+import type { Collection, Connection } from "@mcp-studio/types";
 
 const { useStore } = await import("../store/index.js");
 
@@ -8,9 +8,9 @@ const makeCollection = (): Collection => ({
   name: "Collection",
   createdAt: 1,
   updatedAt: 1,
-  requests: [
+  connections: [
     {
-      id: "req-1",
+      id: "conn-1",
       collectionId: "col-1",
       name: "Original Name",
       connectionConfig: {
@@ -24,9 +24,9 @@ const makeCollection = (): Collection => ({
       updatedAt: 1,
     },
     {
-      id: "req-2",
+      id: "conn-2",
       collectionId: "col-1",
-      name: "Second Request",
+      name: "Second Connection",
       connectionConfig: {
         transport: "stdio",
         config: {
@@ -42,8 +42,8 @@ const makeCollection = (): Collection => ({
   ],
 });
 
-const makeSavedRequest = (): SavedRequest => ({
-  id: "req-1",
+const makeConnection = (): Connection => ({
+  id: "conn-1",
   collectionId: "col-1",
   name: "Original Name",
   connectionConfig: {
@@ -61,10 +61,10 @@ beforeEach(() => {
   vi.restoreAllMocks();
   useStore.setState({
     collections: [makeCollection()],
-    selectedRequestId: "req-1",
-    connectedRequestId: null,
-    connectedRequestCache: null,
-    requestDrafts: {},
+    selectedConnectionId: "conn-1",
+    connectedConnectionId: null,
+    connectedConnectionCache: null,
+    connectionDrafts: {},
     tools: [],
     prompts: [],
     selectedTool: null,
@@ -91,23 +91,23 @@ beforeEach(() => {
   });
 });
 
-describe("renameRequest", () => {
-  it("updates the request name in the store", async () => {
+describe("renameConnection", () => {
+  it("updates the Connection name in the store", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ ok: true }) }));
 
-    await useStore.getState().renameRequest("col-1", "req-1", "Renamed Request");
+    await useStore.getState().renameConnection("col-1", "conn-1", "Renamed Connection");
 
-    expect(useStore.getState().collections[0]!.requests[0]!.name).toBe("Renamed Request");
-    expect(fetch).toHaveBeenCalledWith("/api/collections/col-1/requests/req-1", {
+    expect(useStore.getState().collections[0]!.connections[0]!.name).toBe("Renamed Connection");
+    expect(fetch).toHaveBeenCalledWith("/api/collections/col-1/connections/conn-1", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: "Renamed Request" }),
+      body: JSON.stringify({ name: "Renamed Connection" }),
     });
   });
 });
 
-describe("updateRequestConnection", () => {
-  it("updates the request connectionConfig in the store", async () => {
+describe("updateConnectionConfig", () => {
+  it("updates the Connection connectionConfig in the store", async () => {
     const config = {
       transport: "http" as const,
       config: {
@@ -117,10 +117,10 @@ describe("updateRequestConnection", () => {
     };
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ ok: true }) }));
 
-    await useStore.getState().updateRequestConnection("col-1", "req-1", config);
+    await useStore.getState().updateConnectionConfig("col-1", "conn-1", config);
 
-    expect(useStore.getState().collections[0]!.requests[0]!.connectionConfig).toEqual(config);
-    expect(fetch).toHaveBeenCalledWith("/api/collections/col-1/requests/req-1", {
+    expect(useStore.getState().collections[0]!.connections[0]!.connectionConfig).toEqual(config);
+    expect(fetch).toHaveBeenCalledWith("/api/collections/col-1/connections/conn-1", {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ connectionConfig: config }),
@@ -128,23 +128,23 @@ describe("updateRequestConnection", () => {
   });
 });
 
-describe("loadSavedRequest", () => {
-  it("loads request-scoped connection data without deselecting on repeat click", () => {
+describe("loadConnection", () => {
+  it("loads Connection-scoped data without deselecting on repeat click", () => {
     useStore.setState({
       selectedTool: { name: "old-tool" } as never,
       selectedPrompt: { name: "old-prompt" } as never,
       pendingParams: { stale: true },
-      selectedRequestId: null,
+      selectedConnectionId: null,
       activeView: "collections",
       transport: "stdio",
       connectionUrl: "stale",
     });
 
-    const request = makeSavedRequest();
+    const connection = makeConnection();
 
-    useStore.getState().loadSavedRequest(request);
+    useStore.getState().loadConnection(connection);
 
-    expect(useStore.getState().selectedRequestId).toBe("req-1");
+    expect(useStore.getState().selectedConnectionId).toBe("conn-1");
     expect(useStore.getState().transport).toBe("http");
     expect(useStore.getState().connectionUrl).toBe("http://localhost:4000");
     expect(useStore.getState().selectedTool).toBeNull();
@@ -152,20 +152,20 @@ describe("loadSavedRequest", () => {
     expect(useStore.getState().pendingParams).toBeNull();
     expect(useStore.getState().activeView).toBe("studio");
 
-    useStore.getState().loadSavedRequest(request);
+    useStore.getState().loadConnection(connection);
 
-    expect(useStore.getState().selectedRequestId).toBe("req-1");
+    expect(useStore.getState().selectedConnectionId).toBe("conn-1");
     expect(useStore.getState().transport).toBe("http");
     expect(useStore.getState().connectionUrl).toBe("http://localhost:4000");
     expect(useStore.getState().activeView).toBe("studio");
   });
 
-  it("shows a blank workspace for a different selected request while another request stays connected", () => {
+  it("shows a blank workspace for a different selected Connection while another Connection stays connected", () => {
     useStore.setState({
-      selectedRequestId: "req-1",
-      connectedRequestId: "req-1",
-      connectedRequestCache: {
-        requestId: "req-1",
+      selectedConnectionId: "conn-1",
+      connectedConnectionId: "conn-1",
+      connectedConnectionCache: {
+        connectionId: "conn-1",
         tools: [{ name: "tool-a" }] as never,
         prompts: [{ name: "prompt-a" }] as never,
         selectedTool: { name: "tool-a" } as never,
@@ -208,12 +208,12 @@ describe("loadSavedRequest", () => {
       logs: [{ id: "log_1", level: "INFO", source: "protocol", message: "connected", timestamp: 1 }],
     });
 
-    const secondRequest = useStore.getState().collections[0]!.requests[1]!;
-    useStore.getState().loadSavedRequest(secondRequest);
+    const secondConnection = useStore.getState().collections[0]!.connections[1]!;
+    useStore.getState().loadConnection(secondConnection);
 
     const state = useStore.getState();
-    expect(state.selectedRequestId).toBe("req-2");
-    expect(state.connectedRequestId).toBe("req-1");
+    expect(state.selectedConnectionId).toBe("conn-2");
+    expect(state.connectedConnectionId).toBe("conn-1");
     expect(state.transport).toBe("stdio");
     expect(state.connectionUrl).toBe("npx @test/test-mcp");
     expect(state.tools).toEqual([]);
@@ -224,12 +224,12 @@ describe("loadSavedRequest", () => {
     expect(state.logs).toEqual([]);
   });
 
-  it("restores the cached live workspace when returning to the connected request", () => {
+  it("restores the cached live workspace when returning to the connected Connection", () => {
     const cachedLogs = [{ id: "log_1", level: "INFO", source: "protocol", message: "connected", timestamp: 1 }] as const;
     useStore.setState({
-      connectedRequestId: "req-1",
-      connectedRequestCache: {
-        requestId: "req-1",
+      connectedConnectionId: "conn-1",
+      connectedConnectionCache: {
+        connectionId: "conn-1",
         tools: [{ name: "tool-a" }] as never,
         prompts: [{ name: "prompt-a" }] as never,
         selectedTool: { name: "tool-a" } as never,
@@ -252,7 +252,7 @@ describe("loadSavedRequest", () => {
         timeline: [{ label: "done", detail: "ok", timestamp: "00:00:00", status: "completed" }],
         logs: [...cachedLogs],
       },
-      selectedRequestId: "req-2",
+      selectedConnectionId: "conn-2",
       tools: [],
       prompts: [],
       selectedTool: null,
@@ -274,12 +274,12 @@ describe("loadSavedRequest", () => {
       logs: [],
     });
 
-    const firstRequest = useStore.getState().collections[0]!.requests[0]!;
-    useStore.getState().loadSavedRequest(firstRequest);
+    const firstConnection = useStore.getState().collections[0]!.connections[0]!;
+    useStore.getState().loadConnection(firstConnection);
 
     const state = useStore.getState();
-    expect(state.selectedRequestId).toBe("req-1");
-    expect(state.connectedRequestId).toBe("req-1");
+    expect(state.selectedConnectionId).toBe("conn-1");
+    expect(state.connectedConnectionId).toBe("conn-1");
     expect(state.tools).toHaveLength(1);
     expect(state.prompts).toHaveLength(1);
     expect(state.selectedTool?.name).toBe("tool-a");
@@ -289,16 +289,16 @@ describe("loadSavedRequest", () => {
   });
 });
 
-describe("delete connected request state", () => {
-  it("disconnects and clears live state when deleting the connected request", async () => {
+describe("delete connected Connection state", () => {
+  it("disconnects and clears live state when deleting the Connection that is connected", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ json: async () => ({ ok: true }) }));
     useStore.setState({
-      selectedRequestId: "req-2",
-      connectedRequestId: "req-1",
+      selectedConnectionId: "conn-2",
+      connectedConnectionId: "conn-1",
       connectionStatus: "connected",
       connectedAt: 123,
-      connectedRequestCache: {
-        requestId: "req-1",
+      connectedConnectionCache: {
+        connectionId: "conn-1",
         tools: [{ name: "tool-a" }] as never,
         prompts: [],
         selectedTool: null,
@@ -323,13 +323,13 @@ describe("delete connected request state", () => {
       },
     });
 
-    await useStore.getState().deleteRequest("col-1", "req-1");
+    await useStore.getState().deleteConnection("col-1", "conn-1");
 
     const state = useStore.getState();
-    expect(state.connectedRequestId).toBeNull();
+    expect(state.connectedConnectionId).toBeNull();
     expect(state.connectionStatus).toBe("disconnected");
     expect(state.connectedAt).toBeNull();
-    expect(state.connectedRequestCache).toBeNull();
-    expect(state.selectedRequestId).toBe("req-2");
+    expect(state.connectedConnectionCache).toBeNull();
+    expect(state.selectedConnectionId).toBe("conn-2");
   });
 });

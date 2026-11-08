@@ -1,26 +1,26 @@
 import { eq } from "drizzle-orm";
 import { db } from "../index.js";
-import { requests } from "../schema.js";
+import { connections } from "../schema.js";
 import { nanoid } from "../../utils/nanoid.js";
-import type { SavedRequest, ConnectionConfig } from "@mcp-studio/types";
+import type { Connection, ConnectionConfig } from "@mcp-studio/types";
 
-interface CreateRequestData {
+interface CreateConnectionData {
   name: string;
   connectionConfig?: ConnectionConfig;
 }
 
-interface UpdateRequestData {
+interface UpdateConnectionData {
   name?: string;
   connectionConfig?: ConnectionConfig | null;
 }
 
-export async function createRequest(
+export async function createConnection(
   collectionId: string,
-  data: CreateRequestData
-): Promise<SavedRequest> {
+  data: CreateConnectionData
+): Promise<Connection> {
   const now = Date.now();
   const id = nanoid();
-  await db.insert(requests).values({
+  await db.insert(connections).values({
     id,
     collectionId,
     name: data.name,
@@ -37,11 +37,11 @@ export async function createRequest(
   };
 }
 
-export async function deleteRequest(id: string): Promise<void> {
-  await db.delete(requests).where(eq(requests.id, id));
+export async function deleteConnection(id: string): Promise<void> {
+  await db.delete(connections).where(eq(connections.id, id));
 }
 
-export async function updateRequest(id: string, data: UpdateRequestData): Promise<void> {
+export async function updateConnection(id: string, data: UpdateConnectionData): Promise<void> {
   const update: {
     name?: string;
     connectionConfig?: ConnectionConfig | null;
@@ -59,7 +59,7 @@ export async function updateRequest(id: string, data: UpdateRequestData): Promis
   }
 
   await db
-    .update(requests)
+    .update(connections)
     .set(update)
-    .where(eq(requests.id, id));
+    .where(eq(connections.id, id));
 }

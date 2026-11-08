@@ -6,7 +6,7 @@ import type {
   MCPConfig,
   ConnectionStatus,
   Collection,
-  SavedRequest,
+  Connection,
   Environment,
   ServerMessage,
   ConnectionConfig,
@@ -51,7 +51,7 @@ interface ConnectionDraft {
   httpHeaders?: Record<string, string>;
 }
 
-interface RequestWorkspaceState {
+interface ConnectionWorkspaceState {
   tools: MCPTool[];
   prompts: MCPPrompt[];
   selectedTool: MCPTool | null;
@@ -66,8 +66,8 @@ interface RequestWorkspaceState {
   logs: LogEntry[];
 }
 
-interface ConnectedRequestCache extends RequestWorkspaceState {
-  requestId: string;
+interface ConnectedConnectionCache extends ConnectionWorkspaceState {
+  connectionId: string;
 }
 
 interface AppState {
@@ -75,9 +75,9 @@ interface AppState {
   connectionStatus: ConnectionStatus;
   connectionConfig: ConnectionConfig | null;
   serverInfo: unknown;
-  connectedRequestId: string | null;
-  connectingRequestId: string | null;
-  connectedRequestCache: ConnectedRequestCache | null;
+  connectedConnectionId: string | null;
+  connectingConnectionId: string | null;
+  connectedConnectionCache: ConnectedConnectionCache | null;
 
   // Tools & Prompts
   tools: MCPTool[];
@@ -100,8 +100,8 @@ interface AppState {
 
   // Collections
   collections: Collection[];
-  selectedRequestId: string | null;
-  requestDrafts: Record<string, ConnectionDraft>;
+  selectedConnectionId: string | null;
+  connectionDrafts: Record<string, ConnectionDraft>;
 
   // Connection form (persisted in store so panels stay in sync)
   transport: "stdio" | "http";
@@ -149,8 +149,8 @@ interface AppActions {
   invokeTool: (tool: string, params: Record<string, unknown>) => Promise<void>;
   invokePrompt: (prompt: string, args: Record<string, string>) => Promise<void>;
 
-  // Load saved request into invoke panel
-  loadSavedRequest: (request: SavedRequest) => void;
+  // Load a saved Connection into the workspace
+  loadConnection: (connection: Connection) => void;
   clearPendingParams: () => void;
 
   // Logs
@@ -161,10 +161,10 @@ interface AppActions {
   createCollection: (name: string) => Promise<void>;
   renameCollection: (id: string, name: string) => Promise<void>;
   deleteCollection: (id: string) => Promise<void>;
-  addRequest: (collectionId: string, data: Omit<SavedRequest, "id" | "createdAt" | "updatedAt">) => Promise<void>;
-  renameRequest: (collectionId: string, reqId: string, name: string) => Promise<void>;
-  updateRequestConnection: (collectionId: string, reqId: string, connectionConfig: ConnectionConfig) => Promise<void>;
-  deleteRequest: (collectionId: string, reqId: string) => Promise<void>;
+  addConnection: (collectionId: string, data: Omit<Connection, "id" | "createdAt" | "updatedAt">) => Promise<void>;
+  renameConnection: (collectionId: string, connId: string, name: string) => Promise<void>;
+  updateConnectionConfig: (collectionId: string, connId: string, connectionConfig: ConnectionConfig) => Promise<void>;
+  deleteConnection: (collectionId: string, connId: string) => Promise<void>;
 
   // Connection form
   setTransport: (t: "stdio" | "http") => void;
@@ -215,7 +215,7 @@ const DEFAULT_CONNECTION_DRAFT: ConnectionDraft = {
   httpHeaders: DEFAULT_HTTP_HEADERS,
 };
 
-function createBlankWorkspace(): RequestWorkspaceState {
+function createBlankWorkspace(): ConnectionWorkspaceState {
   return {
     tools: [],
     prompts: [],
@@ -232,7 +232,7 @@ function createBlankWorkspace(): RequestWorkspaceState {
   };
 }
 
-function cloneWorkspace(workspace: RequestWorkspaceState): RequestWorkspaceState {
+function cloneWorkspace(workspace: ConnectionWorkspaceState): ConnectionWorkspaceState {
   return {
     tools: [...workspace.tools],
     prompts: [...workspace.prompts],
@@ -258,9 +258,9 @@ function cloneWorkspace(workspace: RequestWorkspaceState): RequestWorkspaceState
   };
 }
 
-function cloneConnectedCache(cache: ConnectedRequestCache): ConnectedRequestCache {
+function cloneConnectedCache(cache: ConnectedConnectionCache): ConnectedConnectionCache {
   return {
-    requestId: cache.requestId,
+    connectionId: cache.connectionId,
     ...cloneWorkspace(cache),
   };
 }
@@ -304,7 +304,7 @@ function persistConnectionDraft(draft: ConnectionDraft): void {
   } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
 }
 
-function requestWorkspacePatch(workspace: RequestWorkspaceState): Pick<
+function connectionWorkspacePatch(workspace: ConnectionWorkspaceState): Pick<
   AppState,
   | "tools"
   | "prompts"
@@ -351,7 +351,7 @@ function blankWorkspacePatch(): Pick<
   | "timeline"
   | "logs"
 > {
-  return requestWorkspacePatch(createBlankWorkspace());
+  return connectionWorkspacePatch(createBlankWorkspace());
 }
 
 function fmtTime(ts: number): string {
@@ -364,36 +364,36 @@ function fmtTime(ts: number): string {
 
 function syncConnectedWorkspace(
   state: AppState,
-  updater: (workspace: RequestWorkspaceState) => RequestWorkspaceState
+  updater: (workspace: ConnectionWorkspaceState) => ConnectionWorkspaceState
 ): Partial<AppState> {
-  if (!state.connectedRequestCache) return {};
+  if (!state.connectedConnectionCache) return {};
 
-  const nextWorkspace = updater(cloneWorkspace(state.connectedRequestCache));
-  const nextCache: ConnectedRequestCache = {
-    requestId: state.connectedRequestCache.requestId,
+  const nextWorkspace = updater(cloneWorkspace(state.connectedConnectionCache));
+  const nextCache: ConnectedConnectionCache = {
+    connectionId: state.connectedConnectionCache.connectionId,
     ...cloneWorkspace(nextWorkspace),
   };
 
-  if (state.selectedRequestId === state.connectedRequestId) {
+  if (state.selectedConnectionId === state.connectedConnectionId) {
     return {
-      connectedRequestCache: nextCache,
-      ...requestWorkspacePatch(nextWorkspace),
+      connectedConnectionCache: nextCache,
+      ...connectionWorkspacePatch(nextWorkspace),
     };
   }
 
-  return { connectedRequestCache: nextCache };
+  return { connectedConnectionCache: nextCache };
 }
 
-function buildRequestDraftsPatch(
-  selectedRequestId: string | null,
+function buildConnectionDraftsPatch(
+  selectedConnectionId: string | null,
   drafts: Record<string, ConnectionDraft>,
   draft: ConnectionDraft
-): { requestDrafts?: Record<string, ConnectionDraft> } {
-  if (!selectedRequestId) return {};
+): { connectionDrafts?: Record<string, ConnectionDraft> } {
+  if (!selectedConnectionId) return {};
   return {
-    requestDrafts: {
+    connectionDrafts: {
       ...drafts,
-      [selectedRequestId]: { ...draft },
+      [selectedConnectionId]: { ...draft },
     },
   };
 }
@@ -411,14 +411,14 @@ export const useStore = create<AppState & AppActions>()(
       connectionStatus: "disconnected",
       connectionConfig: null,
       serverInfo: null,
-      connectedRequestId: null,
-      connectingRequestId: null,
-      connectedRequestCache: null,
+      connectedConnectionId: null,
+      connectingConnectionId: null,
+      connectedConnectionCache: null,
       ...blankWorkspacePatch(),
       logIdCounter: 0,
       collections: [],
-      selectedRequestId: null,
-      requestDrafts: {},
+      selectedConnectionId: null,
+      connectionDrafts: {},
       transport: readPersistedConnectionDraft().transport,
       connectionUrl: readPersistedConnectionDraft().connectionUrl,
       httpAuth: readPersistedConnectionDraft().httpAuth ?? DEFAULT_HTTP_AUTH,
@@ -452,15 +452,15 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- connection ----------
       connect: async (config) => {
-        const selectedRequestId = get().selectedRequestId;
-        if (!selectedRequestId) return;
+        const selectedConnectionId = get().selectedConnectionId;
+        if (!selectedConnectionId) return;
 
         const clearedWorkspace = blankWorkspacePatch();
         set({
           ...clearedWorkspace,
-          connectedRequestId: null,
-          connectingRequestId: selectedRequestId,
-          connectedRequestCache: null,
+          connectedConnectionId: null,
+          connectingConnectionId: selectedConnectionId,
+          connectedConnectionCache: null,
           connectionConfig: config,
           serverInfo: null,
           connectionStatus: "connecting",
@@ -477,7 +477,7 @@ export const useStore = create<AppState & AppActions>()(
         set({
           connectionConfig: config,
           connectionStatus: "connecting",
-          connectingRequestId: selectedRequestId,
+          connectingConnectionId: selectedConnectionId,
         });
         transport.onMessage(handleServerMessage);
         await transport.connect(config);
@@ -490,9 +490,9 @@ export const useStore = create<AppState & AppActions>()(
           connectionStatus: "disconnected",
           connectionConfig: null,
           serverInfo: null,
-          connectedRequestId: null,
-          connectingRequestId: null,
-          connectedRequestCache: null,
+          connectedConnectionId: null,
+          connectingConnectionId: null,
+          connectedConnectionCache: null,
           requestCount: 0,
           errorCount: 0,
           latency: 0,
@@ -575,8 +575,8 @@ export const useStore = create<AppState & AppActions>()(
       // ---------- invocation ----------
       invokeTool: async (tool, params) => {
         const state = get();
-        if (state.connectionStatus !== "connected" || state.selectedRequestId !== state.connectedRequestId) {
-          state.addToast({ title: "Not connected", description: "Connect the selected request first.", variant: "destructive" });
+        if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
+          state.addToast({ title: "Not connected", description: "Connect the selected Connection first.", variant: "destructive" });
           return;
         }
 
@@ -611,8 +611,8 @@ export const useStore = create<AppState & AppActions>()(
 
       invokePrompt: async (prompt, args) => {
         const state = get();
-        if (state.connectionStatus !== "connected" || state.selectedRequestId !== state.connectedRequestId) {
-          state.addToast({ title: "Not connected", description: "Connect the selected request first.", variant: "destructive" });
+        if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
+          state.addToast({ title: "Not connected", description: "Connect the selected Connection first.", variant: "destructive" });
           return;
         }
 
@@ -645,37 +645,37 @@ export const useStore = create<AppState & AppActions>()(
         await transport.invokePrompt(prompt, args);
       },
 
-      // ---------- saved request loading ----------
-      loadSavedRequest: (request) => {
-        if (get().selectedRequestId === request.id) {
+      // ---------- Connection loading ----------
+      loadConnection: (connection) => {
+        if (get().selectedConnectionId === connection.id) {
           set({ activeView: "studio" });
           return;
         }
 
         const state = get();
         const draft =
-          state.requestDrafts[request.id] ??
-          connectionDraftFromConfig(request.connectionConfig) ??
+          state.connectionDrafts[connection.id] ??
+          connectionDraftFromConfig(connection.connectionConfig) ??
           { ...DEFAULT_CONNECTION_DRAFT };
 
         persistConnectionDraft(draft);
 
         const workspace =
-          state.connectedRequestId === request.id && state.connectedRequestCache
-            ? requestWorkspacePatch(state.connectedRequestCache)
+          state.connectedConnectionId === connection.id && state.connectedConnectionCache
+            ? connectionWorkspacePatch(state.connectedConnectionCache)
             : blankWorkspacePatch();
 
         set({
           ...workspace,
           activeView: "studio",
-          selectedRequestId: request.id,
+          selectedConnectionId: connection.id,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
           httpAuth: draft.httpAuth ?? DEFAULT_HTTP_AUTH,
           httpHeaders: draft.httpHeaders ?? DEFAULT_HTTP_HEADERS,
-          requestDrafts: {
-            ...state.requestDrafts,
-            [request.id]: draft,
+          connectionDrafts: {
+            ...state.connectionDrafts,
+            [connection.id]: draft,
           },
         });
       },
@@ -732,31 +732,31 @@ export const useStore = create<AppState & AppActions>()(
       deleteCollection: async (id) => {
         const wasConnected = (() => {
           const state = get();
-          const deletedReqIds = new Set(
-            state.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
+          const deletedConnIds = new Set(
+            state.collections.find((c) => c.id === id)?.connections.map((r) => r.id) ?? []
           );
-          return deletedReqIds.has(state.connectedRequestId ?? "");
+          return deletedConnIds.has(state.connectedConnectionId ?? "");
         })();
         await fetch(`/api/collections/${id}`, { method: "DELETE" });
         if (wasConnected) {
           await get().disconnect();
         }
         set((s) => {
-          const deletedReqIds = new Set(
-            s.collections.find((c) => c.id === id)?.requests.map((r) => r.id) ?? []
+          const deletedConnIds = new Set(
+            s.collections.find((c) => c.id === id)?.connections.map((r) => r.id) ?? []
           );
-          const selectedRequestDeleted = deletedReqIds.has(s.selectedRequestId ?? "");
-          const connectedRequestDeleted = deletedReqIds.has(s.connectedRequestId ?? "");
-          const nextDrafts = { ...s.requestDrafts };
-          for (const rid of deletedReqIds) delete nextDrafts[rid];
+          const selectedConnectionDeleted = deletedConnIds.has(s.selectedConnectionId ?? "");
+          const connectedConnectionDeleted = deletedConnIds.has(s.connectedConnectionId ?? "");
+          const nextDrafts = { ...s.connectionDrafts };
+          for (const rid of deletedConnIds) delete nextDrafts[rid];
           return {
             collections: s.collections.filter((c) => c.id !== id),
-            selectedRequestId: selectedRequestDeleted ? null : s.selectedRequestId,
-            connectedRequestId: connectedRequestDeleted ? null : s.connectedRequestId,
-            connectingRequestId: connectedRequestDeleted ? null : s.connectingRequestId,
-            connectedRequestCache: connectedRequestDeleted ? null : s.connectedRequestCache,
-            requestDrafts: nextDrafts,
-            ...(selectedRequestDeleted ? {
+            selectedConnectionId: selectedConnectionDeleted ? null : s.selectedConnectionId,
+            connectedConnectionId: connectedConnectionDeleted ? null : s.connectedConnectionId,
+            connectingConnectionId: connectedConnectionDeleted ? null : s.connectingConnectionId,
+            connectedConnectionCache: connectedConnectionDeleted ? null : s.connectedConnectionCache,
+            connectionDrafts: nextDrafts,
+            ...(selectedConnectionDeleted ? {
               ...blankWorkspacePatch(),
               transport: "stdio" as const,
               connectionUrl: "",
@@ -767,24 +767,24 @@ export const useStore = create<AppState & AppActions>()(
         });
       },
 
-      addRequest: async (collectionId, data) => {
-        const res = await fetch(`/api/collections/${collectionId}/requests`, {
+      addConnection: async (collectionId, data) => {
+        const res = await fetch(`/api/collections/${collectionId}/connections`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
         });
-        const request = (await res.json()) as SavedRequest;
+        const connection = (await res.json()) as Connection;
         set((s) => ({
           collections: s.collections.map((c) =>
             c.id === collectionId
-              ? { ...c, requests: [...c.requests, request] }
+              ? { ...c, connections: [...c.connections, connection] }
               : c
           ),
         }));
       },
 
-      renameRequest: async (collectionId, reqId, name) => {
-        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, {
+      renameConnection: async (collectionId, connId, name) => {
+        await fetch(`/api/collections/${collectionId}/connections/${connId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
@@ -794,8 +794,8 @@ export const useStore = create<AppState & AppActions>()(
             c.id === collectionId
               ? {
                   ...c,
-                  requests: c.requests.map((r) =>
-                    r.id === reqId ? { ...r, name, updatedAt: Date.now() } : r
+                  connections: c.connections.map((r) =>
+                    r.id === connId ? { ...r, name, updatedAt: Date.now() } : r
                   ),
                 }
               : c
@@ -803,8 +803,8 @@ export const useStore = create<AppState & AppActions>()(
         }));
       },
 
-      updateRequestConnection: async (collectionId, reqId, connectionConfig) => {
-        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, {
+      updateConnectionConfig: async (collectionId, connId, connectionConfig) => {
+        await fetch(`/api/collections/${collectionId}/connections/${connId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ connectionConfig }),
@@ -814,8 +814,8 @@ export const useStore = create<AppState & AppActions>()(
             c.id === collectionId
               ? {
                   ...c,
-                  requests: c.requests.map((r) =>
-                    r.id === reqId ? { ...r, connectionConfig, updatedAt: Date.now() } : r
+                  connections: c.connections.map((r) =>
+                    r.id === connId ? { ...r, connectionConfig, updatedAt: Date.now() } : r
                   ),
                 }
               : c
@@ -823,27 +823,27 @@ export const useStore = create<AppState & AppActions>()(
         }));
       },
 
-      deleteRequest: async (collectionId, reqId) => {
-        const wasConnected = get().connectedRequestId === reqId;
-        await fetch(`/api/collections/${collectionId}/requests/${reqId}`, { method: "DELETE" });
+      deleteConnection: async (collectionId, connId) => {
+        const wasConnected = get().connectedConnectionId === connId;
+        await fetch(`/api/collections/${collectionId}/connections/${connId}`, { method: "DELETE" });
         if (wasConnected) {
           await get().disconnect();
         }
         set((s) => {
-          const deletingSelected = s.selectedRequestId === reqId;
-          const deletingConnected = s.connectedRequestId === reqId;
-          const { [reqId]: _removed, ...nextDrafts } = s.requestDrafts;
+          const deletingSelected = s.selectedConnectionId === connId;
+          const deletingConnected = s.connectedConnectionId === connId;
+          const { [connId]: _removed, ...nextDrafts } = s.connectionDrafts;
           return {
             collections: s.collections.map((c) =>
               c.id === collectionId
-                ? { ...c, requests: c.requests.filter((r) => r.id !== reqId) }
+                ? { ...c, connections: c.connections.filter((r) => r.id !== connId) }
                 : c
             ),
-            selectedRequestId: deletingSelected ? null : s.selectedRequestId,
-            connectedRequestId: deletingConnected ? null : s.connectedRequestId,
-            connectingRequestId: deletingConnected ? null : s.connectingRequestId,
-            connectedRequestCache: deletingConnected ? null : s.connectedRequestCache,
-            requestDrafts: nextDrafts,
+            selectedConnectionId: deletingSelected ? null : s.selectedConnectionId,
+            connectedConnectionId: deletingConnected ? null : s.connectedConnectionId,
+            connectingConnectionId: deletingConnected ? null : s.connectingConnectionId,
+            connectedConnectionCache: deletingConnected ? null : s.connectedConnectionCache,
+            connectionDrafts: nextDrafts,
             ...(deletingSelected ? {
               ...blankWorkspacePatch(),
               transport: "stdio" as const,
@@ -929,7 +929,7 @@ export const useStore = create<AppState & AppActions>()(
           persistConnectionDraft(draft);
           return {
             transport: t,
-            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+            ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
       setConnectionUrl: (url) =>
@@ -943,7 +943,7 @@ export const useStore = create<AppState & AppActions>()(
           persistConnectionDraft(draft);
           return {
             connectionUrl: url,
-            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+            ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
       setHttpAuth: (auth) =>
@@ -957,7 +957,7 @@ export const useStore = create<AppState & AppActions>()(
           persistConnectionDraft(draft);
           return {
             httpAuth: auth,
-            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+            ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
       setHttpHeaders: (headers) =>
@@ -971,7 +971,7 @@ export const useStore = create<AppState & AppActions>()(
           persistConnectionDraft(draft);
           return {
             httpHeaders: headers,
-            ...buildRequestDraftsPatch(s.selectedRequestId, s.requestDrafts, draft),
+            ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
 
@@ -1011,27 +1011,27 @@ function handleServerMessage(msg: ServerMessage): void {
         timestamp: Date.now(),
       };
 
-      if (!s.connectedRequestCache) {
+      if (!s.connectedConnectionCache) {
         return { logIdCounter: nextLogIdCounter };
       }
 
-      const nextLogs = [...s.connectedRequestCache.logs, nextLog].slice(-500);
-      const nextCache: ConnectedRequestCache = {
-        ...cloneConnectedCache(s.connectedRequestCache),
+      const nextLogs = [...s.connectedConnectionCache.logs, nextLog].slice(-500);
+      const nextCache: ConnectedConnectionCache = {
+        ...cloneConnectedCache(s.connectedConnectionCache),
         logs: nextLogs,
       };
 
-      if (s.selectedRequestId === s.connectedRequestId) {
+      if (s.selectedConnectionId === s.connectedConnectionId) {
         return {
           logIdCounter: nextLogIdCounter,
           logs: nextLogs,
-          connectedRequestCache: nextCache,
+          connectedConnectionCache: nextCache,
         };
       }
 
       return {
         logIdCounter: nextLogIdCounter,
-        connectedRequestCache: nextCache,
+        connectedConnectionCache: nextCache,
       };
     });
   };
@@ -1043,14 +1043,14 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case "connected": {
       const state = useStore.getState();
-      const requestId = state.connectingRequestId ?? state.selectedRequestId;
-      if (!requestId) {
+      const connectionId = state.connectingConnectionId ?? state.selectedConnectionId;
+      if (!connectionId) {
         useStore.setState({ connectionStatus: "connected" });
         return;
       }
 
-      const nextCache: ConnectedRequestCache = {
-        requestId,
+      const nextCache: ConnectedConnectionCache = {
+        connectionId,
         ...createBlankWorkspace(),
         tools: msg.tools,
         prompts: msg.prompts,
@@ -1058,15 +1058,15 @@ function handleServerMessage(msg: ServerMessage): void {
 
       useStore.setState({
         connectionStatus: "connected",
-        connectedRequestId: requestId,
-        connectingRequestId: null,
-        connectedRequestCache: nextCache,
+        connectedConnectionId: connectionId,
+        connectingConnectionId: null,
+        connectedConnectionCache: nextCache,
         serverInfo: msg.serverInfo,
         connectedAt: Date.now(),
         requestCount: 0,
         errorCount: 0,
         latency: 0,
-        ...(state.selectedRequestId === requestId ? requestWorkspacePatch(nextCache) : blankWorkspacePatch()),
+        ...(state.selectedConnectionId === connectionId ? connectionWorkspacePatch(nextCache) : blankWorkspacePatch()),
       });
       addLog("INFO", "protocol", `Connected — ${msg.tools.length} tools, ${msg.prompts.length} prompts`);
       break;
@@ -1077,11 +1077,11 @@ function handleServerMessage(msg: ServerMessage): void {
         connectionStatus: "disconnected",
         connectionConfig: null,
         serverInfo: null,
-        connectedRequestId: null,
-        connectingRequestId: null,
-        connectedRequestCache: null,
+        connectedConnectionId: null,
+        connectingConnectionId: null,
+        connectedConnectionCache: null,
         connectedAt: null,
-        ...(s.selectedRequestId === s.connectedRequestId ? blankWorkspacePatch() : {}),
+        ...(s.selectedConnectionId === s.connectedConnectionId ? blankWorkspacePatch() : {}),
       }));
       break;
 
@@ -1095,7 +1095,7 @@ function handleServerMessage(msg: ServerMessage): void {
     case "result": {
       const completedAt = Date.now();
       useStore.setState((s) => {
-        const startedAt = s.connectedRequestCache?.response.startedAt;
+        const startedAt = s.connectedConnectionCache?.response.startedAt;
         const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
@@ -1122,7 +1122,7 @@ function handleServerMessage(msg: ServerMessage): void {
     case "prompt_result": {
       const completedAt = Date.now();
       useStore.setState((s) => {
-        const startedAt = s.connectedRequestCache?.response.startedAt;
+        const startedAt = s.connectedConnectionCache?.response.startedAt;
         const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
@@ -1150,9 +1150,9 @@ function handleServerMessage(msg: ServerMessage): void {
       if (msg.code === "CONNECTION_FAILED") {
         useStore.setState({
           connectionStatus: "error",
-          connectedRequestId: null,
-          connectingRequestId: null,
-          connectedRequestCache: null,
+          connectedConnectionId: null,
+          connectingConnectionId: null,
+          connectedConnectionCache: null,
           connectionConfig: null,
           serverInfo: null,
           connectedAt: null,
@@ -1162,7 +1162,7 @@ function handleServerMessage(msg: ServerMessage): void {
       } else {
         const errorAt = Date.now();
         useStore.setState((s) => {
-          const startedAt = s.connectedRequestCache?.response.startedAt;
+          const startedAt = s.connectedConnectionCache?.response.startedAt;
           const elapsed = startedAt ? errorAt - startedAt : 0;
           return {
             errorCount: s.errorCount + 1,

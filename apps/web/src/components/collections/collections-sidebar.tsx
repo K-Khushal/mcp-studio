@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { FolderPlus, Search } from 'lucide-react';
 import { toast } from 'sonner';
-import type { SavedRequest } from '@mcp-studio/types';
+import type { Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
 import { CollectionRow } from '@/components/collections/collection-row';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
 
 export function CollectionsSidebar() {
-  const { collections, loadCollections, createCollection, loadSavedRequest, selectedRequestId } = useStore();
+  const { collections, loadCollections, createCollection, loadConnection, selectedConnectionId } = useStore();
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -33,14 +33,14 @@ export function CollectionsSidebar() {
     setIsCreating(false);
   };
 
-  const handleSelectRequest = (req: SavedRequest) => {
-    loadSavedRequest(req);
+  const handleSelectConnection = (conn: Connection) => {
+    loadConnection(conn);
   };
 
   const filtered = collections.filter(
     (c) =>
       c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.requests.some((r) => r.name.toLowerCase().includes(search.toLowerCase()))
+      c.connections.some((r) => r.name.toLowerCase().includes(search.toLowerCase()))
   );
 
   return (
@@ -107,8 +107,8 @@ export function CollectionsSidebar() {
           <CollectionRow
             key={col.id}
             collection={col}
-            selectedRequestId={selectedRequestId}
-            onSelectRequest={handleSelectRequest}
+            selectedConnectionId={selectedConnectionId}
+            onSelectConnection={handleSelectConnection}
           />
         ))}
       </SidebarContent>

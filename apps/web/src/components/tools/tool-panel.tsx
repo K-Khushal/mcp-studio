@@ -9,8 +9,8 @@ import { defaultValue, buildParams, seedValues, getProperties } from './tool-sch
 export default function ToolPanel() {
   const {
     connectionStatus,
-    selectedRequestId,
-    connectedRequestId,
+    selectedConnectionId,
+    connectedConnectionId,
     tools,
     selectedTool,
     toolSearch,
@@ -23,8 +23,8 @@ export default function ToolPanel() {
     invokeTool,
     clearPendingParams,
   } = useStore();
-  const isSelectedRequestConnected =
-    connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
+  const isSelectedConnectionConnected =
+    connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
 
   useEffect(() => {
     if (!selectedTool) {
@@ -55,10 +55,10 @@ export default function ToolPanel() {
     invokeTool(selectedTool.name, buildParams(selectedTool.inputSchema, toolFormValues)).catch(console.error);
   }, [selectedTool, toolFormValues, invokeTool]);
 
-  if (!isSelectedRequestConnected) {
+  if (!isSelectedConnectionConnected) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-        Connect to this request to load tools
+        Connect to load tools
       </div>
     );
   }

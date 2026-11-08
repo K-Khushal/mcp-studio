@@ -85,8 +85,8 @@ function PromptList({ prompts, selectedPromptName, search, onSearch, onSelect }:
 export function PromptPanel() {
   const {
     connectionStatus,
-    selectedRequestId,
-    connectedRequestId,
+    selectedConnectionId,
+    connectedConnectionId,
     prompts,
     selectedPrompt,
     promptSearch,
@@ -106,13 +106,13 @@ export function PromptPanel() {
     invokePrompt(selectedPrompt.name, promptArgValues).catch(console.error);
   }, [selectedPrompt, promptArgValues, invokePrompt]);
 
-  const isSelectedRequestConnected =
-    connectionStatus === 'connected' && selectedRequestId === connectedRequestId;
+  const isSelectedConnectionConnected =
+    connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
 
-  if (!isSelectedRequestConnected) {
+  if (!isSelectedConnectionConnected) {
     return (
       <div className="flex items-center justify-center h-40 text-muted-foreground text-sm">
-        Connect to this request to load prompts
+        Connect to load prompts
       </div>
     );
   }

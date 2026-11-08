@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Plus, FileText, Trash2, Pencil } from 'lucide-react';
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
-import { AddRequestDialog } from './add-request-dialog';
+import { AddConnectionDialog } from './add-connection-dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -14,22 +14,22 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
-import type { Collection, SavedRequest } from '@mcp-studio/types';
+import type { Collection, Connection } from '@mcp-studio/types';
 
 interface CollectionRowProps {
   collection: Collection;
-  selectedRequestId: string | null;
-  onSelectRequest: (req: SavedRequest) => void;
+  selectedConnectionId: string | null;
+  onSelectConnection: (conn: Connection) => void;
 }
 
-export function CollectionRow({ collection, selectedRequestId, onSelectRequest }: CollectionRowProps) {
-  const { renameCollection, deleteCollection, deleteRequest } = useStore();
+export function CollectionRow({ collection, selectedConnectionId, onSelectConnection }: CollectionRowProps) {
+  const { renameCollection, deleteCollection, deleteConnection } = useStore();
   const [expanded, setExpanded] = useState(true);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(collection.name);
   const [addOpen, setAddOpen] = useState(false);
   const [confirmDeleteCollection, setConfirmDeleteCollection] = useState(false);
-  const [confirmDeleteReqId, setConfirmDeleteReqId] = useState<string | null>(null);
+  const [confirmDeleteConnId, setConfirmDeleteConnId] = useState<string | null>(null);
   const renameRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -51,12 +51,12 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
     toast.success(`Collection "${collection.name}" deleted`);
   };
 
-  const handleDeleteRequest = async (req: SavedRequest) => {
-    await deleteRequest(collection.id, req.id);
-    toast.success(`Request "${req.name}" deleted`);
+  const handleDeleteConnection = async (conn: Connection) => {
+    await deleteConnection(collection.id, conn.id);
+    toast.success(`Connection "${conn.name}" deleted`);
   };
 
-  const confirmReq = collection.requests.find((r) => r.id === confirmDeleteReqId);
+  const confirmConn = collection.connections.find((r) => r.id === confirmDeleteConnId);
 
   return (
     <div>
@@ -92,7 +92,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
         <div className="flex items-center gap-0.5 opacity-0 transition-opacity shrink-0 group-hover/collection:opacity-100">
           <button
             onClick={() => setAddOpen(true)}
-            title="Add request"
+            title="Add Connection"
             className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
           >
             <Plus size={12} />
@@ -115,33 +115,33 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
       </div>
 
       {expanded &&
-        collection.requests.map((req) => (
+        collection.connections.map((conn) => (
           <div
-            key={req.id}
+            key={conn.id}
             className={cn(
-              'group/request flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer',
-              selectedRequestId === req.id
+              'group/connection flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer',
+              selectedConnectionId === conn.id
                 ? 'bg-primary/10 text-primary'
                 : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
             )}
-            onClick={() => onSelectRequest(req)}
+            onClick={() => onSelectConnection(conn)}
           >
             <FileText size={11} className="shrink-0" />
-            <span className="flex-1 min-w-0 text-xs truncate">{req.name}</span>
+            <span className="flex-1 min-w-0 text-xs truncate">{conn.name}</span>
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                setConfirmDeleteReqId(req.id);
+                setConfirmDeleteConnId(conn.id);
               }}
-              title="Delete request"
-              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive transition-all group-hover/request:opacity-100"
+              title="Delete Connection"
+              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive transition-all group-hover/connection:opacity-100"
             >
               <Trash2 size={11} />
             </button>
           </div>
         ))}
 
-      <AddRequestDialog
+      <AddConnectionDialog
         collection={collection}
         open={addOpen}
         onClose={() => setAddOpen(false)}
@@ -153,7 +153,7 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
           <AlertDialogHeader>
             <AlertDialogTitle className="text-sm">Delete collection?</AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground">
-              "{collection.name}" and all its requests will be permanently deleted.
+              "{collection.name}" and all its Connections will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -168,23 +168,23 @@ export function CollectionRow({ collection, selectedRequestId, onSelectRequest }
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Confirm delete request */}
+      {/* Confirm delete Connection */}
       <AlertDialog
-        open={confirmDeleteReqId !== null}
-        onOpenChange={(open) => !open && setConfirmDeleteReqId(null)}
+        open={confirmDeleteConnId !== null}
+        onOpenChange={(open) => !open && setConfirmDeleteConnId(null)}
       >
         <AlertDialogContent className="bg-card border-border">
           <AlertDialogHeader>
-            <AlertDialogTitle className="text-sm">Delete request?</AlertDialogTitle>
+            <AlertDialogTitle className="text-sm">Delete Connection?</AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground">
-              "{confirmReq?.name}" will be permanently deleted.
+              "{confirmConn?.name}" will be permanently deleted.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="text-xs h-8 bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => confirmReq && handleDeleteRequest(confirmReq)}
+              onClick={() => confirmConn && handleDeleteConnection(confirmConn)}
             >
               Delete
             </AlertDialogAction>

@@ -1,7 +1,7 @@
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { SessionManager } from "./session/manager.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
-import { createRequest, deleteRequest, updateRequest } from "./db/queries/requests.js";
+import { createConnection, deleteConnection, updateConnection } from "./db/queries/connections.js";
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
@@ -53,25 +53,25 @@ const server = Bun.serve<{ session: SessionManager | null }>({
     }
 
     // ---------------------------------------------------------------------------
-    // Requests
+    // Connections
     // ---------------------------------------------------------------------------
-    const requestsMatch = url.pathname.match(/^\/collections\/([^/]+)\/requests$/);
-    if (requestsMatch && req.method === "POST") {
-      const collectionId = requestsMatch[1]!;
-      const body = (await req.json()) as Parameters<typeof createRequest>[1];
-      return json(await createRequest(collectionId, body), 201);
+    const connectionsMatch = url.pathname.match(/^\/collections\/([^/]+)\/connections$/);
+    if (connectionsMatch && req.method === "POST") {
+      const collectionId = connectionsMatch[1]!;
+      const body = (await req.json()) as Parameters<typeof createConnection>[1];
+      return json(await createConnection(collectionId, body), 201);
     }
 
-    const requestMatch = url.pathname.match(/^\/collections\/([^/]+)\/requests\/([^/]+)$/);
-    if (requestMatch) {
-      const reqId = requestMatch[2]!;
+    const connectionMatch = url.pathname.match(/^\/collections\/([^/]+)\/connections\/([^/]+)$/);
+    if (connectionMatch) {
+      const connId = connectionMatch[2]!;
       if (req.method === "PATCH") {
-        const body = (await req.json()) as Parameters<typeof updateRequest>[1];
-        await updateRequest(reqId, body);
+        const body = (await req.json()) as Parameters<typeof updateConnection>[1];
+        await updateConnection(connId, body);
         return json({ ok: true });
       }
       if (req.method === "DELETE") {
-        await deleteRequest(reqId);
+        await deleteConnection(connId);
         return json({ ok: true });
       }
     }

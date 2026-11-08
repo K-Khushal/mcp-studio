@@ -17,8 +17,8 @@ src/
 ├── pages/                 # route entry
 ├── views/                 # top-level view shells
 ├── components/
-│   ├── connection/        # request header + transport/url controls
-│   ├── collections/       # sidebar + request CRUD
+│   ├── connection/        # connection header + transport/url controls
+│   ├── collections/       # sidebar + connection CRUD
 │   ├── tools/             # tool list + schema form + run
 │   ├── prompts/           # prompt list + args + run
 │   ├── response/          # response panel (see below)
@@ -86,24 +86,24 @@ Tool execution errors (`isError: true` in `CallToolResult`) show a red banner ab
 
 Single Zustand store in `src/store/index.ts`.
 
-Two request identities matter:
+Two connection identities matter:
 
-- `selectedRequestId`: request user currently viewing/editing
-- `connectedRequestId`: request with active live MCP session
+- `selectedConnectionId`: connection user currently viewing/editing
+- `connectedConnectionId`: connection with active live MCP session
 
 These can differ.
 
 Example:
 
-- Request A connected
-- user selects Request B
+- Connection A connected
+- user selects Connection B
 - UI shows B name + B saved connection fields
 - status bar still shows A as connected
 - tools/prompts/response/logs for B stay blank
 
 ## What Persists
 
-Saved per request in DB:
+Saved per connection in DB:
 
 - `name`
 - `connectionConfig`
@@ -118,32 +118,32 @@ Not saved in DB:
 - selected tool/prompt
 - tool form values
 
-Live workspace is memory-only and only for the currently connected request.
+Live workspace is memory-only and only for the currently connected connection.
 
-## Request Behavior
+## Connection Behavior
 
-Selecting a request:
+Selecting a connection:
 
-- loads that request's saved transport/url into connection panel
-- sets `selectedRequestId`
-- if selected request is also connected request, restores its live in-memory workspace
-- otherwise shows blank request workspace
+- loads that connection's saved transport/url into connection panel
+- sets `selectedConnectionId`
+- if selected connection is also connected connection, restores its live in-memory workspace
+- otherwise shows blank connection workspace
 
-Clicking same selected request again:
+Clicking same selected connection again:
 
 - no-op
 - do not deselect
 
 ## Connection Behavior
 
-Panel always reflects selected request, not connected request.
+Panel always reflects selected connection, not connected connection.
 
-Status bar always reflects connected request, not selected request.
+Status bar always reflects connected connection, not selected connection.
 
 Button behavior:
 
-- selected request connected: button means `Disconnect`
-- selected request not connected: button means `Connect`
+- selected connection connected: button means `Disconnect`
+- selected connection not connected: button means `Connect`
 
 Connect flow when A connected and B selected:
 
@@ -151,18 +151,18 @@ Connect flow when A connected and B selected:
 2. clear current live workspace UI immediately
 3. disconnect A
 4. connect using B staged transport/url
-5. on success: set `connectedRequestId = B`, load B tools/prompts
+5. on success: set `connectedConnectionId = B`, load B tools/prompts
 6. on failure: nothing connected, B remains selected
 
 Manual disconnect:
 
 - clears live tools/prompts/response/timeline/logs
-- clears connected request cache
-- keeps selected request + its saved connection fields
+- clears connected connection cache
+- keeps selected connection + its saved connection fields
 
-## Request Workspace Rules
+## Connection Workspace Rules
 
-Only connected request can show live MCP data:
+Only connected connection can show live MCP data:
 
 - tools
 - prompts
@@ -186,13 +186,13 @@ If user disconnects A:
 
 ## Connection Field Persistence
 
-Connection type/url edits are request-scoped.
+Connection type/url edits are connection-scoped.
 
 Behavior:
 
-- editing selected request fields updates in-memory draft immediately
-- draft also PATCHed to request record
-- reload restores saved request connection fields from DB
+- editing selected connection fields updates in-memory draft immediately
+- draft also PATCHed to connection record
+- reload restores saved connection fields from DB
 
 This is why connection string no longer disappears on refresh.
 
@@ -202,12 +202,12 @@ Connection/runtime:
 
 - `connectionStatus`
 - `connectionConfig`
-- `connectedRequestId`
-- `connectingRequestId`
-- `connectedRequestCache`
+- `connectedConnectionId`
+- `connectingConnectionId`
+- `connectedConnectionCache`
 - `connectedAt`
 
-Selected request workspace:
+Selected connection workspace:
 
 - `tools`
 - `prompts`
@@ -223,110 +223,110 @@ Selected request workspace:
 Collections:
 
 - `collections`
-- `selectedRequestId`
-- `requestDrafts`
+- `selectedConnectionId`
+- `connectionDrafts`
 
 ## Key Actions
 
-- `loadSavedRequest(req)`
-  - selects request
+- `loadConnection(connection)`
+  - selects connection
   - loads saved connection fields
-  - restores connected workspace only if same request is live
+  - restores connected workspace only if same connection is live
 
 - `connect(config)`
-  - switches live connection to selected request
+  - switches live connection to selected connection
 
 - `disconnect()`
   - ends live connection
-  - clears live request workspace
+  - clears live connection workspace
 
 - `setTransport(t)` / `setConnectionUrl(url)`
-  - update selected request draft
+  - update selected connection draft
   - persist draft locally
-  - request record persisted from connection panel layer
+  - connection record persisted from connection panel layer
 
 - `selectTool(tool)` / `selectPrompt(prompt)`
   - update visible workspace
-  - sync into connected request cache if selected request is live
+  - sync into connected connection cache if selected connection is live
 
 ## Data Flows
 
-### Request Selection
+### Connection Selection
 
 ```text
 Sidebar click
-  → store.loadSavedRequest(req)
-  → selectedRequestId = req.id
+  → store.loadConnection(connection)
+  → selectedConnectionId = connection.id
   → load req connectionConfig into panel
-  → if req.id === connectedRequestId
+  → if connection.id === connectedConnectionId
       restore cached live workspace
     else
       blank workspace
 ```
 
-### Connect Selected Request
+### Connect Selected Connection
 
 ```text
 ConnectionPanel.handleConnect()
-  → build ConnectionConfig from selected request fields
+  → build ConnectionConfig from selected connection fields
   → store.connect(config)
   → clear live workspace
   → disconnect old session if any
-  → WS connect for selected request
+  → WS connect for selected connection
   → server sends connected
-  → store sets connectedRequestId
-  → tools/prompts visible only for that request
+  → store sets connectedConnectionId
+  → tools/prompts visible only for that connection
 ```
 
 ### Tool Invocation
 
 ```text
 Run Tool
-  → allowed only when selectedRequestId === connectedRequestId
+  → allowed only when selectedConnectionId === connectedConnectionId
   → store.invokeTool()
   → transport.invoke()
-  → server messages update connected request cache
-  → if selected request is live one, visible workspace updates too
+  → server messages update connected connection cache
+  → if selected connection is live one, visible workspace updates too
 ```
 
 ## Important Components
 
 - `src/pages/home.tsx`
   - page shell
-  - shows studio only when a request is selected
+  - shows studio only when a connection is selected
 
 - `src/components/connection/connection-panel.tsx`
-  - selected request title
+  - selected connection title
   - transport/url inputs
   - connect/disconnect button
-  - persists request connection config
+  - persists connection config
 
 - `src/components/tools/tool-panel.tsx`
-  - visible only for selected connected request
+  - visible only for selected connected connection
   - tool form values synced into store
 
 - `src/components/prompts/prompt-panel.tsx`
-  - visible only for selected connected request
+  - visible only for selected connected connection
 
 - `src/components/response/response-panel.tsx`
-  - request-scoped response/timeline
+  - connection-scoped response/timeline
   - understands MCP content block types
 
 - `src/components/logs/logs-panel.tsx`
-  - request-scoped console
+  - connection-scoped console
 
 - `src/components/shell/status-bar.tsx`
-  - shows connected request name + runtime status
+  - shows connected connection name + runtime status
 
 ## Tests
 
 Current tests cover:
 
-- request rename
-- request connection config updates
-- request selection behavior
-- blank workspace when switching away from connected request
-- restoring connected request workspace when switching back
+- connection rename
+- connection config updates
+- connection selection behavior
+- blank workspace when switching away from connected connection
+- restoring connected connection workspace when switching back
 - environment store behavior
 
 Frontend tests: `src/__tests__/*`

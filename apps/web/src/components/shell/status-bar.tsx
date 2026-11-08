@@ -50,12 +50,12 @@ export function StatusBar() {
   const errorCount       = useStore((s) => s.errorCount);
   const connectedAt      = useStore((s) => s.connectedAt);
 
-  // Derive request name in a single selector — returns a string (primitive)
+  // Derive Connection name in a single selector — returns a string (primitive)
   // so Zustand only re-renders if the name itself changes.
-  const connectedRequestName = useStore((s) => {
-    if (!s.connectedRequestId) return null;
+  const connectedConnectionName = useStore((s) => {
+    if (!s.connectedConnectionId) return null;
     for (const c of s.collections) {
-      const r = c.requests.find((r) => r.id === s.connectedRequestId);
+      const r = c.connections.find((r) => r.id === s.connectedConnectionId);
       if (r) return r.name;
     }
     return null;
@@ -80,11 +80,11 @@ export function StatusBar() {
 
   return (
     <div className="flex items-center h-7 px-4 border-t border-border bg-background text-[11px] text-muted-foreground gap-4 shrink-0">
-      {/* Active request name */}
-      {connectedRequestName && (
+      {/* Active Connection name */}
+      {connectedConnectionName && (
         <div className="flex items-center gap-1 min-w-0">
           <FileText size={11} className="shrink-0" />
-          <span className="font-mono truncate max-w-35">{connectedRequestName}</span>
+          <span className="font-mono truncate max-w-35">{connectedConnectionName}</span>
         </div>
       )}
 

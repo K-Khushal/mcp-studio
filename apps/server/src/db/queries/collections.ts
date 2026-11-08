@@ -1,19 +1,19 @@
 import { eq } from "drizzle-orm";
 import { db } from "../index.js";
-import { collections, requests } from "../schema.js";
+import { collections, connections } from "../schema.js";
 import { nanoid } from "../../utils/nanoid.js";
-import type { Collection, SavedRequest } from "@mcp-studio/types";
+import type { Collection, Connection } from "@mcp-studio/types";
 
 export async function getAllCollections(): Promise<Collection[]> {
-  const [cols, reqs] = await Promise.all([
+  const [cols, conns] = await Promise.all([
     db.select().from(collections).orderBy(collections.createdAt),
-    db.select().from(requests).orderBy(requests.createdAt),
+    db.select().from(connections).orderBy(connections.createdAt),
   ]);
 
-  // Group requests by collectionId in O(n) instead of O(n×m) filter loop
-  const reqsByCollection = new Map<string, SavedRequest[]>();
-  for (const r of reqs) {
-    const list = reqsByCollection.get(r.collectionId) ?? [];
+  // Group connections by collectionId in O(n) instead of O(n×m) filter loop
+  const connsByCollection = new Map<string, Connection[]>();
+  for (const r of conns) {
+    const list = connsByCollection.get(r.collectionId) ?? [];
     list.push({
       id: r.id,
       collectionId: r.collectionId,
@@ -22,7 +22,7 @@ export async function getAllCollections(): Promise<Collection[]> {
       createdAt: r.createdAt,
       updatedAt: r.updatedAt,
     });
-    reqsByCollection.set(r.collectionId, list);
+    connsByCollection.set(r.collectionId, list);
   }
 
   return cols.map((col) => ({
@@ -30,7 +30,7 @@ export async function getAllCollections(): Promise<Collection[]> {
     name: col.name,
     createdAt: col.createdAt,
     updatedAt: col.updatedAt,
-    requests: reqsByCollection.get(col.id) ?? [],
+    connections: connsByCollection.get(col.id) ?? [],
   }));
 }
 
@@ -38,7 +38,7 @@ export async function createCollection(name: string): Promise<Collection> {
   const now = Date.now();
   const id = nanoid();
   await db.insert(collections).values({ id, name, createdAt: now, updatedAt: now });
-  return { id, name, createdAt: now, updatedAt: now, requests: [] };
+  return { id, name, createdAt: now, updatedAt: now, connections: [] };
 }
 
 export async function updateCollection(id: string, name: string): Promise<void> {
