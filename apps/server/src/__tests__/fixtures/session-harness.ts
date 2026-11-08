@@ -1,5 +1,6 @@
 import type { ClientMessage, ServerMessage } from "@mcp-studio/types";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
+import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { SessionManager } from "../../session/manager";
 import { createProtocolServer } from "./protocol-server";
 
@@ -51,18 +52,35 @@ export const stdioFixture: ClientMessage = {
 
 /** Real SDK Streamable HTTP on an OS-assigned loopback port. Legacy SSE is stubbed (501). */
 export async function startHTTPFixture() {
-  const protocol = createProtocolServer();
-  const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: () => crypto.randomUUID() });
-  await protocol.connect(transport);
+  const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
+  const protocols = new Set<ReturnType<typeof createProtocolServer>>();
   const versions: (string | null)[] = [];
-  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch(request) {
+  const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     if (new URL(request.url).pathname === "/sse") return new Response("Legacy SSE fixture not implemented", { status: 501 });
     versions.push(request.headers.get("mcp-protocol-version"));
+    const sessionId = request.headers.get("mcp-session-id");
+    if (sessionId) {
+      const transport = sessions.get(sessionId);
+      return transport ? transport.handleRequest(request) : new Response("Unknown session", { status: 404 });
+    }
+    const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+    if (!isInitializeRequest(body)) return new Response("Expected initialize", { status: 400 });
+    const protocol = createProtocolServer();
+    const transport = new WebStandardStreamableHTTPServerTransport({
+      sessionIdGenerator: () => crypto.randomUUID(),
+      onsessioninitialized: id => { sessions.set(id, transport); },
+      onsessionclosed: id => { sessions.delete(id); },
+    });
+    protocols.add(protocol);
+    await protocol.connect(transport);
     return transport.handleRequest(request);
   } });
   return {
     connection: { type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } } satisfies ClientMessage,
     versions,
-    async close() { await protocol.close(); await server.stop(true); },
+    async close() {
+      await Promise.all([...protocols].map(protocol => protocol.close()));
+      await server.stop(true);
+    },
   };
 }

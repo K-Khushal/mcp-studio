@@ -10,7 +10,7 @@ for (const transport of ["stdio", "http"] as const) {
       const connected = await session.waitFor("connected");
       expect(connected).toMatchObject({ serverInfo: { name: "protocol-fixture" } });
       expect(connected.protocolVersion).toMatch(/^202[5-9]-\d{2}-\d{2}$/);
-      if (http) expect(http.versions.slice(1)).toContain(connected.protocolVersion!);
+
       await session.send({ type: "list_tools" });
       expect((await session.waitFor("tools_listed")).tools.map(t => t.name)).toEqual([
         "echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash",
@@ -25,6 +25,10 @@ for (const transport of ["stdio", "http"] as const) {
       expect(await session.waitFor("prompt_result")).toMatchObject({ messages: [{ role: "user", content: { type: "text", text: "Hello, Ada!" } }] });
       await session.send({ type: "disconnect" });
       expect(await session.waitFor("disconnected")).toEqual({ type: "disconnected" });
+      if (http) {
+        expect(http.versions.slice(1).length).toBeGreaterThan(0);
+        expect(http.versions.slice(1).every(v => v === connected.protocolVersion)).toBe(true);
+      }
     } finally {
       await session.close();
       await http?.close();
@@ -43,5 +47,23 @@ test("Session harness waits for future messages and times out missing messages",
     await expect(session.waitFor("ERROR", undefined, 10)).rejects.toThrow("Timed out awaiting ERROR");
   } finally {
     await session.close();
+  }
+});
+
+test("Session connects again after disconnecting over HTTP", async () => {
+  const http = await startHTTPFixture();
+  const session = new SessionHarness();
+  try {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await session.send(http.connection);
+      expect(await session.waitFor("connected")).toMatchObject({ serverInfo: { name: "protocol-fixture" } });
+      await session.send({ type: "invoke", tool: "echo", params: { text: "reconnected" } });
+      expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ type: "text", text: "reconnected" }] } });
+      await session.send({ type: "disconnect" });
+      await session.waitFor("disconnected");
+    }
+  } finally {
+    await session.close();
+    await http.close();
   }
 });
