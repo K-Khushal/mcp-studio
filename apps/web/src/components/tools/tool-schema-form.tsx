@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useId, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useId, useState } from 'react';
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -167,9 +167,43 @@ function ArrayControl({
   value,
   onChange,
 }: Pick<FieldProps, 'prop' | 'value' | 'onChange'> & { label: string }) {
+  const id = useId();
+  const report = useContext(FieldValidityContext);
   const items = prop.items!;
   const list = Array.isArray(value) ? value : [];
   const itemKind = fieldKind(items, 1);
+  // Indices of items the user emptied that have no valid value (a cleared number or select).
+  // `list` keeps its last valid value there, but Run stays blocked until it is corrected or removed.
+  const [blanks, setBlanks] = useState<ReadonlySet<number>>(new Set());
+  const hasBlanks = blanks.size > 0;
+
+  useEffect(() => {
+    report(id, !hasBlanks);
+  }, [report, id, hasBlanks]);
+  useEffect(() => () => report(id, true), [report, id]);
+
+  const setBlank = (index: number, blank: boolean) =>
+    setBlanks((prev) => {
+      if (prev.has(index) === blank) return prev;
+      const next = new Set(prev);
+      if (blank) next.add(index);
+      else next.delete(index);
+      return next;
+    });
+
+  const setItem = (index: number, next: unknown) => {
+    // Clearing a text item leaves an empty string; any other item has no empty value.
+    const cleared = next === undefined;
+    const emptyText = cleared && itemKind === 'string';
+    setBlank(index, cleared && !emptyText);
+    if (cleared && !emptyText) return;
+    onChange(list.map((x, j) => (j === index ? (emptyText ? '' : next) : x)));
+  };
+
+  const removeItem = (index: number) => {
+    setBlanks(new Set([...blanks].filter((b) => b !== index).map((b) => (b > index ? b - 1 : b))));
+    onChange(list.filter((_, j) => j !== index));
+  };
 
   return (
     <div className="flex flex-col gap-1.5">
@@ -179,9 +213,10 @@ function ArrayControl({
           label={`${label} item ${i + 1}`}
           prop={items}
           kind={itemKind}
-          value={item}
-          onChange={(next) => onChange(list.map((x, j) => (j === i ? (next === undefined ? null : next) : x)))}
-          onRemove={() => onChange(list.filter((_, j) => j !== i))}
+          value={blanks.has(i) ? undefined : item}
+          blank={blanks.has(i)}
+          onChange={(next) => setItem(i, next)}
+          onRemove={() => removeItem(i)}
         />
       ))}
       <Button
@@ -204,16 +239,33 @@ function ArrayItem({
   prop,
   kind,
   value,
+  blank,
   onChange,
   onRemove,
 }: Pick<PrimitiveControlProps, 'label' | 'prop' | 'kind' | 'value' | 'onChange'> & {
+  blank: boolean;
   onRemove: () => void;
 }) {
   const id = useId();
+  const errorId = useId();
   return (
     <div className="flex items-center gap-1.5">
-      <div className="flex-1 min-w-0 flex flex-col">
-        <PrimitiveControl id={id} label={label} prop={prop} kind={kind} value={value} onChange={onChange} />
+      <div className="flex-1 min-w-0 flex flex-col gap-1">
+        <PrimitiveControl
+          id={id}
+          label={label}
+          prop={prop}
+          kind={kind}
+          value={value}
+          onChange={onChange}
+          invalid={blank}
+          describedBy={blank ? errorId : undefined}
+        />
+        {blank && (
+          <p id={errorId} role="alert" className="text-[11px] text-destructive">
+            Enter a value or remove this item
+          </p>
+        )}
       </div>
       <Button
         type="button"
@@ -235,9 +287,21 @@ interface PrimitiveControlProps {
   kind: FieldKind;
   value: unknown;
   onChange: (value: unknown) => void;
+  invalid?: boolean;
+  describedBy?: string | undefined;
 }
 
-function PrimitiveControl({ id, label, prop, kind, value, onChange }: PrimitiveControlProps) {
+function PrimitiveControl({
+  id,
+  label,
+  prop,
+  kind,
+  value,
+  onChange,
+  invalid,
+  describedBy,
+}: PrimitiveControlProps) {
+  const aria = { 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy };
   if (kind === 'enum') {
     const options = prop.enum ?? [];
     const index = options.findIndex((o) => o === value);
@@ -245,6 +309,7 @@ function PrimitiveControl({ id, label, prop, kind, value, onChange }: PrimitiveC
       <select
         id={id}
         aria-label={label}
+        {...aria}
         value={index === -1 ? '' : String(index)}
         onChange={(e) => onChange(e.target.value === '' ? undefined : options[Number(e.target.value)])}
         className={SELECT_CLASS}
@@ -252,7 +317,7 @@ function PrimitiveControl({ id, label, prop, kind, value, onChange }: PrimitiveC
         <option value="">—</option>
         {options.map((option, i) => (
           <option key={i} value={i}>
-            {String(option)}
+            {typeof option === 'string' ? option : JSON.stringify(option)}
           </option>
         ))}
       </select>
@@ -263,6 +328,7 @@ function PrimitiveControl({ id, label, prop, kind, value, onChange }: PrimitiveC
       <select
         id={id}
         aria-label={label}
+        {...aria}
         value={typeof value === 'boolean' ? String(value) : ''}
         onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value === 'true')}
         className={SELECT_CLASS}
@@ -274,12 +340,13 @@ function PrimitiveControl({ id, label, prop, kind, value, onChange }: PrimitiveC
     );
   }
   if (kind === 'number') {
-    return <NumberInput id={id} label={label} prop={prop} value={value} onChange={onChange} />;
+    return <NumberInput id={id} label={label} prop={prop} value={value} onChange={onChange} aria={aria} />;
   }
   return (
     <Input
       id={id}
       aria-label={label}
+      {...aria}
       value={typeof value === 'string' ? value : ''}
       onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
       placeholder={prop.default !== undefined ? String(prop.default) : ''}
@@ -295,7 +362,10 @@ function NumberInput({
   prop,
   value,
   onChange,
-}: Pick<PrimitiveControlProps, 'id' | 'label' | 'prop' | 'value' | 'onChange'>) {
+  aria,
+}: Pick<PrimitiveControlProps, 'id' | 'label' | 'prop' | 'value' | 'onChange'> & {
+  aria: Record<string, unknown>;
+}) {
   const [draft, setDraft] = useState<string | null>(null);
   const shown =
     draft !== null && (draft === '' ? value === undefined : Number(draft) === value)
@@ -310,6 +380,7 @@ function NumberInput({
     <Input
       id={id}
       aria-label={label}
+      {...aria}
       type="number"
       step={prop.type === 'integer' ? 1 : 'any'}
       value={shown}

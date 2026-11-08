@@ -66,71 +66,12 @@ export function fieldKind(prop: SchemaProperty, depth = 0): FieldKind {
   return 'string';
 }
 
-export function defaultValue(prop: SchemaProperty): string {
-  if (prop.default !== undefined) {
-    return typeof prop.default === 'object' && prop.default !== null
-      ? JSON.stringify(prop.default)
-      : String(prop.default);
+/** Arguments a fresh form starts with: schema defaults, and `false` for booleans. */
+export function initialArgs(schema: Record<string, unknown>): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(getProperties(schema))) {
+    if (prop.default !== undefined) args[key] = prop.default;
+    else if (resolveType(prop) === 'boolean') args[key] = false;
   }
-  return resolveType(prop) === 'boolean' ? 'false' : '';
-}
-
-/** Store values (strings, complex ones as JSON) → Call arguments. Empty values are omitted. */
-export function buildParams(
-  schema: Record<string, unknown>,
-  values: Record<string, string>
-): Record<string, unknown> {
-  const properties = getProperties(schema);
-  const result: Record<string, unknown> = {};
-
-  for (const [key, raw] of Object.entries(values)) {
-    if (raw === '' || raw === undefined) continue;
-    const prop = properties[key];
-    if (!prop) {
-      result[key] = parseJsonOr(raw, raw);
-      continue;
-    }
-    const type = resolveType(prop);
-
-    if (type === 'number' || type === 'integer') {
-      const n = Number(raw);
-      result[key] = isNaN(n) ? raw : n;
-    } else if (type === 'boolean') {
-      result[key] = raw === 'true' ? true : raw === 'false' ? false : raw;
-    } else if (type === 'object' || type === 'array') {
-      result[key] = parseJsonOr(raw, raw);
-    } else {
-      result[key] = raw;
-    }
-  }
-
-  return result;
-}
-
-/** Call arguments → store values. Inverse of buildParams. */
-export function seedValues(
-  schema: Record<string, unknown>,
-  params: Record<string, unknown>
-): Record<string, string> {
-  const properties = getProperties(schema);
-  const seeded: Record<string, string> = {};
-  for (const [key, val] of Object.entries(params)) {
-    if (val === undefined) continue;
-    const prop = properties[key];
-    const type = prop ? resolveType(prop) : undefined;
-    const matchesPrimitive =
-      (type === 'string' && typeof val === 'string') ||
-      ((type === 'number' || type === 'integer') && typeof val === 'number') ||
-      (type === 'boolean' && typeof val === 'boolean');
-    seeded[key] = matchesPrimitive ? String(val) : typeof val === 'string' && prop ? val : JSON.stringify(val);
-  }
-  return seeded;
-}
-
-function parseJsonOr<T>(raw: string, fallback: T): unknown {
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return fallback;
-  }
+  return args;
 }

@@ -4,7 +4,7 @@ import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { ToolList } from './tool-list';
 import { ToolArgsEditor } from './tool-args-editor';
-import { defaultValue, buildParams, seedValues, getProperties } from './tool-schema-helpers';
+import { initialArgs } from './tool-schema-helpers';
 
 export default function ToolPanel() {
   const {
@@ -34,22 +34,18 @@ export default function ToolPanel() {
       return;
     }
     if (Object.keys(toolFormValues).length > 0) return;
-    const defaults: Record<string, string> = {};
-    for (const [key, prop] of Object.entries(getProperties(selectedTool.inputSchema))) {
-      defaults[key] = defaultValue(prop);
-    }
-    setToolFormValues(defaults);
+    setToolFormValues(initialArgs(selectedTool.inputSchema));
   }, [selectedTool?.name, setToolFormValues]);
 
   useEffect(() => {
     if (!pendingParams || !selectedTool) return;
-    setToolFormValues({ ...toolFormValues, ...seedValues(selectedTool.inputSchema, pendingParams) });
+    setToolFormValues({ ...toolFormValues, ...pendingParams });
     clearPendingParams();
   }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
 
   const handleInvoke = useCallback(() => {
     if (!selectedTool) return;
-    invokeTool(selectedTool.name, buildParams(selectedTool.inputSchema, toolFormValues)).catch(console.error);
+    invokeTool(selectedTool.name, toolFormValues).catch(console.error);
   }, [selectedTool, toolFormValues, invokeTool]);
 
   if (!isSelectedConnectionConnected) {
@@ -88,7 +84,7 @@ export default function ToolPanel() {
             <ToolArgsEditor
               key={selectedTool.name}
               schema={selectedTool.inputSchema}
-              values={toolFormValues}
+              args={toolFormValues}
               onChange={setToolFormValues}
               onValidChange={setArgsValid}
             />

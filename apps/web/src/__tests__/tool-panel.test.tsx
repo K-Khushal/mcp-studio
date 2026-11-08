@@ -84,4 +84,46 @@ describe("ToolPanel Run", () => {
 
     expect(await screen.findByRole("button", { name: /run tool/i })).toBeEnabled();
   });
+
+  it("sends explicit empty strings and nulls from the JSON view unchanged", async () => {
+    const typed: MCPTool = {
+      name: "find",
+      description: "",
+      inputSchema: {
+        type: "object",
+        properties: { query: { type: "string" }, limit: { type: ["integer", "null"] } },
+      },
+    };
+    useStore.setState({ selectedTool: typed, tools: [typed] });
+    render(<ToolPanel />);
+    await userEvent.click(screen.getByRole("button", { name: "JSON" }));
+    const editor = screen.getByRole("textbox", { name: /arguments json/i });
+    await userEvent.clear(editor);
+    await userEvent.click(editor);
+    await userEvent.paste('{"query":"","limit":null}');
+    await userEvent.click(screen.getByRole("button", { name: "Form" }));
+    await userEvent.click(screen.getByRole("button", { name: /run tool/i }));
+
+    expect(invokeTool).toHaveBeenCalledWith("find", { query: "", limit: null });
+  });
+
+  it("disables Run while an integer array item is blank", async () => {
+    const ids: MCPTool = {
+      name: "sum",
+      description: "",
+      inputSchema: {
+        type: "object",
+        properties: { ids: { type: "array", items: { type: "integer" } } },
+      },
+    };
+    useStore.setState({ selectedTool: ids, tools: [ids] });
+    render(<ToolPanel />);
+    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "4");
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
+
+    expect(screen.getByRole("button", { name: /run tool/i })).toBeDisabled();
+    await userEvent.click(screen.getByRole("button", { name: "Remove ids item 1" }));
+    expect(screen.getByRole("button", { name: /run tool/i })).toBeEnabled();
+  });
 });

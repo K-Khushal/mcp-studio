@@ -4,12 +4,11 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { ToolArgsEditor } from "../components/tools/tool-args-editor";
-import { buildParams } from "../components/tools/tool-schema-helpers";
 
 type Schema = Record<string, unknown>;
 
-/** Stateful host mirroring ToolPanel: string-valued store, args derived via buildParams. */
-function renderEditor(schema: Schema, initial: Record<string, string> = {}) {
+/** Stateful host mirroring ToolPanel: the store holds the Call arguments. */
+function renderEditor(schema: Schema, initial: Record<string, unknown> = {}) {
   const onValidChange = vi.fn();
   const latest = { values: initial };
   function Host() {
@@ -18,14 +17,14 @@ function renderEditor(schema: Schema, initial: Record<string, string> = {}) {
     return (
       <ToolArgsEditor
         schema={schema}
-        values={values}
+        args={values}
         onChange={setValues}
         onValidChange={onValidChange}
       />
     );
   }
   render(<Host />);
-  return { onValidChange, args: () => buildParams(schema, latest.values) };
+  return { onValidChange, args: () => latest.values };
 }
 
 describe("enum fields", () => {
@@ -113,7 +112,7 @@ describe("nested object", () => {
   });
 
   it("drops the object when its last child is cleared", async () => {
-    const { args } = renderEditor(schema, { options: '{"retries":3}' });
+    const { args } = renderEditor(schema, { options: { retries: 3 } });
 
     await userEvent.clear(screen.getByRole("spinbutton", { name: "retries" }));
 
@@ -275,5 +274,123 @@ describe("deeper schemas", () => {
 
     expect(screen.getByRole("alert")).toHaveTextContent(/invalid json/i);
     expect(onValidChange).toHaveBeenLastCalledWith(false);
+  });
+});
+
+async function pasteJson(text: string) {
+  await userEvent.click(screen.getByRole("button", { name: "JSON" }));
+  const editor = screen.getByRole("textbox", { name: /arguments json/i });
+  await userEvent.clear(editor);
+  await userEvent.click(editor);
+  await userEvent.paste(text);
+  return editor as HTMLTextAreaElement;
+}
+
+describe("value fidelity", () => {
+  const schema: Schema = {
+    type: "object",
+    properties: {
+      query: { type: "string" },
+      limit: { type: ["integer", "null"] },
+    },
+  };
+
+  it("keeps explicit empty strings and nulls through JSON → form → JSON", async () => {
+    const { args } = renderEditor(schema);
+    const text = '{"query":"","limit":null}';
+
+    await pasteJson(text);
+    expect(args()).toEqual({ query: "", limit: null });
+
+    await userEvent.click(screen.getByRole("button", { name: "Form" }));
+    expect(args()).toEqual({ query: "", limit: null });
+    await userEvent.click(screen.getByRole("button", { name: "JSON" }));
+    const editor = screen.getByRole("textbox", { name: /arguments json/i }) as HTMLTextAreaElement;
+    expect(JSON.parse(editor.value)).toEqual({ query: "", limit: null });
+  });
+
+  it("still treats a cleared form field as unset", async () => {
+    const { args } = renderEditor(schema);
+    await userEvent.type(screen.getByRole("textbox", { name: "query" }), "x");
+    await userEvent.clear(screen.getByRole("textbox", { name: "query" }));
+
+    expect(args()).toEqual({});
+  });
+
+  it("sends the enum member with its own type, not its text", async () => {
+    const numeric: Schema = { type: "object", properties: { n: { enum: [1, 2] } } };
+    const { args } = renderEditor(numeric);
+
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "n" }), "2");
+
+    expect(args()).toEqual({ n: 2 });
+  });
+
+  it("sends parsed JSON from a fallback field without a declared type", async () => {
+    const composite: Schema = {
+      type: "object",
+      properties: { x: { anyOf: [{ type: "object" }, { type: "string" }] } },
+    };
+    const { args } = renderEditor(composite);
+
+    await userEvent.click(screen.getByRole("textbox", { name: "x" }));
+    await userEvent.paste('{"a":1}');
+
+    expect(args()).toEqual({ x: { a: 1 } });
+  });
+
+  it("round-trips typed values for properties without a declared type", async () => {
+    const loose: Schema = { type: "object", properties: { v: {} } };
+    const { args } = renderEditor(loose);
+
+    await pasteJson('{"v":"123","w":"true"}');
+
+    expect(args()).toEqual({ v: "123", w: "true" });
+  });
+});
+
+describe("integer array item left blank", () => {
+  const schema: Schema = {
+    type: "object",
+    properties: { ids: { type: "array", items: { type: "integer" } } },
+  };
+
+  it("keeps the blank draft, flags it, and blocks Run until corrected or removed", async () => {
+    const { args, onValidChange } = renderEditor(schema);
+    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 2" }), "7");
+
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
+
+    expect(screen.getByRole("spinbutton", { name: "ids item 1" })).toHaveValue(null);
+    expect(screen.getByRole("alert")).toHaveTextContent(/enter a value or remove/i);
+    expect(onValidChange).toHaveBeenLastCalledWith(false);
+    expect(JSON.stringify(args())).not.toContain("null");
+
+    await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "5");
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onValidChange).toHaveBeenLastCalledWith(true);
+    expect(args()).toEqual({ ids: [5, 7] });
+
+    await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
+    expect(onValidChange).toHaveBeenLastCalledWith(false);
+    await userEvent.click(screen.getByRole("button", { name: "Remove ids item 1" }));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(onValidChange).toHaveBeenLastCalledWith(true);
+    expect(args()).toEqual({ ids: [7] });
+  });
+
+  it("keeps a cleared string item as an empty string", async () => {
+    const strings: Schema = {
+      type: "object",
+      properties: { tags: { type: "array", items: { type: "string" } } },
+    };
+    const { args } = renderEditor(strings);
+    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
+    await userEvent.type(screen.getByRole("textbox", { name: "tags item 1" }), "a");
+    await userEvent.clear(screen.getByRole("textbox", { name: "tags item 1" }));
+
+    expect(args()).toEqual({ tags: [""] });
   });
 });

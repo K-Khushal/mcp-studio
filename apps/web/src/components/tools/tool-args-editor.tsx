@@ -1,31 +1,24 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { JsonTextarea } from './json-textarea';
 import { FieldValidityContext, SchemaForm, type Args } from './tool-schema-form';
-import { buildParams, seedValues } from './tool-schema-helpers';
 
 type Mode = 'form' | 'json';
 
 interface ToolArgsEditorProps {
   schema: Record<string, unknown>;
-  /** Store values: strings, object/array arguments as JSON. */
-  values: Record<string, string>;
-  onChange: (values: Record<string, string>) => void;
+  /** The Call arguments: exactly what Run sends and the JSON view shows. */
+  args: Args;
+  onChange: (args: Args) => void;
   /** false while the arguments can't be sent (invalid JSON). */
   onValidChange?: (valid: boolean) => void;
 }
 
 const JSON_FIELD = 'arguments-json';
 
-export function ToolArgsEditor({ schema, values, onChange, onValidChange }: ToolArgsEditorProps) {
+export function ToolArgsEditor({ schema, args, onChange, onValidChange }: ToolArgsEditorProps) {
   const [mode, setMode] = useState<Mode>('form');
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
-  const args = useMemo(() => buildParams(schema, values), [schema, values]);
-  const handleArgs = useCallback(
-    (next: Args) => onChange(seedValues(schema, next)),
-    [schema, onChange],
-  );
-
   const reportField = useCallback((id: string, valid: boolean) => {
     setInvalid((prev) => {
       if (valid === !prev.has(id)) return prev;
@@ -51,13 +44,13 @@ export function ToolArgsEditor({ schema, values, onChange, onValidChange }: Tool
       </div>
       {mode === 'form' ? (
         <FieldValidityContext.Provider value={reportField}>
-          <SchemaForm schema={schema} args={args} onChange={handleArgs} />
+          <SchemaForm schema={schema} args={args} onChange={onChange} />
         </FieldValidityContext.Provider>
       ) : (
         <JsonTextarea
           label="Arguments JSON"
           value={args}
-          onChange={(next) => handleArgs(next as Args)}
+          onChange={(next) => onChange(next as Args)}
           onValidChange={reportJson}
           requireObject
           rows={10}
