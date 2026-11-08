@@ -1,11 +1,13 @@
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
+import { StudioOAuthProvider } from "./oauth.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
@@ -56,6 +58,23 @@ export class StreamableHTTPClient extends BaseMCPClient {
   private variant: "streamable" | "sse" = "streamable";
 
   protected async setupTransport(): Promise<Client> {
+    const { auth } = this.config;
+    if (auth?.type !== "oauth") return this.connectHttp();
+    if (!this.options.oauth) throw new Error("OAuth sign-in is not available in this Studio Server");
+    const provider = new StudioOAuthProvider(this.options.oauth);
+    try {
+      return await this.connectHttp(provider);
+    } catch (error) {
+      if (!(error instanceof UnauthorizedError)) throw error;
+      const code = await provider.authorizePending();
+      if (!code || !this.transport) throw error;
+      this.options.onLog?.("INFO", "protocol", "OAuth sign-in approved; exchanging authorization code");
+      await this.transport.finishAuth(code);
+      return this.connectHttp(provider);
+    }
+  }
+
+  private async connectHttp(authProvider?: StudioOAuthProvider): Promise<Client> {
     const url = new URL(this.config.url);
 
     // Merge auth into headers/URL before connecting
@@ -87,6 +106,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers },
       fetch: wrappedFetch,
+      authProvider,
     });
 
     const logUrl = new URL(url);
@@ -108,6 +128,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         requestInit: { headers },
         eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
         fetch: wrappedFetch,
+        authProvider,
       });
       client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
       try {

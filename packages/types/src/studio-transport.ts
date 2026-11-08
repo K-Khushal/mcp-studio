@@ -7,7 +7,8 @@ import type { ServerMessage } from "./messages.js";
 // ---------------------------------------------------------------------------
 
 export interface StudioTransport {
-  connect(config: ConnectionConfig, verbose?: boolean): Promise<void>;
+  /** `connectionId` identifies the saved Connection whose OAuth sign-in to use. */
+  connect(config: ConnectionConfig, verbose?: boolean, connectionId?: string): Promise<void>;
   /** Apply the verbose logging setting to the live Session without reconnecting. */
   setVerbose(verbose: boolean): void;
   invoke(tool: string, params: Record<string, unknown>, requestId?: string, requestTimeout?: number): Promise<void>;
