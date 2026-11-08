@@ -20,7 +20,16 @@ const server = Bun.serve<{ session: SessionManager | null }>({
   async fetch(req, server) {
     const url = new URL(req.url);
     const origin = req.headers.get("Origin");
-    if (origin && origin !== url.origin && origin !== CORS_ORIGIN) {
+    const host = req.headers.get("Host") ?? "";
+    if (!/^(localhost|127\.0\.0\.1|\[::1\])(?::[0-9]+)?$/i.test(host)) {
+      return new Response("Host not allowed", { status: 403 });
+    }
+    const allowedOrigins = [
+      ...["localhost", "127.0.0.1", "[::1]"].map((hostname) => `http://${hostname}:${server.port}`),
+      CORS_ORIGIN,
+      ...(!production ? ["http://localhost:5173"] : []),
+    ];
+    if (origin !== null && !allowedOrigins.includes(origin)) {
       return new Response("Origin not allowed", { status: 403 });
     }
     // Keep the development /api proxy and production browser URLs identical.

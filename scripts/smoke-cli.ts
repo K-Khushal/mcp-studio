@@ -37,6 +37,26 @@ try {
   assert.deepEqual(await (await fetch(`${base}/api/collections`)).json(), []);
   assert.equal((await fetch(`${base}/assets/missing.js`)).status, 404);
   assert.equal((await fetch(`${base}/collections`, { headers: { Origin: "https://evil.example" } })).status, 403);
+  for (const hostname of ["localhost", "127.0.0.1", "[::1]"]) {
+    assert.equal((await fetch(`${base}/collections`, {
+      headers: { Origin: `http://${hostname}:${port}` },
+    })).status, 200);
+  }
+  for (const path of ["/collections", "/", "/ws"]) {
+    assert.equal((await fetch(`${base}${path}`, {
+      headers: { Host: `evil.example:${port}` },
+    })).status, 403, `bad Host rejected without Origin for ${path}`);
+    assert.equal((await fetch(`${base}${path}`, {
+      headers: { Host: `evil.example:${port}`, Origin: `http://evil.example:${port}` },
+    })).status, 403, `bad Host rejected for ${path}`);
+  }
+  assert.equal((await fetch(`${base}/..%2fcli.js`)).status, 404);
+  assert.equal((await fetch(`${base}/ws`, {
+    headers: {
+      Origin: "https://evil.example", Connection: "Upgrade", Upgrade: "websocket",
+      "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+    },
+  })).status, 403);
   await new Promise<void>((resolve, reject) => {
     const ws = new WebSocket(`ws://localhost:${port}/ws`);
     const timer = setTimeout(() => { ws.close(); reject(new Error("WS timeout")); }, 3000);
@@ -44,7 +64,7 @@ try {
     ws.onerror = () => { clearTimeout(timer); reject(new Error("WS failed")); };
   });
   assert.equal(await Bun.file(marker).exists(), false, "--no-open suppresses browser");
-  console.log("PASS: --port, --no-open, HTML + asset, REST + /api, WebSocket, origin rejection, arbitrary cwd");
+  console.log("PASS: --port, --no-open, HTML + asset, REST + /api, WebSocket, Host + origin rejection, traversal rejection, arbitrary cwd");
 } finally {
   child.kill();
   await child.exited;
