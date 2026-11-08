@@ -71,3 +71,13 @@ it("collapses a text mirror even when object keys have a different order", () =>
   expect(screen.getByText("Content (text mirror)")).toBeVisible();
   expect(container.querySelector("details")).not.toHaveAttribute("open");
 });
+
+it.each([
+  "http://json-schema.org/draft-07/schema",
+  "http://json-schema.org/draft-07/schema#",
+  "https://json-schema.org/draft/2020-12/schema",
+  "https://json-schema.org/draft/2020-12/schema#",
+])("validates dialect URI with an optional empty fragment: %s", ($schema) => {
+  render(<PrettyTab result={{ content: [], structuredContent: { answer: "wrong" } }} error={null} outputSchema={{ ...schema, $schema }} />);
+  expect(screen.getByRole("alert")).toHaveTextContent(/output schema mismatch.*answer.*number/i);
+});

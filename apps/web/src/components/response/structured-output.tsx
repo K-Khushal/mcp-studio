@@ -10,8 +10,8 @@ const validators = new WeakMap<Record<string, unknown>, ValidateFunction>();
 function compiledValidator(schema: Record<string, unknown>) {
   const cached = validators.get(schema);
   if (cached) return cached;
-  const dialect = schema.$schema;
-  const draft07 = dialect === 'http://json-schema.org/draft-07/schema#' || dialect === 'https://json-schema.org/draft-07/schema#';
+  const dialect = typeof schema.$schema === 'string' ? schema.$schema.replace(/#$/, '') : schema.$schema;
+  const draft07 = dialect === 'http://json-schema.org/draft-07/schema' || dialect === 'https://json-schema.org/draft-07/schema';
   if (dialect !== undefined && !draft07 && dialect !== 'https://json-schema.org/draft/2020-12/schema') {
     throw new Error(`Unsupported JSON Schema dialect: ${String(dialect)}`);
   }
