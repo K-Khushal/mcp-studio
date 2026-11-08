@@ -211,7 +211,7 @@ describe("loadConnection", () => {
     expect(state.selectedConnectionId).toBe("conn-2");
     expect(state.connectedConnectionId).toBe("conn-1");
     expect(state.transport).toBe("stdio");
-    expect(state.connectionUrl).toBe("npx @test/test-mcp");
+    expect(state.stdio).toMatchObject({ command: "npx", args: ["@test/test-mcp"] });
     expect(state.tools).toEqual([]);
     expect(state.prompts).toEqual([]);
     expect(state.selectedTool).toBeNull();

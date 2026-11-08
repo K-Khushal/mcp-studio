@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderPlus, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Connection } from '@mcp-studio/types';
@@ -6,6 +6,17 @@ import { useStore } from '@/store';
 import { CollectionRow } from '@/components/collections/collection-row';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
 
 export function CollectionsSidebar() {
@@ -33,9 +44,50 @@ export function CollectionsSidebar() {
     setIsCreating(false);
   };
 
-  const handleSelectConnection = (conn: Connection) => {
-    loadConnection(conn);
+  // A switch the user must confirm: one Session at a time, and it belongs to another Connection.
+  const [pendingSwitch, setPendingSwitch] = useState<{ conn: Connection; connect: boolean } | null>(null);
+  const clickTimer = useRef<number | undefined>(undefined);
+
+  const needsConfirmation = (conn: Connection) => {
+    const { connectionStatus, connectedConnectionId, connectingConnectionId } = useStore.getState();
+    const liveId = connectionStatus === 'connected' ? connectedConnectionId : connectionStatus === 'connecting' ? connectingConnectionId : null;
+    return liveId !== null && liveId !== conn.id;
   };
+
+  const connectSelected = useCallback(() => {
+    const config = buildConnectionConfig(useStore.getState());
+    if (isConnectable(config)) void useStore.getState().connect(config);
+  }, []);
+
+  const open = async ({ conn, connect }: { conn: Connection; connect: boolean }) => {
+    if (needsConfirmation(conn)) await useStore.getState().disconnect();
+    loadConnection(conn);
+    if (connect) connectSelected();
+  };
+
+  // Wait out the double-click window before prompting so a double-click raises one dialog, not two.
+  const handleSelectConnection = (conn: Connection) => {
+    window.clearTimeout(clickTimer.current);
+    if (!needsConfirmation(conn)) {
+      loadConnection(conn);
+      return;
+    }
+    clickTimer.current = window.setTimeout(() => setPendingSwitch({ conn, connect: false }), 250);
+  };
+
+  const handleConnectConnection = (conn: Connection) => {
+    window.clearTimeout(clickTimer.current);
+    if (needsConfirmation(conn)) {
+      setPendingSwitch({ conn, connect: true });
+      return;
+    }
+    const { selectedConnectionId: selected, connectedConnectionId, connectionStatus } = useStore.getState();
+    if (connectedConnectionId === conn.id && connectionStatus !== 'disconnected') return;
+    if (selected !== conn.id) loadConnection(conn);
+    connectSelected();
+  };
+
+  useEffect(() => () => window.clearTimeout(clickTimer.current), []);
 
   const filtered = collections.filter(
     (c) =>
@@ -109,10 +161,29 @@ export function CollectionsSidebar() {
             collection={col}
             selectedConnectionId={selectedConnectionId}
             onSelectConnection={handleSelectConnection}
+            onConnectConnection={handleConnectConnection}
           />
         ))}
       </SidebarContent>
       <SidebarRail />
+
+      <AlertDialog open={pendingSwitch !== null} onOpenChange={(isOpen) => !isOpen && setPendingSwitch(null)}>
+        <AlertDialogContent className="bg-card border-border">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-sm">Switch Connection?</AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground">
+              The live Session will be closed
+              {pendingSwitch ? ` and "${pendingSwitch.conn.name}" ${pendingSwitch.connect ? 'opened' : 'loaded'}` : ''}.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="text-xs h-8">Cancel</AlertDialogCancel>
+            <AlertDialogAction className="text-xs h-8" onClick={() => pendingSwitch && void open(pendingSwitch)}>
+              Switch
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sidebar>
   );
 }
