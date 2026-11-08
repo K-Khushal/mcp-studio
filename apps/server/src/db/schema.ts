@@ -8,7 +8,7 @@ export const collections = sqliteTable("collections", {
   updatedAt: integer("updated_at").notNull(),
 });
 
-export const requests = sqliteTable("requests", {
+export const connections = sqliteTable("connections", {
   id: text("id").primaryKey(),
   collectionId: text("collection_id")
     .notNull()

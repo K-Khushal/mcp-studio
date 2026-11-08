@@ -6,7 +6,7 @@ import {
   getAllCollections,
   updateCollection,
 } from "../db/queries/collections.js";
-import { createRequest, deleteRequest, updateRequest } from "../db/queries/requests.js";
+import { createConnection, deleteConnection, updateConnection } from "../db/queries/connections.js";
 
 beforeEach(clearDb);
 
@@ -20,7 +20,7 @@ describe("collections", () => {
     const cols = await getAllCollections();
     expect(cols).toHaveLength(1);
     expect(cols[0]!.name).toBe("My Tools");
-    expect(cols[0]!.requests).toEqual([]);
+    expect(cols[0]!.connections).toEqual([]);
   });
 
   it("renames a collection", async () => {
@@ -37,63 +37,63 @@ describe("collections", () => {
   });
 });
 
-describe("requests", () => {
-  it("creates a request with name only", async () => {
+describe("connections", () => {
+  it("creates a Connection with name only", async () => {
     const col = await createCollection("Col");
-    const req = await createRequest(col.id, { name: "Ping" });
-    expect(req.name).toBe("Ping");
-    expect(req.id).toBeTruthy();
+    const conn = await createConnection(col.id, { name: "Ping" });
+    expect(conn.name).toBe("Ping");
+    expect(conn.id).toBeTruthy();
 
     const cols = await getAllCollections();
-    expect(cols[0]!.requests).toHaveLength(1);
-    expect(cols[0]!.requests[0]!.name).toBe("Ping");
+    expect(cols[0]!.connections).toHaveLength(1);
+    expect(cols[0]!.connections[0]!.name).toBe("Ping");
   });
 
-  it("stores connectionConfig on a request", async () => {
+  it("stores connectionConfig on a Connection", async () => {
     const col = await createCollection("Col");
     const config = {
       transport: "stdio" as const,
       config: { command: "node", args: ["server.js"], env: {}, inheritSystemEnv: false },
     };
-    await createRequest(col.id, { name: "Run", connectionConfig: config });
+    await createConnection(col.id, { name: "Run", connectionConfig: config });
     const cols = await getAllCollections();
-    expect(cols[0]!.requests[0]!.connectionConfig).toMatchObject(config);
+    expect(cols[0]!.connections[0]!.connectionConfig).toMatchObject(config);
   });
 
-  it("deletes a request", async () => {
+  it("deletes a Connection", async () => {
     const col = await createCollection("Col");
-    const req = await createRequest(col.id, { name: "Temp" });
-    await deleteRequest(req.id);
+    const conn = await createConnection(col.id, { name: "Temp" });
+    await deleteConnection(conn.id);
     const cols = await getAllCollections();
-    expect(cols[0]!.requests).toHaveLength(0);
+    expect(cols[0]!.connections).toHaveLength(0);
   });
 
-  it("renames a request", async () => {
+  it("renames a Connection", async () => {
     const col = await createCollection("Col");
-    const req = await createRequest(col.id, { name: "Old Name" });
-    await updateRequest(req.id, { name: "New Name" });
+    const conn = await createConnection(col.id, { name: "Old Name" });
+    await updateConnection(conn.id, { name: "New Name" });
     const cols = await getAllCollections();
-    expect(cols[0]!.requests[0]!.name).toBe("New Name");
+    expect(cols[0]!.connections[0]!.name).toBe("New Name");
   });
 
-  it("updates request connectionConfig", async () => {
+  it("updates Connection connectionConfig", async () => {
     const col = await createCollection("Col");
-    const req = await createRequest(col.id, { name: "Run" });
+    const conn = await createConnection(col.id, { name: "Run" });
     const config = {
       transport: "http" as const,
       config: { url: "http://localhost:4000", headers: {} },
     };
 
-    await updateRequest(req.id, { connectionConfig: config });
+    await updateConnection(conn.id, { connectionConfig: config });
 
     const cols = await getAllCollections();
-    expect(cols[0]!.requests[0]!.connectionConfig).toMatchObject(config);
+    expect(cols[0]!.connections[0]!.connectionConfig).toMatchObject(config);
   });
 
-  it("cascade-deletes requests when collection is deleted", async () => {
+  it("cascade-deletes connections when collection is deleted", async () => {
     const col = await createCollection("Col");
-    await createRequest(col.id, { name: "R1" });
-    await createRequest(col.id, { name: "R2" });
+    await createConnection(col.id, { name: "C1" });
+    await createConnection(col.id, { name: "C2" });
     await deleteCollection(col.id);
     expect(await getAllCollections()).toHaveLength(0);
   });

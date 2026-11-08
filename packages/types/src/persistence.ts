@@ -4,7 +4,7 @@ import type { ConnectionConfig } from "./transport.js";
 // Collections
 // ---------------------------------------------------------------------------
 
-export interface SavedRequest {
+export interface Connection {
   id: string;
   collectionId?: string;
   name: string;
@@ -16,7 +16,7 @@ export interface SavedRequest {
 export interface Collection {
   id: string;
   name: string;
-  requests: SavedRequest[];
+  connections: Connection[];
   createdAt: number;
   updatedAt: number;
 }
