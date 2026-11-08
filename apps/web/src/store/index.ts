@@ -38,6 +38,7 @@ interface LogEntry {
 }
 
 interface ResponseState {
+  outputSchema?: Record<string, unknown>;
   chunks: unknown[];
   result: unknown | null;
   error: string | null;
@@ -254,6 +255,7 @@ function cloneWorkspace(workspace: ConnectionWorkspaceState): ConnectionWorkspac
     toolFormValues: { ...workspace.toolFormValues },
     promptArgValues: { ...workspace.promptArgValues },
     response: {
+      outputSchema: workspace.response.outputSchema,
       chunks: [...workspace.response.chunks],
       result: workspace.response.result,
       error: workspace.response.error,
@@ -591,6 +593,7 @@ export const useStore = create<AppState & AppActions>()(
 
         const now = Date.now();
         const response: ResponseState = {
+          outputSchema: state.tools.find(t => t.name === tool)?.outputSchema,
           chunks: [],
           result: null,
           error: null,

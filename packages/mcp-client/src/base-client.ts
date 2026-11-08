@@ -73,6 +73,10 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
     return response.tools.map((t) => ({
       name: t.name,
+      title: t.title,
+      icons: t.icons,
+      annotations: t.annotations,
+      outputSchema: t.outputSchema,
       description: t.description ?? "",
       inputSchema: t.inputSchema as Record<string, unknown>,
     }));

@@ -4,6 +4,16 @@
 
 export interface MCPTool {
   name: string;
+  title?: string;
+  icons?: { src: string; mimeType?: string; sizes?: string[]; theme?: "light" | "dark" }[];
+  annotations?: {
+    title?: string;
+    readOnlyHint?: boolean;
+    destructiveHint?: boolean;
+    idempotentHint?: boolean;
+    openWorldHint?: boolean;
+  };
+  outputSchema?: Record<string, unknown>;
   description: string;
   inputSchema: Record<string, unknown>; // JSON Schema object
 }

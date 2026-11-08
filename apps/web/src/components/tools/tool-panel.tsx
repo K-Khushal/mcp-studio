@@ -2,6 +2,7 @@ import { useEffect, useCallback, useState } from 'react';
 import { Play, ChevronRight } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
+import { ToolIcon, ToolBadges, toolTitle } from './tool-metadata';
 import { ToolList } from './tool-list';
 import { ToolArgsEditor } from './tool-args-editor';
 import { initialArgs } from './tool-schema-helpers';
@@ -75,11 +76,20 @@ export default function ToolPanel() {
         ) : (
           <>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">{selectedTool.name}</h3>
+              <h3 aria-label={toolTitle(selectedTool)} className="flex items-center gap-2 text-sm font-semibold text-foreground"><ToolIcon tool={selectedTool} />{toolTitle(selectedTool)}</h3>
+              {toolTitle(selectedTool) !== selectedTool.name && <p className="mt-1 font-mono text-xs text-muted-foreground">{selectedTool.name}</p>}
+              <ToolBadges tool={selectedTool} />
               {selectedTool.description && (
                 <p className="text-xs text-muted-foreground mt-0.5">{selectedTool.description}</p>
               )}
             </div>
+
+            {selectedTool.outputSchema && (
+              <details className="rounded-md border border-border px-3 py-2 text-xs">
+                <summary className="cursor-pointer font-medium">Output schema</summary>
+                <pre className="mt-2 overflow-auto font-mono text-muted-foreground">{JSON.stringify(selectedTool.outputSchema, null, 2)}</pre>
+              </details>
+            )}
 
             <ToolArgsEditor
               key={selectedTool.name}

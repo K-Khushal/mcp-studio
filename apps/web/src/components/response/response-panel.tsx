@@ -65,6 +65,7 @@ export function ResponsePanel() {
         ) : activeTab === 'pretty' ? (
           <PrettyTab
             key={response.startedAt ?? 0}
+            outputSchema={response.outputSchema}
             result={response.result}
             error={response.error}
           />

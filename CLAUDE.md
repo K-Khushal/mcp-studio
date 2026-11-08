@@ -74,6 +74,8 @@ Single screen (`pages/home.tsx`), no view switching — `activeView` and the ico
 Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar). TopNav `SessionInfo` shows MCP Server name/version, Transport, negotiated protocol version, status from store `serverInfo`/`protocolVersion`/`connectionConfig`.  
 Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,configuration,shared}/`  
 Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()` → sets `selectedConnectionId`, `transport`, `connectionUrl`, `selectedTool`, `pendingParams` → ToolPanel pre-fills. Home shows blank state when `selectedConnectionId === null`.  
+Tool metadata (title, icons, annotations, outputSchema) passes through the MCP client to the web. Each Call captures its output schema in ResponseState; Pretty validates structuredContent with Ajv (draft-7 or explicit 2020-12) and ajv-formats, preserving content blocks alongside validation feedback.
+
 ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
 Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme: dark|light|system`) persisted to `localStorage` key `mcp-studio-config` via `store/config.ts` (field-validated read, unknown keys dropped); `setConfig` writes store + localStorage and re-applies theme (`lib/theme.ts`). `index.html` inline script applies saved theme before paint. `requestTimeout`/`verboseLogging` stored only, not yet consumed. Logs panel height is `logsHeight` in store (clamped, drag/arrow-key resize). Environments are global (not per-collection/Connection).
 

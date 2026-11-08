@@ -8,7 +8,11 @@ export function createProtocolServer() {
   const server = new Server({ name: "protocol-fixture", version: "1" }, { capabilities: { tools: {}, prompts: {}, logging: {} } });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: [
     ...["echo", "error", "slow", "elicit", "log", "stderr", "crash"].map(name => ({ name, inputSchema: { type: "object" as const, properties: { text: { type: "string" }, steps: { type: "integer", minimum: 1, maximum: 100 } } } })),
-    { name: "structured", inputSchema: { type: "object" as const }, outputSchema: { type: "object" as const, properties: { answer: { type: "number" } }, required: ["answer"] } },
+    { name: "structured", title: "Structured answer",
+      description: "Returns a structured answer with an output schema.",
+      icons: [{ src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", mimeType: "image/png" }],
+      annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+      inputSchema: { type: "object" as const }, outputSchema: { type: "object" as const, properties: { answer: { type: "number" } }, required: ["answer"] } },
   ].sort((a, b) => ["echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash"].indexOf(a.name) - ["echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash"].indexOf(b.name)) }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const args = request.params.arguments ?? {};
