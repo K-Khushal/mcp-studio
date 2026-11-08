@@ -75,9 +75,10 @@ export class SessionManager {
     }
   }
 
-  private connectionClosed(): void {
-    if (this.status !== "connected") return;
+  private connectionClosed(client: MCPClientInterface): void {
+    if (this.client !== client) return;
     this.clearElicitations();
+    if (this.status !== "connected") return;
     const reason = "MCP Server connection closed unexpectedly";
     this.client = null;
     this.send({ type: "log", level: "ERROR", source: "protocol", message: reason, timestamp: Date.now() });
@@ -109,11 +110,11 @@ export class SessionManager {
     this.setStatus("connecting");
 
     try {
-      this.client =
+      const client: MCPClientInterface =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
               onElicitation: this.requestElicitation,
-              onClose: () => this.connectionClosed(),
+              onClose: () => this.connectionClosed(client),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
@@ -121,7 +122,7 @@ export class SessionManager {
             })
           : new StreamableHTTPClient(config.config, {
               onElicitation: this.requestElicitation,
-              onClose: () => this.connectionClosed(),
+              onClose: () => this.connectionClosed(client),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
@@ -130,7 +131,8 @@ export class SessionManager {
                 this.send({ type: "http_response", requestId, status, headers }),
             });
 
-      const info = await this.client.connect();
+      this.client = client;
+      const info = await client.connect();
       this.setStatus("connected");
 
       this.send({
@@ -142,6 +144,7 @@ export class SessionManager {
         serverInfo: { name: info.serverName, version: info.serverVersion },
       });
     } catch (err) {
+      this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
       this.client = null;

@@ -25,7 +25,6 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
   /** Capture the SDK's initialize result while preserving transport negotiation. */
   protected async connectTransport(client: Client, transport: Transport): Promise<void> {
-    client.onclose = () => this.options.onClose?.();
     this.protocolVersion = undefined;
     const setProtocolVersion = transport.setProtocolVersion?.bind(transport);
     transport.setProtocolVersion = (version) => {

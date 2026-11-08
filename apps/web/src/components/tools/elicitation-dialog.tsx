@@ -19,7 +19,7 @@ export function ElicitationFormDialog({ request, onRespond }: { request: Request
           <DialogTitle>MCP Server needs your input</DialogTitle>
           <DialogDescription>{request.message}</DialogDescription>
         </DialogHeader>
-        <ToolArgsEditor schema={request.requestedSchema} args={args} onChange={setArgs} onValidChange={setValid} />
+        <ToolArgsEditor label="Fields" schema={request.requestedSchema} args={args} onChange={setArgs} onValidChange={setValid} />
         {missing.length > 0 && <p className="text-xs text-muted-foreground">Required: {missing.join(', ')}</p>}
         <DialogFooter>
           <Button variant="ghost" onClick={() => onRespond({ action: 'cancel' })}>Cancel</Button>

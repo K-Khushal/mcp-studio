@@ -6,6 +6,7 @@ import { FieldValidityContext, SchemaForm, type Args } from './tool-schema-form'
 type Mode = 'form' | 'json';
 
 interface ToolArgsEditorProps {
+  label?: string;
   schema: Record<string, unknown>;
   /** The Call arguments: exactly what Run sends and the JSON view shows. */
   args: Args;
@@ -16,7 +17,7 @@ interface ToolArgsEditorProps {
 
 const JSON_FIELD = 'arguments-json';
 
-export function ToolArgsEditor({ schema, args, onChange, onValidChange }: ToolArgsEditorProps) {
+export function ToolArgsEditor({ schema, args, onChange, onValidChange, label = 'Arguments' }: ToolArgsEditorProps) {
   const [mode, setMode] = useState<Mode>('form');
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
   const reportField = useCallback((id: string, valid: boolean) => {
@@ -39,7 +40,7 @@ export function ToolArgsEditor({ schema, args, onChange, onValidChange }: ToolAr
   return (
     <div className="flex flex-col gap-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-muted-foreground">Arguments</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <ModeToggle mode={mode} onChange={setMode} valid={isValid} />
       </div>
       {mode === 'form' ? (

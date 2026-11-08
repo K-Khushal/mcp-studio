@@ -494,7 +494,7 @@ export const useStore = create<AppState & AppActions>()(
         set({
           ...clearedWorkspace,
           elicitations: [],
-      connectionStatus: "disconnected",
+            connectionStatus: "disconnected",
           connectionConfig: null,
           serverInfo: null,
           protocolVersion: null,
@@ -1087,7 +1087,7 @@ function handleServerMessage(msg: ServerMessage): void {
       }
       useStore.setState((s) => ({
         elicitations: [],
-      connectionStatus: "disconnected",
+        connectionStatus: "disconnected",
         connectionConfig: null,
         serverInfo: null,
         protocolVersion: null,
