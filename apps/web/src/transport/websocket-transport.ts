@@ -65,9 +65,12 @@ export class WebSocketTransport implements StudioTransport {
       this.intentionalClose = false;
       this.ws = new WebSocket(WS_URL);
 
-      this.ws.onopen = () => resolve();
+      const ws = this.ws;
+      let opened = false;
+      this.ws.onopen = () => { opened = true; resolve(); };
       this.ws.onerror = () => reject(new Error("WebSocket connection failed"));
       this.ws.onclose = () => {
+        if (!opened || ws !== this.ws) return;
         this.dispatch({ type: "disconnected", ...(this.intentionalClose ? {} : { reason: "Studio Server connection closed unexpectedly" }) });
       };
       this.ws.onmessage = (e) => {

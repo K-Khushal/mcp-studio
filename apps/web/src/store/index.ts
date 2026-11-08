@@ -1069,7 +1069,6 @@ function handleServerMessage(msg: ServerMessage): void {
       if (msg.reason) {
         toast.error("Session disconnected", { description: msg.reason });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
-        addLog("ERROR", "protocol", msg.reason);
       }
       useStore.setState((s) => ({
         connectionStatus: "disconnected",
@@ -1169,7 +1168,8 @@ function handleServerMessage(msg: ServerMessage): void {
           const startedAt = s.connectedConnectionCache?.response.startedAt;
           const elapsed = startedAt ? errorAt - startedAt : 0;
           return {
-            errorCount: s.errorCount + 1,
+            errorCount: s.errorCount + (s.connectionStatus === "disconnected" ? 0 : 1),
+            ...(!s.connectedConnectionCache ? { response: { ...s.response, error: msg.message, isStreaming: false, completedAt: errorAt } } : {}),
             latency: elapsed,
             ...syncConnectedWorkspace(s, (workspace) => ({
               ...workspace,
@@ -1189,7 +1189,6 @@ function handleServerMessage(msg: ServerMessage): void {
           };
         });
       }
-      addLog("ERROR", "protocol", msg.message);
       break;
 
     case "log":

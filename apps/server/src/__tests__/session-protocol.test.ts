@@ -147,3 +147,14 @@ test("crash mid-Session reports disconnected with a reason", async () => {
     expect(session.messages).toContainEqual({ type: "status", status: "disconnected" });
   } finally { await session.close(); }
 });
+
+test("a rejected replacement Connection preserves live Session crash detection", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.send({ type: "connect", transport: "http", config: { url: "{{MISSING_URL}}", headers: {} } });
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    await session.send({ type: "invoke", tool: "crash", params: {} });
+    expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
+  } finally { await session.close(); }
+});

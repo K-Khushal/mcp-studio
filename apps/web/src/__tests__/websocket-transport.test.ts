@@ -1,0 +1,47 @@
+import { afterEach, expect, it, vi } from "vitest";
+import { WebSocketTransport } from "../transport/websocket-transport";
+
+class Socket {
+  static OPEN = 1;
+  static CONNECTING = 0;
+  static instances: Socket[] = [];
+  readyState = 0;
+  onopen = () => {};
+  onerror = () => {};
+  onclose = () => {};
+  send() {}
+  close() { this.readyState = 3; }
+  constructor() { Socket.instances.push(this); }
+  open() { this.readyState = 1; this.onopen(); }
+}
+const config = { transport: "http" as const, config: { url: "http://localhost", headers: {} } };
+afterEach(() => { vi.unstubAllGlobals(); Socket.instances = []; });
+it("unreachable Studio Server rejects without a second disconnected event", async () => {
+  vi.stubGlobal("WebSocket", Socket);
+  const transport = new WebSocketTransport();
+  const receive = vi.fn();
+  transport.onMessage(receive);
+  const connecting = transport.connect(config);
+  const rejected = expect(connecting).rejects.toThrow("WebSocket connection failed");
+  Socket.instances[0]!.onerror();
+  await rejected;
+  Socket.instances[0]!.onclose();
+  expect(receive).not.toHaveBeenCalled();
+});
+it("ignores a retired socket closing after reconnect", async () => {
+  vi.stubGlobal("WebSocket", Socket);
+  const transport = new WebSocketTransport();
+  const receive = vi.fn();
+  transport.onMessage(receive);
+  const first = transport.connect(config);
+  Socket.instances[0]!.open();
+  await first;
+  await transport.disconnect();
+  const second = transport.connect(config);
+  Socket.instances[1]!.open();
+  await second;
+  Socket.instances[0]!.onclose();
+  expect(receive).not.toHaveBeenCalled();
+  Socket.instances[1]!.onclose();
+  expect(receive).toHaveBeenCalledExactlyOnceWith({ type: "disconnected", reason: "Studio Server connection closed unexpectedly" });
+});

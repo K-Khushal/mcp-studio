@@ -70,7 +70,7 @@ export class SessionManager {
     try {
       config = this.interpolateConfig(msg);
     } catch (err) {
-      this.setStatus("error");
+      if (!this.client?.isConnected) this.setStatus("error");
       this.send({ type: "log", level: "ERROR", source: "protocol", message: String(err), timestamp: Date.now() });
       this.send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
       return;
