@@ -1,22 +1,33 @@
+import { toast } from 'sonner';
 import { useStore } from '@/store';
 import type { HttpAuth } from '@mcp-studio/types';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
+import { Button } from '@/components/ui/button';
 
 const AUTH_TYPES = [
   { value: 'none', label: 'None' },
   { value: 'bearer', label: 'Bearer Token' },
   { value: 'apikey', label: 'API Key' },
+  { value: 'oauth', label: 'OAuth' },
 ] as const;
 
 export function AuthPanel() {
-  const { httpAuth, setHttpAuth } = useStore();
+  const { httpAuth, setHttpAuth, selectedConnectionId, collections, signOut } = useStore();
+  const selectedCollection = collections.find((c) => c.connections.some((r) => r.id === selectedConnectionId));
 
   const handleTypeChange = (type: HttpAuth['type']) => {
     if (type === 'none') setHttpAuth({ type: 'none' });
     else if (type === 'bearer') setHttpAuth({ type: 'bearer', token: '' });
+    else if (type === 'oauth') setHttpAuth({ type: 'oauth' });
     else setHttpAuth({ type: 'apikey', key: '', value: '', in: 'header' });
+  };
+
+  const handleSignOut = async () => {
+    if (!selectedCollection || !selectedConnectionId) return;
+    await signOut(selectedCollection.id, selectedConnectionId);
+    toast.success('Signed out', { description: 'The next connect will ask you to sign in again.' });
   };
 
   return (
@@ -100,6 +111,19 @@ export function AuthPanel() {
               ))}
             </div>
           </div>
+        </div>
+      )}
+
+      {/* OAuth */}
+      {httpAuth.type === 'oauth' && (
+        <div className="space-y-3">
+          <p className="text-xs text-muted-foreground max-w-prose">
+            On connect, Studio discovers the MCP Server&apos;s authorization server, registers itself and opens
+            sign-in in your browser. Tokens stay on this machine, saved with this Connection, and refresh automatically.
+          </p>
+          <Button variant="outline" size="sm" onClick={handleSignOut} disabled={!selectedCollection}>
+            Sign out
+          </Button>
         </div>
       )}
 
