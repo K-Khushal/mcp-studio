@@ -1,3 +1,4 @@
+import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
@@ -84,7 +85,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
       fetch: wrappedFetch,
     });
 
-    let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
+    let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
     this.options.onLog?.("INFO", "protocol", `Connecting via Streamable HTTP to ${url.toString()}`);
     this.variant = "streamable";
     try {
@@ -100,7 +101,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
         fetch: wrappedFetch,
       });
-      client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
+      client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
       try {
         await this.connectTransport(client, this.transport);
         this.variant = "sse";

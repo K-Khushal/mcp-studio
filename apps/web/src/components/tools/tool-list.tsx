@@ -1,3 +1,4 @@
+import { ToolIcon, ToolBadges, toolTitle } from './tool-metadata';
 import { Search } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
@@ -19,7 +20,8 @@ export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) 
         : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
     )}
   >
-    <span className="block truncate font-mono">{tool.name}</span>
+    <span className="flex items-center gap-2"><ToolIcon tool={tool} /><span className="truncate">{toolTitle(tool)}</span></span>
+    <ToolBadges tool={tool} />
     {tool.description && (
       <span className="block truncate text-[10px] opacity-70 mt-0.5">{tool.description}</span>
     )}
@@ -38,6 +40,7 @@ export function ToolList({ tools, selectedToolName, search, onSearch, onSelect }
   const filtered = tools.filter(
     (t) =>
       t.name.toLowerCase().includes(search.toLowerCase()) ||
+      toolTitle(t).toLowerCase().includes(search.toLowerCase()) ||
       t.description?.toLowerCase().includes(search.toLowerCase())
   );
 
