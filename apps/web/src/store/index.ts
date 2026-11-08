@@ -68,7 +68,7 @@ interface ConnectionWorkspaceState {
   toolSearch: string;
   promptSearch: string;
   pendingParams: Record<string, unknown> | null;
-  toolFormValues: Record<string, string>;
+  toolFormValues: Record<string, unknown>;
   promptArgValues: Record<string, string>;
   response: ResponseState;
   timeline: TimelineStep[];
@@ -97,7 +97,7 @@ interface AppState {
   toolSearch: string;
   promptSearch: string;
   pendingParams: Record<string, unknown> | null;
-  toolFormValues: Record<string, string>;
+  toolFormValues: Record<string, unknown>;
   promptArgValues: Record<string, string>;
 
   // Response
@@ -147,7 +147,7 @@ interface AppActions {
   // Tools
   selectTool: (tool: MCPTool | null) => void;
   setToolSearch: (q: string) => void;
-  setToolFormValues: (values: Record<string, string>) => void;
+  setToolFormValues: (values: Record<string, unknown>) => void;
   setPromptSearch: (q: string) => void;
   setPromptArgValues: (values: Record<string, string>) => void;
 

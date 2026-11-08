@@ -3,7 +3,20 @@ export interface SchemaProperty {
   description?: string;
   enum?: unknown[];
   default?: unknown;
+  properties?: Record<string, SchemaProperty>;
+  required?: string[];
+  items?: SchemaProperty;
+  [key: string]: unknown;
 }
+
+export type FieldKind =
+  | 'enum'
+  | 'boolean'
+  | 'number'
+  | 'string'
+  | 'primitive-array'
+  | 'object'
+  | 'json';
 
 export function getProperties(schema: Record<string, unknown>): Record<string, SchemaProperty> {
   const props = schema['properties'];
@@ -25,60 +38,40 @@ export function resolveType(prop: SchemaProperty): string {
   return t as string;
 }
 
-export function defaultValue(prop: SchemaProperty): string {
-  if (prop.default !== undefined) return String(prop.default);
-  const t = resolveType(prop);
-  if (t === 'boolean') return 'false';
-  if (t === 'number' || t === 'integer') return '';
-  if (t === 'object' || t === 'array') return t === 'object' ? '{}' : '[]';
-  return '';
+const COMPOSITE_KEYWORDS = ['oneOf', 'anyOf', 'allOf', '$ref'];
+
+function isPrimitiveKind(kind: FieldKind): boolean {
+  return kind === 'enum' || kind === 'boolean' || kind === 'number' || kind === 'string';
 }
 
-export function buildParams(
-  schema: Record<string, unknown>,
-  values: Record<string, string>
-): Record<string, unknown> {
-  const properties = getProperties(schema);
-  const result: Record<string, unknown> = {};
-
-  for (const [key, raw] of Object.entries(values)) {
-    if (raw === '' || raw === undefined) continue;
-    const prop = properties[key];
-    const type = prop ? resolveType(prop) : 'string';
-
-    if (type === 'number' || type === 'integer') {
-      const n = Number(raw);
-      if (!isNaN(n)) result[key] = n;
-    } else if (type === 'boolean') {
-      result[key] = raw === 'true';
-    } else if (type === 'object' || type === 'array') {
-      try {
-        result[key] = JSON.parse(raw);
-      } catch {
-        result[key] = raw;
-      }
-    } else {
-      result[key] = raw;
-    }
+/**
+ * How a property is edited in form mode. `depth` is the nesting level of the
+ * property: 0 = top-level argument, 1 = inside one grouped object.
+ * Anything deeper or not expressible as plain fields falls back to 'json'.
+ */
+export function fieldKind(prop: SchemaProperty, depth = 0): FieldKind {
+  if (COMPOSITE_KEYWORDS.some((k) => prop[k] !== undefined)) return 'json';
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) return 'enum';
+  const type = resolveType(prop);
+  if (type === 'boolean') return 'boolean';
+  if (type === 'number' || type === 'integer') return 'number';
+  if (type === 'array') {
+    const items = prop.items;
+    return items && isPrimitiveKind(fieldKind(items, depth + 1)) ? 'primitive-array' : 'json';
   }
-
-  return result;
+  if (type === 'object') {
+    if (depth > 0 || !prop.properties || Object.keys(prop.properties).length === 0) return 'json';
+    return 'object';
+  }
+  return 'string';
 }
 
-export function seedValues(
-  schema: Record<string, unknown>,
-  params: Record<string, unknown>
-): Record<string, string> {
-  const properties = getProperties(schema);
-  const seeded: Record<string, string> = {};
-  for (const [key, val] of Object.entries(params)) {
-    const prop = properties[key];
-    const type = prop ? resolveType(prop) : 'string';
-    if (type === 'object' || type === 'array') {
-      seeded[key] = JSON.stringify(val, null, 2);
-    } else {
-      seeded[key] = val !== undefined && val !== null ? String(val) : '';
-    }
+/** Arguments a fresh form starts with: schema defaults, and `false` for booleans. */
+export function initialArgs(schema: Record<string, unknown>): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  for (const [key, prop] of Object.entries(getProperties(schema))) {
+    if (prop.default !== undefined) args[key] = prop.default;
+    else if (resolveType(prop) === 'boolean') args[key] = false;
   }
-  return seeded;
+  return args;
 }

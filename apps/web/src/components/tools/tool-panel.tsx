@@ -1,10 +1,10 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Play, ChevronRight } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { ToolList } from './tool-list';
-import { SchemaForm } from './tool-schema-form';
-import { defaultValue, buildParams, seedValues, getProperties } from './tool-schema-helpers';
+import { ToolArgsEditor } from './tool-args-editor';
+import { initialArgs } from './tool-schema-helpers';
 
 export default function ToolPanel() {
   const {
@@ -23,6 +23,7 @@ export default function ToolPanel() {
     invokeTool,
     clearPendingParams,
   } = useStore();
+  const [argsValid, setArgsValid] = useState(true);
   const isSelectedConnectionConnected =
     connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
 
@@ -33,26 +34,18 @@ export default function ToolPanel() {
       return;
     }
     if (Object.keys(toolFormValues).length > 0) return;
-    const defaults: Record<string, string> = {};
-    for (const [key, prop] of Object.entries(getProperties(selectedTool.inputSchema))) {
-      defaults[key] = defaultValue(prop);
-    }
-    setToolFormValues(defaults);
+    setToolFormValues(initialArgs(selectedTool.inputSchema));
   }, [selectedTool?.name, setToolFormValues]);
 
   useEffect(() => {
     if (!pendingParams || !selectedTool) return;
-    setToolFormValues({ ...toolFormValues, ...seedValues(selectedTool.inputSchema, pendingParams) });
+    setToolFormValues({ ...toolFormValues, ...pendingParams });
     clearPendingParams();
   }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
 
-  const handleFieldChange = useCallback((key: string, value: string) => {
-    setToolFormValues({ ...toolFormValues, [key]: value });
-  }, [toolFormValues, setToolFormValues]);
-
   const handleInvoke = useCallback(() => {
     if (!selectedTool) return;
-    invokeTool(selectedTool.name, buildParams(selectedTool.inputSchema, toolFormValues)).catch(console.error);
+    invokeTool(selectedTool.name, toolFormValues).catch(console.error);
   }, [selectedTool, toolFormValues, invokeTool]);
 
   if (!isSelectedConnectionConnected) {
@@ -88,17 +81,19 @@ export default function ToolPanel() {
               )}
             </div>
 
-            <SchemaForm
+            <ToolArgsEditor
+              key={selectedTool.name}
               schema={selectedTool.inputSchema}
-              values={toolFormValues}
-              onChange={handleFieldChange}
+              args={toolFormValues}
+              onChange={setToolFormValues}
+              onValidChange={setArgsValid}
             />
 
             <div className="flex justify-end pt-2 border-t border-border mt-auto">
               <Button
                 size="sm"
                 onClick={handleInvoke}
-                disabled={response.isStreaming}
+                disabled={response.isStreaming || !argsValid}
                 className="gap-1.5 text-xs"
               >
                 <Play size={12} />
