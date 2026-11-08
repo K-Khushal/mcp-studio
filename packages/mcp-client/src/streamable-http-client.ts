@@ -61,14 +61,13 @@ export class StreamableHTTPClient extends BaseMCPClient {
     }
 
     // Custom fetch wrapper: captures HTTP response headers per operation
-    const self = this;
     const wrappedFetch: FetchLike = async (input, init) => {
       const response = await fetch(input, init);
-      const reqId = self.activeRequestId;
-      if (reqId && self.options.onHttpResponse) {
+      const reqId = this.activeRequestId;
+      if (reqId && this.options.onHttpResponse) {
         const respHeaders: Record<string, string> = {};
         response.headers.forEach((value, key) => { respHeaders[key] = value; });
-        self.options.onHttpResponse(reqId, response.status, respHeaders);
+        this.options.onHttpResponse(reqId, response.status, respHeaders);
       }
       return response;
     };

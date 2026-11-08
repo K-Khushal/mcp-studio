@@ -1,5 +1,5 @@
-import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import type { MCPTool, MCPPrompt, MCPPromptMessage } from "@mcp-studio/types";
+import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-studio/types";
 import type { MCPClientInterface, MCPClientOptions, ConnectedServerInfo } from "./types.js";
 
 /**
@@ -106,7 +106,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
     return result.messages.map((m) => ({
       role: m.role as "user" | "assistant",
-      content: m.content as import("@mcp-studio/types").MCPContent,
+      content: m.content as MCPContent,
     }));
   }
 

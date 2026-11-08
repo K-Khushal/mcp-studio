@@ -8,7 +8,11 @@ Bun required. Add to PATH if needed: `export PATH="$HOME/.bun/bin:$PATH"`
 
 ```bash
 bun install && bun dev       # install + start all packages (Turborepo)
-bun typecheck / build / test
+# Required gates, in order (also run on every PR and push to main)
+bun typecheck
+bun lint
+bun run test                # Turbo: server bun:test + web/mcp-client Vitest
+bun run build
 
 bun --filter @mcp-studio/web dev
 bun --filter @mcp-studio/server dev    # bun --watch src/index.ts
@@ -90,7 +94,7 @@ Update after any session with: new package/route/transport, schema change, arch 
 
 ## Gotchas
 - **`exactOptionalPropertyTypes` disabled** — MCP SDK returns `string | undefined`; enabling breaks mcp-client type assignments.
-- **`tsc -b` removed from web build** — `tsconfig.node.json` (`composite: true`) conflicted with Vite's DOM types. `bun typecheck` is separate; `bun build` calls `vite build` directly.
+- **`tsc -b` removed from web build** — `tsconfig.node.json` (`composite: true`) conflicted with Vite's DOM types. `bun typecheck` is separate; `bun run build` calls `vite build` directly.
 - **`getServerVersion()` missing `protocolVersion`** — SDK doesn't expose it. Hardcoded `"2024-11-05"` in both clients.
 - **`cwd` must be spread conditionally** — `StdioClientTransport` uses `exactOptionalPropertyTypes` internally: `...(cwd ? { cwd } : {})`.
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
