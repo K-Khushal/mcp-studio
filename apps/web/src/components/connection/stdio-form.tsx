@@ -122,7 +122,7 @@ export function StdioForm() {
             aria-label="Inherit system environment"
           />
           <label htmlFor="stdio-inherit-env" className="text-xs text-muted-foreground">
-            Inherit the Studio Server's environment; variables above take precedence
+            On: inherit the Studio Server's environment. Off: only a minimal safe set (PATH, HOME, …) plus the variables above. Variables above take precedence.
           </label>
         </div>
       </Section>

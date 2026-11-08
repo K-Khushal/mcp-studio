@@ -681,13 +681,8 @@ export const useStore = create<AppState & AppActions>()(
 
         persistConnectionDraft(draft);
 
-        const workspace =
-          state.connectedConnectionId === connection.id && state.connectedConnectionCache
-            ? connectionWorkspacePatch(state.connectedConnectionCache)
-            : blankWorkspacePatch();
-
         set({
-          ...workspace,
+          ...blankWorkspacePatch(),
           selectedConnectionId: connection.id,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,

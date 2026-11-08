@@ -129,6 +129,20 @@ describe("STDIO form", () => {
     expect(transport.connect).toHaveBeenCalledWith(savedConfig);
   });
 
+  it("switching Connections inside the debounce window still saves the outgoing edit once", async () => {
+    const second = { id: "conn-2", collectionId: "col-1", name: "Other", connectionConfig: { ...savedConfig, config: { ...savedConfig.config, command: "other" } } as ConnectionConfig, createdAt: 1, updatedAt: 1 };
+    useStore.setState({ collections: [{ ...makeCollection(), connections: [...makeCollection().connections, second] }] });
+    render(<ConnectionPanel />);
+    fireEvent.change(screen.getByLabelText("Command"), { target: { value: "edited" } });
+    act(() => useStore.getState().loadConnection(second));
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+
+    const patches = fetchMock.mock.calls.filter((call) => (call[1] as RequestInit | undefined)?.method === "PATCH");
+    expect(patches).toHaveLength(1);
+    expect(patches[0]![0]).toBe("/api/collections/col-1/connections/conn-1");
+    expect(JSON.parse((patches[0]![1] as RequestInit).body as string).connectionConfig.config.command).toBe("edited");
+  });
+
   it("is hidden for HTTP Connections", () => {
     act(() => useStore.getState().setTransport("http"));
     render(<ConnectionPanel />);

@@ -32,6 +32,16 @@ export function ConnectionPanel() {
   const renameRef = useRef<HTMLInputElement>(null);
   // Enter and the blur that follows it both commit; only the first may PATCH
   const isCommittingRename = useRef(false);
+  // Debounced autosave not yet sent; flushed on switch and Connect so edits are never dropped
+  const pendingSave = useRef<{ timeoutId: number; save: () => void; connectionId: string } | null>(null);
+
+  const flushPendingSave = () => {
+    const pending = pendingSave.current;
+    if (!pending) return;
+    window.clearTimeout(pending.timeoutId);
+    pendingSave.current = null;
+    pending.save();
+  };
 
   const isConnected = connectionStatus === 'connected';
   const isSelectedConnectionConnected =
@@ -61,6 +71,7 @@ export function ConnectionPanel() {
   }, [isRenaming]);
 
   useEffect(() => {
+    if (pendingSave.current && pendingSave.current.connectionId !== selectedConnection?.id) flushPendingSave();
     if (!selectedConnection || !selectedCollection) return;
     const connectionConfig = buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth });
     if (!isConnectable(connectionConfig) && !selectedConnection.connectionConfig) return;
@@ -70,11 +81,16 @@ export function ConnectionPanel() {
       return;
     }
 
-    const timeoutId = window.setTimeout(() => {
+    if (pendingSave.current) window.clearTimeout(pendingSave.current.timeoutId);
+    const save = () => {
+      pendingSave.current = null;
       updateConnectionConfig(selectedCollection.id, selectedConnection.id, connectionConfig).catch(console.error);
-    }, 250);
-
-    return () => window.clearTimeout(timeoutId);
+    };
+    pendingSave.current = {
+      timeoutId: window.setTimeout(save, 250),
+      save,
+      connectionId: selectedConnection.id,
+    };
   }, [
     selectedCollection?.id,
     selectedConnection?.id,
@@ -115,6 +131,7 @@ export function ConnectionPanel() {
       disconnect();
       return;
     }
+    flushPendingSave();
     const config = buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth });
     connect(config);
   };

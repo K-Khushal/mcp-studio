@@ -34,7 +34,7 @@ test("STDIO cwd, args and env reach the subprocess", async () => {
   } finally { rmSync(cwd, { recursive: true, force: true }); }
 });
 
-test("inheritSystemEnv=false hides the Studio Server environment; true merges it under Connection env", async () => {
+test("inheritSystemEnv=false excludes arbitrary Studio Server variables (SDK minimal safe set remains); true merges it under Connection env", async () => {
   process.env.STUDIO_PARENT_VAR = "from-parent";
   process.env.STUDIO_SHADOWED_VAR = "parent-value";
   try {
