@@ -1,9 +1,9 @@
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useState } from 'react';
 import { Play, ChevronRight } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { ToolList } from './tool-list';
-import { SchemaForm } from './tool-schema-form';
+import { ToolArgsEditor } from './tool-args-editor';
 import { defaultValue, buildParams, seedValues, getProperties } from './tool-schema-helpers';
 
 export default function ToolPanel() {
@@ -23,6 +23,7 @@ export default function ToolPanel() {
     invokeTool,
     clearPendingParams,
   } = useStore();
+  const [argsValid, setArgsValid] = useState(true);
   const isSelectedConnectionConnected =
     connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
 
@@ -45,10 +46,6 @@ export default function ToolPanel() {
     setToolFormValues({ ...toolFormValues, ...seedValues(selectedTool.inputSchema, pendingParams) });
     clearPendingParams();
   }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
-
-  const handleFieldChange = useCallback((key: string, value: string) => {
-    setToolFormValues({ ...toolFormValues, [key]: value });
-  }, [toolFormValues, setToolFormValues]);
 
   const handleInvoke = useCallback(() => {
     if (!selectedTool) return;
@@ -88,17 +85,19 @@ export default function ToolPanel() {
               )}
             </div>
 
-            <SchemaForm
+            <ToolArgsEditor
+              key={selectedTool.name}
               schema={selectedTool.inputSchema}
               values={toolFormValues}
-              onChange={handleFieldChange}
+              onChange={setToolFormValues}
+              onValidChange={setArgsValid}
             />
 
             <div className="flex justify-end pt-2 border-t border-border mt-auto">
               <Button
                 size="sm"
                 onClick={handleInvoke}
-                disabled={response.isStreaming}
+                disabled={response.isStreaming || !argsValid}
                 className="gap-1.5 text-xs"
               >
                 <Play size={12} />
