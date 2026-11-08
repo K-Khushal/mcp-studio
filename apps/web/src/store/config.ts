@@ -18,7 +18,7 @@ export function readPersistedConfig(): MCPConfig {
     const saved = JSON.parse(raw) as Record<string, unknown>;
     return {
       requestTimeout:
-        typeof saved.requestTimeout === "number" && saved.requestTimeout > 0
+        typeof saved.requestTimeout === "number" && Number.isInteger(saved.requestTimeout) && saved.requestTimeout > 0
           ? saved.requestTimeout
           : DEFAULT_CONFIG.requestTimeout,
       autoScrollLogs:

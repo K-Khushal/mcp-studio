@@ -79,6 +79,10 @@ describe("settings persistence", () => {
     expect(store.getState().config.theme).toBe("dark");
     expect(store.getState().config.requestTimeout).toBe(30);
 
+    localStorage.setItem(CONFIG_KEY, JSON.stringify({ requestTimeout: 1.5 }));
+    const fractional = await freshStore();
+    expect(fractional.getState().config.requestTimeout).toBe(30);
+
     localStorage.setItem(CONFIG_KEY, "{not json");
     const again = await freshStore();
     expect(again.getState().config.theme).toBe("dark");

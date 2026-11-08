@@ -57,12 +57,13 @@ export function ConfigurationPanel() {
               type="number"
               inputMode="numeric"
               min={1}
+              step={1}
               aria-label="Request timeout in seconds"
               value={timeoutDraft ?? String(config.requestTimeout)}
               onChange={(e) => {
                 setTimeoutDraft(e.target.value);
                 const n = Number(e.target.value);
-                if (Number.isFinite(n) && n > 0) setConfig({ requestTimeout: n });
+                if (Number.isInteger(n) && n > 0) setConfig({ requestTimeout: n });
               }}
               onBlur={() => setTimeoutDraft(null)}
               className="h-8 w-20 font-mono text-xs tabular-nums"

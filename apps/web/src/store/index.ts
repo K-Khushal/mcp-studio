@@ -983,7 +983,8 @@ export const useStore = create<AppState & AppActions>()(
 );
 
 applyTheme(useStore.getState().config.theme);
-watchSystemTheme(() => useStore.getState().config.theme);
+const stopWatchingSystemTheme = watchSystemTheme(() => useStore.getState().config.theme);
+import.meta.hot?.dispose(stopWatchingSystemTheme);
 
 // ---------------------------------------------------------------------------
 // Module-level server message handler

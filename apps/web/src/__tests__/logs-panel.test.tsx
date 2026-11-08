@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 
 const { useStore } = await import("../store/index.js");
 const { LogsPanel } = await import("../components/logs/logs-panel.js");
@@ -29,6 +29,15 @@ describe("LogsPanel", () => {
   it("follows new lines when auto-scroll is on", () => {
     render(<LogsPanel />);
     expect(list().scrollTop).toBe(900);
+  });
+
+  it("keeps following once the buffer is full and length stops changing", () => {
+    render(<LogsPanel />);
+    const el = list();
+    el.scrollTop = 0;
+    const shifted = [...logs.slice(1), { ...logs[0]!, id: "log_40", message: "line 40" }];
+    act(() => useStore.setState({ logs: shifted }));
+    expect(el.scrollTop).toBe(900);
   });
 
   it("stays put when auto-scroll is off", () => {

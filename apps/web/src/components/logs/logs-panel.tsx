@@ -36,7 +36,7 @@ export function LogsPanel() {
   useLayoutEffect(() => {
     const list = listRef.current;
     if (autoScroll && list) list.scrollTop = list.scrollHeight;
-  }, [autoScroll, logsOpen, filtered.length]);
+  }, [autoScroll, logsOpen, logs, filter, search]);
 
   const startResize = (e: React.PointerEvent<HTMLDivElement>) => {
     const startY = e.clientY;
