@@ -43,6 +43,9 @@ export function ConnectionPanel() {
     pending.save();
   };
 
+  // Unmount: send the pending edit only if its Connection still exists
+  useEffect(() => () => flushPendingSave(), []);
+
   const isConnected = connectionStatus === 'connected';
   const isSelectedConnectionConnected =
     selectedConnectionId !== null && selectedConnectionId === connectedConnectionId && isConnected;
@@ -84,6 +87,8 @@ export function ConnectionPanel() {
     if (pendingSave.current) window.clearTimeout(pendingSave.current.timeoutId);
     const save = () => {
       pendingSave.current = null;
+      const exists = useStore.getState().collections.some((c) => c.connections.some((r) => r.id === selectedConnection.id));
+      if (!exists) return;
       updateConnectionConfig(selectedCollection.id, selectedConnection.id, connectionConfig).catch(console.error);
     };
     pendingSave.current = {

@@ -59,6 +59,16 @@ const lastPatchedConfig = () => {
 };
 
 describe("STDIO form", () => {
+  it("sends no PATCH for a Connection deleted during its autosave debounce", async () => {
+    render(<ConnectionPanel />);
+    fireEvent.change(screen.getByLabelText("Command"), { target: { value: "bun" } });
+    await act(async () => { await useStore.getState().deleteConnection("col-1", "conn-1"); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(500); });
+    const methods = fetchMock.mock.calls.map((call) => (call[1] as RequestInit | undefined)?.method);
+    expect(methods).toContain("DELETE");
+    expect(methods).not.toContain("PATCH");
+  });
+
   it("shows every saved field of the selected Connection", () => {
     render(<ConnectionPanel />);
     expect(screen.getByLabelText("Command")).toHaveProperty("value", "node");
