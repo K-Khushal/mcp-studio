@@ -1,3 +1,4 @@
+import { ElicitRequestSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-studio/types";
@@ -35,6 +36,10 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       this._isConnected = false;
       if (wasConnected) this.options.onClose?.();
     };
+    client.setRequestHandler(ElicitRequestSchema, async (request) => {
+      if ("url" in request.params) return { action: "cancel" as const };
+      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }) ?? { action: "cancel" as const }) };
+    });
     await client.connect(transport);
   }
 

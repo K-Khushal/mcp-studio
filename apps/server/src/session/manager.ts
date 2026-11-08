@@ -1,3 +1,4 @@
+import type { ElicitationResult } from "@mcp-studio/types";
 import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface } from "@mcp-studio/mcp-client";
 import type {
@@ -17,6 +18,27 @@ type Send = (msg: ServerMessage) => void;
  * One instance per WebSocket connection.
  */
 export class SessionManager {
+  private pendingElicitations = new Map<string, (result: ElicitationResult) => void>();
+
+  private requestElicitation = (request: { message: string; requestedSchema: Record<string, unknown> }): Promise<ElicitationResult> => {
+    const elicitationId = nanoid();
+    return new Promise(resolve => {
+      const finish = (result: ElicitationResult) => {
+        clearTimeout(timer);
+        this.pendingElicitations.delete(elicitationId);
+        this.send({ type: "elicitation_closed", elicitationId });
+        resolve(result);
+      };
+      const timer = setTimeout(() => finish({ action: "cancel" }), 120_000);
+      this.pendingElicitations.set(elicitationId, finish);
+      this.send({ type: "elicitation_request", elicitationId, ...request });
+    });
+  };
+
+  private clearElicitations = (): void => {
+    for (const finish of this.pendingElicitations.values()) finish({ action: "cancel" });
+  };
+
   private client: MCPClientInterface | null = null;
   private status: ConnectionStatus = "disconnected";
   private activeEnv: Record<string, string> = {};
@@ -29,6 +51,9 @@ export class SessionManager {
 
   async handle(msg: ClientMessage): Promise<void> {
     switch (msg.type) {
+      case "elicitation_response":
+        this.pendingElicitations.get(msg.elicitationId)?.({ action: msg.action, ...(msg.action === "accept" ? { content: msg.content } : {}) });
+        break;
       case "connect":
         await this.connect(msg);
         break;
@@ -50,7 +75,9 @@ export class SessionManager {
     }
   }
 
-  private connectionClosed(): void {
+  private connectionClosed(client: MCPClientInterface): void {
+    if (this.client !== client) return;
+    this.clearElicitations();
     if (this.status !== "connected") return;
     const reason = "MCP Server connection closed unexpectedly";
     this.client = null;
@@ -83,17 +110,19 @@ export class SessionManager {
     this.setStatus("connecting");
 
     try {
-      this.client =
+      const client: MCPClientInterface =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
-              onClose: () => this.connectionClosed(),
+              onElicitation: this.requestElicitation,
+              onClose: () => this.connectionClosed(client),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
                 this.send({ type: "chunk", requestId, data }),
             })
           : new StreamableHTTPClient(config.config, {
-              onClose: () => this.connectionClosed(),
+              onElicitation: this.requestElicitation,
+              onClose: () => this.connectionClosed(client),
               onLog: (level, source, message) =>
                 this.send({ type: "log", level, source, message, timestamp: Date.now() }),
               onChunk: (requestId, data) =>
@@ -102,7 +131,8 @@ export class SessionManager {
                 this.send({ type: "http_response", requestId, status, headers }),
             });
 
-      const info = await this.client.connect();
+      this.client = client;
+      const info = await client.connect();
       this.setStatus("connected");
 
       this.send({
@@ -114,6 +144,7 @@ export class SessionManager {
         serverInfo: { name: info.serverName, version: info.serverVersion },
       });
     } catch (err) {
+      this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
       this.client = null;
@@ -192,6 +223,7 @@ export class SessionManager {
 
   async disconnect(): Promise<void> {
     if (this.status === "disconnected") return;
+    this.clearElicitations();
     const client = this.client;
     this.client = null;
     this.setStatus("disconnected");

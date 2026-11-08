@@ -41,7 +41,7 @@ export class StdioMCPClient extends BaseMCPClient {
     };
     this.transport.stderr?.on("data", this.stderrHandler);
 
-    const client = new Client({ name: "mcp-studio", version: "0.0.1" });
+    const client = new Client({ name: "mcp-studio", version: "0.0.1" }, { capabilities: { elicitation: { form: {} } } });
     this.options.onLog?.("INFO", "protocol", "Connecting via STDIO transport…");
     await this.connectTransport(client, this.transport);
     this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");

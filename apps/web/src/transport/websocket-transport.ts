@@ -1,4 +1,4 @@
-import type { StudioTransport, ServerMessage, ConnectionConfig } from "@mcp-studio/types";
+import type { StudioTransport, ServerMessage, ConnectionConfig, ClientMessage } from "@mcp-studio/types";
 
 const WS_URL = import.meta.env["VITE_WS_URL"] ?? (import.meta.env.DEV ? "ws://localhost:3000/ws" : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
 
@@ -46,7 +46,7 @@ export class WebSocketTransport implements StudioTransport {
   // Internal
   // ---------------------------------------------------------------------------
 
-  private send(msg: unknown): void {
+  send(msg: ClientMessage): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       console.warn("[transport] send() called while socket not open");
       return;
