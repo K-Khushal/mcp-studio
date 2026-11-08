@@ -38,7 +38,7 @@ class TestClient extends BaseMCPClient {
   private transport = new PingPeer();
   constructor(options: MCPClientOptions) { super(options); }
   protected async setupTransport() {
-    const client = new Client({ name: "test", version: "1" });
+    const client = new Client({ name: "test", version: "1" }, { capabilities: { elicitation: { form: {} } } });
     await this.connectTransport(client, this.transport);
     return client;
   }
