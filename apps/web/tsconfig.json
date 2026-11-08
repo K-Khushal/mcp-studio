@@ -6,7 +6,6 @@
     "jsx": "react-jsx",
     "moduleResolution": "Bundler",
     "rootDir": "./src",
-    "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"]
     },
