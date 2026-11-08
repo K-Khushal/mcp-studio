@@ -106,7 +106,10 @@ export class StreamableHTTPClient extends BaseMCPClient {
         this.variant = "sse";
       } catch (fallbackError) {
         await client.close();
-        throw fallbackError;
+        throw new Error(
+          `Streamable HTTP rejected (HTTP ${error.code}); legacy SSE failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
+          { cause: fallbackError },
+        );
       }
     }
     this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");

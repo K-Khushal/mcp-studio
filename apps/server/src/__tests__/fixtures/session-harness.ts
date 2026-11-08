@@ -55,8 +55,14 @@ export const stdioFixture: ClientMessage = {
 };
 
 /** Real SDK HTTP transports on OS-assigned loopback ports. */
-export async function startHTTPFixture(mode: "streamable" | "sse" = "streamable") {
-  if (mode === "sse") return startSSEFixture();
+export function startHTTPFixture(): ReturnType<typeof startStreamableFixture>;
+export function startHTTPFixture(mode: "streamable"): ReturnType<typeof startStreamableFixture>;
+export function startHTTPFixture(mode: "sse"): ReturnType<typeof startSSEFixture>;
+export function startHTTPFixture(mode: "streamable" | "sse" = "streamable") {
+  return mode === "sse" ? startSSEFixture() : startStreamableFixture();
+}
+
+async function startStreamableFixture() {
   const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
   const protocols = new Set<ReturnType<typeof createProtocolServer>>();
   const versions: (string | null)[] = [];
@@ -123,13 +129,20 @@ async function startSSEFixture() {
   await new Promise<void>(resolve => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   if (!address || typeof address === "string") throw new Error("Missing fixture port");
+  let closing: Promise<void> | undefined;
   return {
     connection: { type: "connect", transport: "http", config: { url: `http://127.0.0.1:${address.port}/sse`, headers: {} } } satisfies ClientMessage,
     versions,
-    async close() {
-      await Promise.all([...protocols].map(protocol => protocol.close()));
-      server.closeAllConnections();
-      await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    close() {
+      return closing ??= (async () => {
+        await Promise.all([...protocols].map(protocol => protocol.close()));
+        // Bun 1.3.12 also stops the listener here; newer Bun only closes sockets.
+        server.closeAllConnections();
+        await new Promise<void>((resolve, reject) => server.close(error => {
+          if (error && (error as NodeJS.ErrnoException).code !== "ERR_SERVER_NOT_RUNNING") reject(error);
+          else resolve();
+        }));
+      })();
     },
   };
 }
