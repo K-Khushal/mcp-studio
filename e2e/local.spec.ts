@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { fixtureURL, studioToken, studioURL } from './ports';
 import { test, expect } from '@playwright/test';
 import { fixtureConnection, selectTool, runTool, jsonArgs, createConnection, configureStdio, connect, fixtureInfo } from './helpers';
@@ -23,6 +24,7 @@ test('STDIO: form and JSON Calls, prompts and structured output', async ({ page 
   await page.getByPlaceholder('name', { exact: true }).fill('Ada');
   await page.getByRole('button', { name: 'Run Prompt', exact: true }).click();
   await expect(page.getByText('Hello, Ada!', { exact: true })).toBeVisible();
+  expect((await new AxeBuilder({ page }).include('[data-testid="response"]').analyze()).violations).toEqual([]);
 });
 
 for (const variant of ['streamable', 'sse'] as const) {
@@ -206,6 +208,7 @@ test('public everything STDIO package returns tools and image content', async ({
   await runTool(page);
   await expect(page.getByRole('img', { name: /^Image response/ })).toBeVisible();
   await expect.poll(() => page.getByRole('img', { name: /^Image response/ }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  expect((await new AxeBuilder({ page }).include('[data-testid="response"]').analyze()).violations).toEqual([]);
   await page.screenshot({ path: testInfo.outputPath('everything-image.png') });
 });
 

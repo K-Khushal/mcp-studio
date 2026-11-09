@@ -7,7 +7,7 @@ test.setTimeout(180_000);
 
 const shots = process.env.RESPONSE_AUDIT_DIR ?? 'test-results/response-audit';
 const before = process.env.RESPONSE_AUDIT_BEFORE === '1';
-const surface = 'div.flex.flex-col.bg-card.h-full';
+const surface = '[data-testid="response"]';
 
 async function responseTab(page: Page, name: string) {
   await page.locator(surface).getByRole(before ? 'button' : 'tab', { name: before ? name.toLowerCase() : name, exact: true }).click();
@@ -61,7 +61,7 @@ for (const theme of ['dark', 'light'] as const) {
     await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
     await createConnection(page, `Response HTTP ${theme}`, `Response HTTP ${theme} Collection`);
     const info = await fixtureInfo(page);
-    await page.getByRole('button', { name: 'HTTP', exact: true }).click();
+    await page.getByRole('radio', { name: 'HTTP', exact: true }).click();
     await page.getByLabel('Server URL').fill(info.streamable);
     await connect(page);
     await selectTool(page, 'echo');
@@ -113,7 +113,7 @@ test('response keyboard walkthrough: tabs, JSON expansion and copy', async ({ pa
   await page.getByRole('button', { name: 'Disconnect', exact: true }).click();
   await createConnection(page, 'Keyboard HTTP response', 'Keyboard HTTP Collection');
   const info = await fixtureInfo(page);
-  await page.getByRole('button', { name: 'HTTP', exact: true }).click();
+  await page.getByRole('radio', { name: 'HTTP', exact: true }).click();
   await page.getByLabel('Server URL').fill(info.streamable);
   await connect(page);
   await selectTool(page, 'echo');

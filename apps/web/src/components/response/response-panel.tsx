@@ -45,7 +45,7 @@ export function ResponsePanel() {
     : null;
 
   return (
-    <Tabs value={activeTab} onValueChange={value => setActiveTab(value as ResponseTab)} className="flex flex-col bg-card h-full min-h-0">
+    <Tabs data-testid="response" value={activeTab} onValueChange={value => setActiveTab(value as ResponseTab)} className="flex flex-col bg-card h-full min-h-0">
       <ResponseHeader
         isHttp={isHttp}
         hasResult={hasResult}
