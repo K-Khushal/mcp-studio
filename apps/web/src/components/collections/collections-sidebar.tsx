@@ -183,7 +183,7 @@ export function CollectionsSidebar() {
             key={col.id}
             collection={col}
             connections={connections}
-            searching={query !== ''}
+            searchQuery={search}
             selectedConnectionId={selectedConnectionId}
             onSelectConnection={handleSelectConnection}
             onConnectConnection={handleConnectConnection}

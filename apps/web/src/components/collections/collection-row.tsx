@@ -27,18 +27,23 @@ interface CollectionRowProps {
   collection: Collection;
   /** Connections to list; the sidebar narrows them while searching. Defaults to all. */
   connections?: Connection[];
-  searching?: boolean;
+  searchQuery?: string;
   selectedConnectionId: string | null;
   onSelectConnection: (conn: Connection) => void;
   onConnectConnection: (conn: Connection) => void;
 }
 
-export function CollectionRow({ collection, connections = collection.connections, searching = false, selectedConnectionId, onSelectConnection, onConnectConnection }: CollectionRowProps) {
+export function CollectionRow({ collection, connections = collection.connections, searchQuery = '', selectedConnectionId, onSelectConnection, onConnectConnection }: CollectionRowProps) {
   const { renameCollection, deleteCollection, deleteConnection } = useStore();
   const liveConnectionId = useStore((s) =>
     s.connectionStatus === 'connected' ? s.connectedConnectionId : s.connectionStatus === 'connecting' ? s.connectingConnectionId : null
   );
   const [expanded, setExpanded] = useState(true);
+  const [searchExpansion, setSearchExpansion] = useState<{ query: string; expanded?: boolean }>({ query: searchQuery });
+  // Reset even when clearing then returning to the same query.
+  if (searchExpansion.query !== searchQuery) {
+    setSearchExpansion({ query: searchQuery });
+  }
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(collection.name);
   const [addOpen, setAddOpen] = useState(false);
@@ -70,7 +75,7 @@ export function CollectionRow({ collection, connections = collection.connections
     toast.success(`Connection "${conn.name}" deleted`);
   };
 
-  const showConnections = expanded || searching;
+  const showConnections = searchQuery ? (searchExpansion.query === searchQuery ? searchExpansion.expanded ?? true : true) : expanded;
   const confirmConn = collection.connections.find((r) => r.id === confirmDeleteConnId);
 
   return (
@@ -78,7 +83,10 @@ export function CollectionRow({ collection, connections = collection.connections
       <div className="group/collection relative flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 transition-colors">
         <button
           type="button"
-          onClick={() => setExpanded((e) => !e)}
+          onClick={() => {
+            if (searchQuery) setSearchExpansion({ query: searchQuery, expanded: !showConnections });
+            else setExpanded((e) => !e);
+          }}
           aria-label={`${showConnections ? 'Collapse' : 'Expand'} ${collection.name}`}
           aria-expanded={showConnections}
           className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"

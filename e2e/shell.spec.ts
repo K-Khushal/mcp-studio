@@ -1,10 +1,10 @@
 import AxeBuilder from '@axe-core/playwright';
 import { test, expect, type Page } from '@playwright/test';
-import { studioURL } from './ports';
+import { studioURL, studioToken } from './ports';
 import { fixtureInfo } from './helpers';
 
 const post = async (page: Page, path: string, body: unknown) =>
-  (await (await page.request.post(`${studioURL}${path}`, { data: body })).json()) as { id: string };
+  (await (await page.request.post(`${studioURL}${path}`, { data: body, headers: { Authorization: `Bearer ${studioToken}` } })).json()) as { id: string };
 
 async function violations(page: Page) {
   const { violations } = await new AxeBuilder({ page }).analyze();
@@ -116,4 +116,35 @@ test('at 200% zoom the sidebar opens from a labelled top-bar trigger', async ({ 
   expect(await violations(page)).toEqual([]);
   await page.keyboard.press('Escape');
   await expect(sheet).toHaveCount(0);
+});
+
+test('search reveals matches but respects each Collection collapse until the query changes', async ({ page }) => {
+  const info = await fixtureInfo(page);
+  const connectionConfig = { transport: 'stdio', config: { command: info.command, args: [info.fixture], env: {}, inheritSystemEnv: true } };
+  for (const name of ['Search Alpha', 'Search Beta']) {
+    const col = await post(page, '/collections', { name });
+    await post(page, `/collections/${col.id}/connections`, { name: `${name} match`, connectionConfig });
+  }
+  await page.goto('/');
+  const search = page.getByRole('textbox', { name: 'Search Collections and Connections' });
+  const alpha = page.getByRole('button', { name: 'Search Alpha match', exact: true });
+  const beta = page.getByRole('button', { name: 'Search Beta match', exact: true });
+  await page.getByRole('button', { name: 'Collapse Search Alpha', exact: true }).click();
+  await search.fill('match');
+  await expect(alpha).toBeVisible();
+  await page.getByRole('button', { name: 'Collapse Search Alpha', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Expand Search Alpha', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(alpha).toHaveCount(0);
+  await expect(beta).toBeVisible();
+  await search.fill('mat');
+  await expect(alpha).toBeVisible();
+  const collapse = page.getByRole('button', { name: 'Collapse Search Alpha', exact: true });
+  await collapse.focus();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Expand Search Alpha', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(alpha).toHaveCount(0);
+  await search.fill('');
+  await expect(alpha).toHaveCount(0);
+  await search.fill('mat');
+  await expect(alpha).toBeVisible();
 });
