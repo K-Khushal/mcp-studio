@@ -1,4 +1,4 @@
-import { studioURL, fixtureURL } from './ports';
+import { studioURL, fixtureURL, studioToken } from './ports';
 import { defineConfig } from '@playwright/test';
 
 export default defineConfig({
@@ -8,7 +8,11 @@ export default defineConfig({
   timeout: 90_000,
   expect: { timeout: 15_000 },
   reporter: [['./live-reporter.ts'], ['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
-  use: { actionTimeout: 15_000, baseURL: studioURL, viewport: { width: 1440, height: 1000 }, trace: 'retain-on-failure', screenshot: 'only-on-failure' },
+  use: {
+    actionTimeout: 15_000, baseURL: studioURL, viewport: { width: 1440, height: 1000 }, trace: 'retain-on-failure', screenshot: 'only-on-failure',
+    // Launch credentials are scoped to the browser origin, including its port (ADR-0007).
+    storageState: { cookies: [], origins: [{ origin: studioURL, localStorage: [{ name: 'mcp-studio.launch-token', value: studioToken }] }] },
+  },
   webServer: {
     command: 'bun runtime.ts',
     url: `${fixtureURL}/info`,

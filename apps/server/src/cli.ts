@@ -9,9 +9,16 @@ const usage = `Usage: mcp-studio [options]
   --help         Show this help
   --version      Print the package version
 
+Each launch prints a link like http://localhost:3000/?token=<launch token>
+and opens it. The Studio Server only answers browsers that opened that link
+(the page stores an origin-scoped credential) and scripts that send Authorization: Bearer <launch token>.
+Other tabs see a page asking for the printed link.
+
 Environment:
   STUDIO_DB_PATH  Database path (default: ~/.mcp-studio/studio.db)
-  CORS_ORIGIN     Additional allowed browser origin
+  STUDIO_TOKEN    Fixed Launch token for scripts (default: random per launch)
+  CORS_ORIGIN     Additional allowed browser origin (exact http(s) origin);
+                  it gets full Studio access, including launching commands
 `;
 
 try {
@@ -28,8 +35,8 @@ try {
   }
   process.env["PORT"] = String(port);
   process.env["STUDIO_PRODUCTION"] = "1";
-  await import("./index.js");
-  const url = `http://localhost:${port}`;
+  const studio = await import("./index.js");
+  const url = `http://localhost:${studio.port}/?token=${studio.token}`;
   console.log(`MCP Studio: ${url}`);
   if (!values["no-open"]) {
     const command = process.platform === "darwin" ? ["open", url]

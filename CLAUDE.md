@@ -70,7 +70,10 @@ REST (granular CRUD, no bulk replace):
 ### OAuth (ADR-0006)
 HTTP auth `{type:"oauth"}`: `StreamableHTTPClient.wrappedFetch` intercepts 401/insufficient-scope and calls `StudioOAuthProvider.authenticate()` (`packages/mcp-client/src/oauth.ts`); SDK does discovery/DCR/PKCE/refresh via a separate auth fetch (30s timeout). Flows coalesce per credential generation (retired on sign-out/URL change; stale saves rejected); only connecting Sessions receive `oauth_authorize`; `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) delivers the code. Browser approval only at connect; failed refresh in a Call needs reconnect. Tokens must never reach logs or `ServerMessage`s (tested). File-backed DBs use 0700 dir / 0600 file. Details: ADR-0006.
 
-Dev: Vite proxies `/api` → `localhost:3000`; WS direct to `ws://localhost:3000/ws` (`VITE_WS_URL` overrides). Production CLI (`bunx mcp-studio [--port N] [--no-open]`, `apps/server/src/cli.ts`) serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. Package build bundles CLI + copies web assets and Drizzle migrations into `dist/` (paths relative to bundle). `bun scripts/build-binary.ts` compiles a standalone CLI; release workflow builds five targets, draft releases only.
+Dev: Vite proxies `/api` → `localhost:3000`; WS direct to `ws://localhost:3000/ws` (`VITE_WS_URL` overrides). Production CLI (`bunx mcp-studio [--port N] [--no-open]`, `apps/server/src/cli.ts`) prints the token link and serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. Package build bundles CLI + copies web assets and Drizzle migrations into `dist/` (paths relative to bundle). `bun scripts/build-binary.ts` compiles a standalone CLI; release workflow builds five targets, draft releases only.
+
+### Launch token (ADR-0007)
+The launch link stores its token in origin-scoped localStorage and cleans the URL; HTML/static assets are public, REST uses Bearer headers, and browser WS handshakes offer `mcp-studio, token.<token>` (echo only `mcp-studio`). Browser REST callers use `apps/web/src/lib/studio-access.ts` so every `401` locks `LaunchGate`; recheck credentials on WS reconnect. Cookies cannot isolate localhost ports: expire legacy cookies and reject them for authentication. For token lifecycle, development redirects, security headers and protocol validation, read `docs/adr/0007-launch-token.md`.
 
 ### Env interpolation
 `apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively. `{{name}}` with `[A-Za-z0-9_]+` is a reference, no escape syntax; `{{ name }}` (spaces) not matched. Unresolved Variables block connect/Call. Only values interpolated, not keys.
@@ -113,7 +116,8 @@ Update after: new package/route/transport, schema change, arch decision, bug >15
 - **`cwd` must be spread conditionally** — `StdioClientTransport` uses `exactOptionalPropertyTypes` internally: `...(cwd ? { cwd } : {})`.
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
 - **Server tests use `bun:test`, not vitest** — Vite can't resolve native `bun:sqlite`; web tests use vitest + jsdom.
-- **Loopback only** — server listens on `localhost`, rejects non-loopback `Host` and foreign `Origin` (extra allowed origin from `CORS_ORIGIN`, default `http://localhost:5173` in dev, none in production).
+- **Loopback only** — server listens on `127.0.0.1` and `[::1]` (taken `[::1]` port fails startup), rejects `Host` other than loopback`:port` and foreign `Origin` (extra allowed origin from `CORS_ORIGIN`, exact http(s) origin, validated at startup; default `http://localhost:5173` in dev, none in production).
+- **Bun `development: false`** — errors return generic 500 (no dev error page); bad JSON bodies 400 via `readJsonObject`.
 - **`inheritSystemEnv=false` still gets the MCP SDK's minimal safe env** (PATH, HOME, TERM, …) so commands resolve; only arbitrary parent vars are excluded.
 
 ## Tests

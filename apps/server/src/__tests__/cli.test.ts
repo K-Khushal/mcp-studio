@@ -13,3 +13,44 @@ for (const flag of ["--help", "--version", "--unknown"]) {
     else for (const text of ["Usage:", "--port", "--no-open", "--help", "--version", "STUDIO_DB_PATH", "CORS_ORIGIN", "~/.mcp-studio/studio.db"]) expect(output).toContain(text);
   });
 }
+
+test("CLI --help documents the Launch token", async () => {
+  const child = Bun.spawn([process.execPath, resolve(import.meta.dir, "../cli.ts"), "--help"], { stdout: "pipe" });
+  const output = await new Response(child.stdout).text();
+  for (const text of ["?token=", "STUDIO_TOKEN", "Authorization: Bearer"]) expect(output).toContain(text);
+});
+
+test("CLI prints a link with a fresh Launch token that unlocks the Studio Server", async () => {
+  const launch = async () => {
+    const probe = Bun.serve({ hostname: "127.0.0.1", port: 0, fetch: () => new Response() });
+    const port = probe.port!;
+    await probe.stop(true);
+    const env: Record<string, string | undefined> = { ...process.env, STUDIO_DB_PATH: ":memory:" };
+    delete env["STUDIO_TOKEN"];
+    const child = Bun.spawn([process.execPath, resolve(import.meta.dir, "../cli.ts"), "--port", String(port), "--no-open"], { env, stdout: "pipe", stderr: "pipe" });
+    const reader = child.stdout.getReader();
+    let output = "";
+    let link: string | undefined;
+    while (!link) {
+      const { value, done } = await reader.read();
+      if (done) throw new Error(`CLI exited: ${output}`);
+      output += new TextDecoder().decode(value);
+      link = output.match(/MCP Studio: (http:\/\/localhost:\d+\/\?token=[A-Za-z0-9_-]{43})\n/)?.[1];
+    }
+    return { child, link, port };
+  };
+  const first = await launch();
+  try {
+    expect((await fetch(`http://localhost:${first.port}/collections`)).status).toBe(401);
+    const token = new URL(first.link).searchParams.get("token")!;
+    expect((await fetch(`http://localhost:${first.port}/collections`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
+    expect((await fetch(`http://localhost:${first.port}/collections`, { headers: { Cookie: `mcp_studio_${first.port}=${token}` } })).status).toBe(401);
+    first.child.kill();
+    await first.child.exited;
+    const second = await launch();
+    try {
+      expect(second.link.split("token=")[1]).not.toBe(first.link.split("token=")[1]);
+      expect((await fetch(`http://localhost:${second.port}/collections`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(401);
+    } finally { second.child.kill(); await second.child.exited; }
+  } finally { first.child.kill(); await first.child.exited; }
+}, 15000);

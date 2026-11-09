@@ -29,7 +29,9 @@ bunx mcp-studio
 bunx mcp-studio --port 4000 --no-open
 ```
 
-The CLI serves the UI, REST API (also under `/api`) and `/ws` on one loopback port, `http://localhost:3000` by default, and opens it in your browser. `--port` changes the port; `--no-open` skips the browser launch. Data lives in `~/.mcp-studio/studio.db` (override with `STUDIO_DB_PATH`). `npx` is unsupported.
+The CLI serves the UI, REST API (also under `/api`) and `/ws` on one loopback port (`127.0.0.1` and `[::1]`), `http://localhost:3000` by default. `--port` changes the port; `--no-open` skips the browser launch. Data lives in `~/.mcp-studio/studio.db` (override with `STUDIO_DB_PATH`). `npx` is unsupported.
+
+Each launch prints and opens a link with a random Launch token, like `http://localhost:3000/?token=…`. Opening it stores the token in origin-scoped localStorage and strips it from the address bar; other tabs on that same origin work too. A browser without it sees a page asking for the printed link, and scripts must send `Authorization: Bearer <token>`. Restarting MCP Studio prints a new link. `STUDIO_TOKEN` fixes the token (at least 32 characters of `A-Za-z0-9_-`) for scripts. Every response carries a strict Content-Security-Policy and refuses framing ([ADR-0007](docs/adr/0007-launch-token.md)).
 
 ### Standalone binaries (no Bun required)
 
@@ -129,6 +131,8 @@ packages/
 bun install
 bun dev                       # web on 5173, Studio Server on 3000
 ```
+
+Open the `Open http://localhost:3000/?token=…` link the Studio Server prints: it redirects to the Vite app on `5173`, which stores the launch token in origin-scoped localStorage and removes it from the URL. The development token is kept in the gitignored `apps/server/.dev-token`, so it survives `--watch` restarts.
 
 Run the gates, in order (CI runs the same on every PR and push to `main`):
 

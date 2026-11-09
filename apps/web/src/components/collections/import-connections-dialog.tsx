@@ -1,3 +1,4 @@
+import { studioFetch } from "@/lib/studio-access";
 import { useRef, useState } from 'react';
 import type { Collection, Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
@@ -7,7 +8,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 
 async function post<T>(url: string, data: unknown): Promise<T> {
-  const response = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
+  const response = await studioFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   if (!response.ok) throw new Error(`Could not save (${response.status}). Try again.`);
   return response.json() as Promise<T>;
 }
