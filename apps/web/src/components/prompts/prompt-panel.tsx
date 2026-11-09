@@ -3,6 +3,7 @@ import { Play, ChevronRight, Search } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 import { cn } from '@/lib/utils';
 import type { MCPPrompt } from '@mcp-studio/types';
 
@@ -161,7 +162,7 @@ export function PromptPanel() {
                         <span className="text-muted-foreground font-normal ml-1">— {arg.description}</span>
                       )}
                     </label>
-                    <Input
+                    <VariableInput
                       value={promptArgValues[arg.name] ?? ''}
                       onChange={(e) => handleArgChange(arg.name, e.target.value)}
                       placeholder={arg.description ?? arg.name}

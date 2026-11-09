@@ -70,6 +70,8 @@ Frontend proxies via Vite → `localhost:3000` in development. Production CLI se
 ### Env interpolation
 `apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively in nested objects/arrays. Any `{{name}}` whose name matches `[A-Za-z0-9_]+` is a Variable reference, with no escape syntax; `{{ name }}` with spaces is not matched. Unresolved Variables block connect/Call. Only values are interpolated; object keys (header names, env-var names, apikey key) are not interpolated.
 
+Variable editors (`components/shared/variable-input.tsx`) keep native input/textarea editing and paint token backgrounds in a pointer-inert, scroll-synced mirror. Hover the field for previews (also available as its accessible description); names containing secret/token/password/passwd/credential/key, case-insensitively, are conservatively masked, as are password-field previews. This is a display heuristic, not a secrecy boundary; ordinary Variables show their values.
+
 ### Frontend structure
 Single screen (`pages/home.tsx`), no view switching — `activeView` and the icon sidebar are gone.  
 Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar). TopNav `SessionInfo` shows MCP Server name/version, Transport, negotiated protocol version, status from store `serverInfo`/`protocolVersion`/`connectionConfig`.  

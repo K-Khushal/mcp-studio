@@ -1,5 +1,6 @@
 import { useStore } from '@/store';
 import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 import { Plus, Trash2 } from 'lucide-react';
 
 export function HeadersPanel() {
@@ -51,7 +52,7 @@ export function HeadersPanel() {
                 placeholder="Header name"
                 className="font-mono text-xs h-7"
               />
-              <Input
+              <VariableInput
                 value={value}
                 onChange={(e) => updateValue(key, e.target.value)}
                 placeholder="Value or {{ENV_VAR}}"
