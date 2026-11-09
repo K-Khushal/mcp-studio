@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { FolderPlus, Search } from 'lucide-react';
+import { FolderPlus, Search, Import } from 'lucide-react';
 import { toast } from 'sonner';
 import type { Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
@@ -19,8 +19,11 @@ import {
 import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
 import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
 
+import { ImportConnectionsDialog } from './import-connections-dialog';
+
 export function CollectionsSidebar() {
   const { collections, loadCollections, createCollection, loadConnection, selectedConnectionId } = useStore();
+  const [importing, setImporting] = useState(false);
   const [search, setSearch] = useState('');
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
@@ -105,6 +108,8 @@ export function CollectionsSidebar() {
           <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
             Collections
           </span>
+          <div className="flex items-center">
+          <Button variant="ghost" size="icon-sm" aria-label="Import Connections" title="Import Connections" onClick={() => setImporting(true)}><Import size={14} /></Button>
           <Button
             variant="ghost"
             size="icon-sm"
@@ -114,6 +119,7 @@ export function CollectionsSidebar() {
           >
             <FolderPlus size={14} />
           </Button>
+          </div>
         </div>
         <div className="relative">
           <Search size={12} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -166,6 +172,7 @@ export function CollectionsSidebar() {
         ))}
       </SidebarContent>
       <SidebarRail />
+      {importing && <ImportConnectionsDialog onClose={() => setImporting(false)} />}
 
       <AlertDialog open={pendingSwitch !== null} onOpenChange={(isOpen) => !isOpen && setPendingSwitch(null)}>
         <AlertDialogContent className="bg-card border-border">
