@@ -18,7 +18,7 @@ bun --filter @mcp-studio/web dev
 bun --filter @mcp-studio/server dev    # bun --watch src/index.ts
 bun --filter @mcp-studio/mcp-client test
 
-cd packages/mcp-client && bun vitest run src/__tests__/stdio-client.test.ts
+cd packages/mcp-client && bun vitest run src/__tests__/log.test.ts
 
 # Tests
 cd apps/server && STUDIO_DB_PATH=:memory: bun test src/__tests__   # server DB/query tests (bun:test)
@@ -46,46 +46,47 @@ Browser → WebSocketTransport → Bun WS server
        → SessionManager → StdioMCPClient | StreamableHTTPClient
        → MCP process (STDIO) or remote (HTTP)
 ```
+`StreamableHTTPClient` falls back to legacy SSE (ADR-0005); no separate SSE class.
 
-**`SessionManager`** (`apps/server/src/session/manager.ts`) — owns single active MCP connection, handles all `ClientMessage` types, interpolates `{{VAR_NAME}}` before every invoke.
+**`SessionManager`** (`apps/server/src/session/manager.ts`) — owns the single active MCP connection, handles all `ClientMessage`s, interpolates Variables before every Call.
 
 **Zustand store** (`apps/web/src/store/index.ts`) — `handleServerMessage()` at bottom is sole mutation point for `ServerMessage` events; registered via `transport.onMessage()` at connect time.
 
-### Message protocol
-`ClientMessage` → server: `connect` (stdio|http, optional `verbose` and `connectionId` for OAuth Sign-in), `set_verbose`, `invoke`, `invoke_prompt`, `cancel`, `disconnect`, `list_tools`, `list_prompts`
-`ServerMessage` → browser: `connected`, `session_phase`, `progress`, `cancelled`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`, `oauth_authorize` (browser opens URL)
-`requestId` ties progress, results, errors and cancellation to the originating tool or prompt Call. The browser supplies it; SessionManager generates one for older clients. Every tools/call gets an SDK progressToken; per-Call AbortSignals send MCP cancellation on Cancel or timeout. `session_phase` reports transport start (spawn/connect) and initialize durations independently of verbose logging.
-`log` carries `source` (`protocol`|`server`|`studio`) + optional `payload` (`direction`,`method`,`id`,`body`). With `verbose` on, `BaseMCPClient` taps transport send/onmessage and logs every JSON-RPC frame as a protocol-source DEBUG entry (live-toggle via `set_verbose`); `notifications/message` → server source (levels mapped in `mcp-client/src/log.ts`), STDIO stderr → server INFO. Store buffers logs arriving during connect (`handshakeLogs`) and adopts them on `connected`.
+### Message protocol (`packages/types/src/messages.ts`)
+`ClientMessage` → server: `connect` (stdio|http, optional `verbose` and `connectionId` for OAuth Sign-in), `set_verbose`, `invoke`, `invoke_prompt`, `cancel`, `disconnect`, `list_tools`, `list_prompts`, `elicitation_response`
+`ServerMessage` → browser: `connected` (tools, prompts, `serverInfo`, `protocolVersion`, `httpVariant`), `session_phase`, `progress`, `cancelled`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`, `http_response`, `elicitation_request`, `elicitation_closed`, `oauth_authorize`
+`requestId` ties progress, results, errors and cancellation to the originating tool or prompt Call. Browser supplies it (SessionManager generates one for older clients). Every tools/call gets a progressToken; per-Call AbortSignals send MCP cancellation on Cancel/timeout. `session_phase` reports transport-start and initialize durations.
+`log` carries `source` (`protocol`|`server`|`studio`) + optional `payload` (`direction`,`method`,`id`,`body`). `verbose` on: `BaseMCPClient` logs every JSON-RPC frame as protocol DEBUG (live via `set_verbose`); `notifications/message` + STDIO stderr → server source (`mcp-client/src/log.ts`). Store buffers connect-time logs (`handshakeLogs`), adopts on `connected`.
 
 ### Persistence
-SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `connections`, `environments`, `oauth_credentials`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `Connection` (table renamed from `requests` in migration `0002`, rows preserved) has no `tool`/`params` fields — tools fetched live from MCP after connect (dropped in migration `0001`).
+SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `connections`, `environments`, `oauth_credentials`). Queries: `db/queries/`. Migrations in `apps/server/drizzle/`, auto-applied at startup. No Call history or diff (ADR-0002); Calls are ephemeral. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `Connection` (table renamed from `requests`, migration `0002`) has no `tool`/`params` — tools fetched live after connect.
 
 REST (granular CRUD, no bulk replace):
 - `GET/POST /collections`, `PATCH/DELETE /collections/:id`
 - `POST /collections/:id/connections`, `PATCH|DELETE /collections/:id/connections/:connId`
 - `GET/POST /environments`, `PATCH/DELETE /environments/:id`
-- `DELETE /collections/:id/connections/:connId/oauth` (sign out), `GET /oauth/callback` (authorization redirect)
+- `DELETE /collections/:id/connections/:connId/oauth` (sign out), `GET /oauth/callback` (authorization redirect), `GET /health`
 
 ### OAuth (ADR-0006)
-HTTP auth `{type:"oauth"}`: `StreamableHTTPClient.wrappedFetch` intercepts 401 / insufficient-scope responses and calls `StudioOAuthProvider.authenticate()` (`packages/mcp-client/src/oauth.ts`); the SDK handles discovery/DCR/PKCE/refresh through a separate auth fetch. Flows coalesce per credential generation: only browser-allowed connecting Sessions receive `oauth_authorize` (including late joiners); connected waiters fail promptly if browser approval becomes necessary, and `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) delivers the code before exchange and MCP retry. Sessions cancel their own waits; the last waiter leaving cancels browser approval, while in-flight token responses finish persisting. Storage `db/queries/oauth-credentials.ts` binds credentials to the server URL and rejects generations retired by sign-out or URL changes. Browser approval is limited to connect; failed refresh during a Call requires reconnect. Auth endpoint requests time out after 30 seconds independently of Session lifetimes. Only OAuth-flow failures are sanitized; other MCP/network errors retain their messages with known secrets redacted. Tokens must never reach logs or `ServerMessage`s (tested).
+HTTP auth `{type:"oauth"}`: `StreamableHTTPClient.wrappedFetch` intercepts 401/insufficient-scope and calls `StudioOAuthProvider.authenticate()` (`packages/mcp-client/src/oauth.ts`); SDK does discovery/DCR/PKCE/refresh via a separate auth fetch (30s timeout). Flows coalesce per credential generation (retired on sign-out/URL change; stale saves rejected); only connecting Sessions receive `oauth_authorize`; `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) delivers the code. Browser approval only at connect; failed refresh in a Call needs reconnect. Tokens must never reach logs or `ServerMessage`s (tested). File-backed DBs use 0700 dir / 0600 file. Details: ADR-0006.
 
-Frontend proxies via Vite → `localhost:3000` in development. Production CLI serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. The package build bundles the CLI and copies web assets and Drizzle migrations into `dist/`; keep these paths relative to the bundle, independent of the working directory. `bun scripts/build-binary.ts` compiles a standalone CLI with embedded web assets and migrations, extracted to a temporary directory at startup; the release workflow builds five targets and creates draft releases only.
+Dev: Vite proxies `/api` → `localhost:3000`; WS direct to `ws://localhost:3000/ws` (`VITE_WS_URL` overrides). Production CLI (`bunx mcp-studio [--port N] [--no-open]`, `apps/server/src/cli.ts`) serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. Package build bundles CLI + copies web assets and Drizzle migrations into `dist/` (paths relative to bundle). `bun scripts/build-binary.ts` compiles a standalone CLI; release workflow builds five targets, draft releases only.
 
 ### Env interpolation
-`apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively in nested objects/arrays. Any `{{name}}` whose name matches `[A-Za-z0-9_]+` is a Variable reference, with no escape syntax; `{{ name }}` with spaces is not matched. Unresolved Variables block connect/Call. Only values are interpolated; object keys (header names, env-var names, apikey key) are not interpolated.
+`apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively. `{{name}}` with `[A-Za-z0-9_]+` is a reference, no escape syntax; `{{ name }}` (spaces) not matched. Unresolved Variables block connect/Call. Only values interpolated, not keys.
 
-Variable editors (`components/shared/variable-input.tsx`) keep native input/textarea editing and paint token backgrounds in a pointer-inert, scroll-synced mirror. Hover the field for previews (also available as its accessible description); names containing secret/token/password/passwd/credential/key, case-insensitively, are conservatively masked, as are password-field previews. This is a display heuristic, not a secrecy boundary; ordinary Variables show their values.
+Variable editors (`components/shared/variable-input.tsx`) keep native editing, painting token backgrounds in a scroll-synced mirror. Hover previews mask names containing secret/token/password/passwd/credential/key (display heuristic, not a secrecy boundary).
 
 ### Frontend structure
-Single screen (`pages/home.tsx`), no view switching — `activeView` and the icon sidebar are gone.  
-Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar). TopNav `SessionInfo` shows MCP Server name/version, Transport, negotiated protocol version, status from store `serverInfo`/`protocolVersion`/`connectionConfig`.  
-Features: `src/components/{connection,tools,prompts,response,logs,collections,environments,configuration,shared}/`  
-STDIO form (`connection/stdio-form.tsx`): store `stdio` (`StdioDraft`: command, args[], cwd, env rows, inheritSystemEnv) edited via `setStdio`; `store/connection-form.ts` converts draft ↔ `StdioConfig` (blank args/env names/cwd dropped) and builds the `ConnectionConfig` used by autosave PATCH and Connect; `connectionUrl` is HTTP-only. Sidebar double-click connects; clicking/double-clicking another Connection while a Session is live asks, then disconnects.  
-Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()` → sets `selectedConnectionId`, `transport`, `connectionUrl`, `selectedTool`, `pendingParams` → ToolPanel pre-fills. Home shows blank state when `selectedConnectionId === null`.  
-Tool metadata (title, icons, annotations, outputSchema) passes through the MCP client to the web. Each Call captures its output schema in ResponseState; Pretty validates structuredContent with Ajv (2020-12 by default, draft-07 only when explicitly declared; unsupported dialects report Cannot validate) and ajv-formats, preserving content blocks alongside validation feedback.
+Single screen (`pages/home.tsx`): collections sidebar + studio view + logs panel; no view switching or icon sidebar.  
+Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar); SessionInfo reads store `serverInfo`/`protocolVersion`/`connectionConfig`.  
+Features: `src/components/{auth,connection,tools,prompts,response,logs,collections,environments,configuration,shared}/`  
+STDIO form: store `stdio` (`StdioDraft`) via `setStdio`; `store/connection-form.ts` converts draft ↔ `StdioConfig` (blanks dropped), builds `ConnectionConfig` for autosave PATCH and Connect; `connectionUrl` HTTP-only. Sidebar double-click connects; clicking/double-clicking another Connection while a Session is live asks, then disconnects.  
+Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()` → sets `selectedConnectionId` + connection form (transport/url/stdio/auth/headers) from the saved config or local draft, and blanks tools/prompts/selection/params/response/logs (Connections store no tool/params, ADR-0003). Home shows blank state when `selectedConnectionId === null`.  
+Each Call captures its tool outputSchema in ResponseState; Pretty validates structuredContent with Ajv (2020-12 default, draft-07 if declared; else Cannot validate).
 
 ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
-Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme: dark|light|system`) persisted to `localStorage` key `mcp-studio-config` via `store/config.ts` (field-validated read, unknown keys dropped); `setConfig` writes store + localStorage and re-applies theme (`lib/theme.ts`). `index.html` inline script applies saved theme before paint. `requestTimeout` (seconds) is sent with each tool/prompt Call and enforced by SessionManager; `verboseLogging` is sent with `connect` and on change (`setConfig` → `transport.setVerbose`). Logs panel height is `logsHeight` in store (clamped, drag/arrow-key resize). Environments are global (not per-collection/Connection).
+Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme`) in `localStorage` `mcp-studio-config` via `store/config.ts`; `setConfig` writes store + localStorage, re-applies theme. `requestTimeout` (s) sent with each Call, enforced by SessionManager; `verboseLogging` sent with `connect` and on change. Environments are global.
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`
@@ -93,32 +94,23 @@ Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `th
 3. Emit → `SessionManager` in `apps/server/src/session/manager.ts`
 
 ### TS config
-Root `tsconfig.base.json` extended by all packages. Web: `moduleResolution: Bundler`, `@/*` → `src/`. Server adds `bun-types`. `exactOptionalPropertyTypes` disabled (see Gotchas).
+`tsconfig.base.json` extended by all packages. Web: `moduleResolution: Bundler`, `@/*` → `src/`. Server adds `bun-types`. `exactOptionalPropertyTypes` disabled (see Gotchas).
 
 ## Domain docs
-Vocabulary: `GLOSSARY.md` (use its terms; saved entity = **Connection**, formerly "request"). Decisions: `docs/adr/`. Read both before changing domain behaviour.
+`GLOSSARY.md` (saved entity = **Connection**, formerly "request"), `docs/adr/`. Read before changing domain behaviour.
 
 ## Self-Maintenance
-Update after any session with: new package/route/transport, schema change, arch decision, or bug >15 min to diagnose. One-two sentences, drop oldest if bloated.
+Update after: new package/route/transport, schema change, arch decision, bug >15 min. One-two sentences.
 
 ## Gotchas
 - **`exactOptionalPropertyTypes` disabled** — MCP SDK returns `string | undefined`; enabling breaks mcp-client type assignments.
-- **`tsc -b` removed from web build** — `tsconfig.node.json` (`composite: true`) conflicted with Vite's DOM types. `bun typecheck` is separate; `bun run build` calls `vite build` directly.
-- **Negotiated protocol version** — BaseMCPClient captures the SDK initialize result through transport.setProtocolVersion, preserving the transport callback; SessionManager includes it in connected. getServerVersion() only describes the MCP Server implementation.
+- **`tsc -b` removed from web build** — `tsconfig.node.json` (`composite`) conflicted with Vite DOM types; `bun typecheck` is separate.
+- **Negotiated protocol version** — BaseMCPClient captures the initialize result via transport.setProtocolVersion; SessionManager sends it in `connected`. getServerVersion() is only the MCP Server implementation.
 - **`cwd` must be spread conditionally** — `StdioClientTransport` uses `exactOptionalPropertyTypes` internally: `...(cwd ? { cwd } : {})`.
 - **Env synced per-message, not per-session** — `setActiveEnv()` called on every WS message; env changes take effect immediately without reconnect.
-- **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
-- **AppState includes `selectedConnectionId`, `transport`, `connectionUrl`** — moved from local component state to store so connection panel and home page stay in sync.
-
-## Tests
-
-Session protocol seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`. `SessionHarness` in `src/__tests__/fixtures/session-harness.ts` drives the real SessionManager: `await harness.send(clientMessage)` then `await harness.waitFor("result", message => message.requestId === id, 3000)`. Waits consume matching events once, including already emitted events; `messages` retains the full stream for diagnostics. Start waits before sending when observing events during an unfinished Call; always close the harness and HTTP fixture in `finally`.
-
-`stdioFixture` launches the SDK fixture subprocess; `startHTTPFixture()` provides an isolated Streamable HTTP endpoint on an ephemeral loopback port and `close()`. Catalogue: echo (`text`), error (tool result with `isError`), slow (`steps`, 50ms ticks, progress when `_meta.progressToken` supplied, AbortSignal cancellation), structured (`answer: 42` + outputSchema), elicit (name form), log (info notification), stderr, crash (exit 23); prompt: greet (`name`). `runtime-server.ts` is a STDIO-only fixture whose `runtime` tool reports subprocess cwd/env (`session-stdio-config.test.ts`). Live Call coverage: `session-live-calls.test.ts` verifies ordered progress, concurrent cancellation and timeouts against STDIO/HTTP fixtures; the slow fixture logs when its AbortSignal fires. Run crash only over STDIO: the in-process HTTP fixture would exit the test runner. `startHTTPFixture("sse")` runs the SDK legacy SSE transport at `/sse` with a separate POST endpoint. HTTP tries Streamable HTTP first and falls back on 400/404/405 rejection; `connected.httpVariant` carries `streamable` or `sse` to the status bar.
-
-Form elicitation: MCP clients advertise `elicitation.form`; SessionManager bridges `elicitation_request`/`elicitation_response` with unique elicitation IDs. Pending forms cancel after 120 seconds or Session closure; `elicitation_closed` removes expired dialogs. The browser queues forms and reuses ToolArgsEditor.
+- **Server tests use `bun:test`, not vitest** — Vite can't resolve native `bun:sqlite`; web tests use vitest + jsdom.
+- **Loopback only** — server listens on `localhost`, rejects non-loopback `Host` and foreign `Origin` (extra allowed origin from `CORS_ORIGIN`, default `http://localhost:5173` in dev, none in production).
 - **`inheritSystemEnv=false` still gets the MCP SDK's minimal safe env** (PATH, HOME, TERM, …) so commands resolve; only arbitrary parent vars are excluded.
 
-OAuth: `fixtures/oauth-fixture.ts` — `startOAuthFixture()` (protected `/mcp` + minimal AS: metadata, DCR, PKCE, refresh; `counts`, `issued`, `presented`, `expireAccessTokens()`, `revokeTokens()`), `startOAuthCallback()` (real callback route), `approveInBrowser(url)`. `new SessionHarness({ oauth })` enables sign-in.
-
-OAuth lifecycle: credential storage adapters share a per-Connection generation, retired on sign-out or URL change; saves reject stale generations, and aborted Sessions cannot reconnect. The SDK auth flow is coalesced per generation across Sessions, uses a separate fetch for auth traffic, and exposes safe errors without endpoint bodies; file-backed DBs use private permissions (0700 directory, 0600 file).
+## Tests
+Harness, fixtures (STDIO/HTTP/OAuth), elicitation and live-Call coverage: `docs/testing.md`. Session seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`.

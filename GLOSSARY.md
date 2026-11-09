@@ -40,6 +40,10 @@ _Avoid_: profile, config
 A key-value pair in an Environment, referenced as `{{NAME}}` in connection fields and Call arguments and substituted at use time.
 _Avoid_: secret, placeholder
 
+**Elicitation**:
+A form the MCP Server asks the user to fill in during a Call.
+_Avoid_: prompt (that is an MCP prompt template), popup
+
 **Log entry**:
 One line in the logs panel: a level, a source, a message, and optionally a structured payload (JSON-RPC direction, method, id, body).
 _Avoid_: log line, event
