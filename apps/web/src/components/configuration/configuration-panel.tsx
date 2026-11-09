@@ -2,7 +2,6 @@ import { useState } from "react";
 import { Settings } from "lucide-react";
 import type { ThemePreference } from "@mcp-studio/types";
 import { useStore } from "@/store";
-import { cn } from "@/lib/utils";
 import {
   Dialog,
   DialogContent,
@@ -12,6 +11,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { SegmentedControl } from "@/components/ui/segmented-control";
 import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
@@ -35,7 +35,7 @@ export function ConfigurationPanel() {
             <button
               type="button"
               aria-label="Settings"
-              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] duration-150 ease-out outline-hidden hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.96]"
+              className="flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] duration-150 ease-out outline-hidden hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]"
             >
               <Settings size={16} />
             </button>
@@ -84,25 +84,7 @@ export function ConfigurationPanel() {
             />
           </Row>
           <Row label="Theme" hint="System follows your OS.">
-            <div role="radiogroup" aria-label="Theme" className="flex rounded-lg border border-border bg-muted p-0.5">
-              {THEME_OPTIONS.map(({ value, label }) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={config.theme === value}
-                  onClick={() => setConfig({ theme: value })}
-                  className={cn(
-                    "rounded-md px-2.5 py-1 text-xs font-medium transition-[background-color,color] duration-150 ease-out outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50",
-                    config.theme === value
-                      ? "bg-background text-foreground shadow-sm"
-                      : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
+            <SegmentedControl aria-label="Theme" value={config.theme} onValueChange={(theme) => setConfig({ theme })} options={THEME_OPTIONS} />
           </Row>
         </div>
       </DialogContent>
