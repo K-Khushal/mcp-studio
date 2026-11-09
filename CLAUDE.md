@@ -88,7 +88,7 @@ Collections CRUD in sidebar; clicking a saved Connection calls `loadConnection()
 Each Call captures its tool outputSchema in ResponseState; Pretty validates structuredContent with Ajv (2020-12 default, draft-07 if declared; else Cannot validate).
 
 ToolPanel renders dynamic form from `selectedTool.inputSchema` (JSON Schema → fields).  
-Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme`) in `localStorage` `mcp-studio-config` via `store/config.ts`; `setConfig` writes store + localStorage, re-applies theme. `requestTimeout` (s) sent with each Call, enforced by SessionManager; `verboseLogging` sent with `connect` and on change. Environments are global.
+Settings (`MCPConfig`: `requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme`) in `localStorage` `mcp-studio-config` via `store/config.ts`; `setConfig` writes store + localStorage, re-applies theme. `requestTimeout` (s) sent with each Call, enforced by SessionManager; `verboseLogging` sent with `connect` and on change. Environments are global. Connection drafts stay in memory; startup deletes the legacy `mcp-studio-connection` localStorage entry. Diagnostic copies (logs, frames, response headers and errors) redact configured credentials and Variable values; wire data and Call results remain intact.
 
 ### Adding a new ServerMessage type
 1. Add variant → `packages/types/src/messages.ts`

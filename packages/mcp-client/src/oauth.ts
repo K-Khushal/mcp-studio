@@ -17,46 +17,7 @@ type AuthorizationFlow = {
 };
 const authorizations = new WeakMap<object, AuthorizationFlow>();
 
-/** Clone log data while redacting secrets; wire frames and Call results stay intact. */
-export function redactOAuthValue<T>(value: T, secrets: ReadonlySet<string>): T {
-  const seen = new WeakSet<object>();
-  const redact = (item: unknown): unknown => {
-    if (typeof item === "string") {
-      for (const secret of secrets) if (secret) item = (item as string).replaceAll(secret, "[REDACTED]");
-      return item;
-    }
-    if (!item || typeof item !== "object") return item;
-    if (seen.has(item)) return "[Circular]";
-    seen.add(item);
-    try {
-      if (item instanceof Error) {
-        const descriptors = Object.getOwnPropertyDescriptors(item);
-        for (const descriptor of Object.values(descriptors)) {
-          if ("value" in descriptor) descriptor.value = redact(descriptor.value);
-        }
-        const clone = Object.create(Object.getPrototypeOf(item), descriptors) as Error;
-        try {
-          // Branded prototype getters (e.g. DOMException.message) reject clones.
-          void clone.message;
-          void clone.name;
-          return clone;
-        } catch {
-          return Object.defineProperties(new Error(), {
-            ...descriptors,
-            message: { value: redact(item.message), writable: true, configurable: true },
-            name: { value: redact(item.name), writable: true, configurable: true },
-          });
-        }
-      }
-      if (Array.isArray(item)) return item.map(redact);
-      return Object.fromEntries(Object.entries(item).map(([key, child]) => [redact(key), redact(child)]));
-    } finally {
-      seen.delete(item);
-    }
-  };
-  return redact(value) as T;
-}
-
+export { redactDiagnosticValue as redactOAuthValue } from "./diagnostics.js";
 /** What Studio keeps between Sessions for one Connection's OAuth sign-in. */
 export interface OAuthCredentials {
   tokens?: OAuthTokens;
@@ -105,7 +66,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   private remember(credentials: OAuthCredentials): void {
-    for (const secret of [credentials.tokens?.access_token, credentials.tokens?.refresh_token, credentials.clientInformation?.client_secret]) {
+    for (const secret of [credentials.tokens?.access_token, credentials.tokens?.refresh_token, credentials.tokens?.id_token, credentials.clientInformation?.client_secret]) {
       if (secret) this.secrets.add(secret);
     }
   }

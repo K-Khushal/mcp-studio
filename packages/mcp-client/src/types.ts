@@ -6,6 +6,8 @@ import type { OAuthSignIn } from "./oauth.js";
 // ---------------------------------------------------------------------------
 
 export interface MCPClientOptions {
+  /** Shared with the Session to cover Variables and transport errors. Never used on wire data. */
+  diagnosticSecrets?: Set<string>;
   onClose?: () => void;
   onElicitation?: (request: { message: string; requestedSchema: Record<string, unknown> }, signal: AbortSignal) => Promise<ElicitationResult>;
   /** Capture JSON-RPC frames as Protocol log entries. Toggle live with `setVerbose`. */
@@ -21,6 +23,8 @@ export interface MCPClientOptions {
 }
 
 export interface MCPClientInterface {
+  /** Restore transport-owned credentials when the Session rebuilds Variable redaction. */
+  rememberDiagnosticSecrets(secrets: Set<string>): void;
   connect(): Promise<ConnectedServerInfo>;
   listTools(): Promise<MCPTool[]>;
   callTool(

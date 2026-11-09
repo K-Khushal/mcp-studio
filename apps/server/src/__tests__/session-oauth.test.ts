@@ -574,3 +574,17 @@ test("OAuth refresh failure during connect prompts/list still fails sanitized", 
   expect(messages).not.toContain("diagnostic");
   for (const secret of fixture.issued) expect(messages).not.toContain(secret);
 });
+
+test("OAuth ID tokens and resource response credentials are redacted from headers, verbose frames and errors", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  const id = fixture.idTokens[0]!;
+  await echo(session, id);
+  await session.send({ type: "invoke", tool: id, params: {} });
+  expect((await session.waitFor("error")).message).toContain("[REDACTED]");
+  const diagnostics = JSON.stringify(session.messages.filter(msg => ["log", "error", "http_response"].includes(msg.type)));
+  for (const value of [...fixture.issued, ...fixture.idTokens]) expect(diagnostics).not.toContain(value);
+  const headers = await session.waitFor("http_response");
+  expect(headers.headers["set-cookie"]).toBe("[REDACTED]");
+  expect(headers.headers["x-id-reflection"]).toBe("[REDACTED]");
+});

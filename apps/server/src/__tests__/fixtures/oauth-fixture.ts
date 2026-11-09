@@ -31,6 +31,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
   const accessTokens = new Map<string, { expired: boolean }>();
   const refreshTokens = new Set<string>();
   const issued: string[] = [];
+  const idTokens: string[] = [];
   const presented = new Set<string>();
   const counts = { registrations: 0, authorizations: 0, refreshes: 0 };
 
@@ -40,7 +41,9 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
     accessTokens.set(access, { expired: false });
     refreshTokens.add(refresh);
     issued.push(access, refresh);
-    return json({ access_token: access, token_type: "Bearer", expires_in: 3600, refresh_token: refresh });
+    const idToken = `id_${random()}`;
+    idTokens.push(idToken);
+    return json({ access_token: access, token_type: "Bearer", expires_in: 3600, refresh_token: refresh, id_token: idToken });
   };
 
   const waitAtGate = async (grant: string | null, phase: "request" | "response") => {
@@ -149,7 +152,11 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
           return new Response("Unauthorized", { status: 401, headers: { "www-authenticate": `Bearer resource_metadata="${resourceMetadata}"` } });
         }
         if (legacy && url.pathname === "/mcp" && request.method === "POST") return new Response("Use legacy SSE", { status: 405 });
-        return endpoint.handle(request);
+        const response = await endpoint.handle(request);
+        const headers = new Headers(response.headers);
+        headers.set("set-cookie", `session=${token}`);
+        headers.set("x-id-reflection", idTokens.at(-1) ?? "");
+        return new Response(response.body, { status: response.status, headers });
       }
       default:
         return new Response("Not found", { status: 404 });
@@ -178,6 +185,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
     },
     /** Every access and refresh token the authorization server issued. */
     issued,
+    idTokens,
     /** Every bearer token the MCP endpoint received. */
     presented,
     /** Revokes every access and refresh token, so only a new sign-in gets through. */

@@ -1,5 +1,5 @@
 import type { ElicitationResult } from "@mcp-studio/types";
-import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
+import { StdioMCPClient, StreamableHTTPClient, redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
@@ -72,10 +72,56 @@ export class SessionManager {
   private signInAbort: AbortController | null = null;
   private sessionOAuthStorage: OAuthStorage | null = null;
 
-  constructor(private readonly send: Send, private readonly options: SessionOptions = {}) {}
+  private readonly diagnosticSecrets = new Set<string>();
+  private readonly send: Send;
+
+  constructor(send: Send, private readonly options: SessionOptions = {}) {
+    this.send = message => {
+      if (message.type === "log") send({ ...message, message: redactDiagnosticValue(message.message, this.diagnosticSecrets),
+        ...(message.payload ? { payload: { ...message.payload, body: redactDiagnosticValue(message.payload.body, this.diagnosticSecrets) } } : {}) });
+      else if (message.type === "error") send({ ...message, message: redactDiagnosticValue(message.message, this.diagnosticSecrets) });
+      else if (message.type === "http_response") send({ ...message, headers: redactDiagnosticValue(message.headers, this.diagnosticSecrets, true) });
+      else if (message.type === "progress") send({ ...message, ...(message.message ? { message: redactDiagnosticValue(message.message, this.diagnosticSecrets) } : {}) });
+      else send(message);
+    };
+  }
+
+  private connectionTemplate: ConnectionConfig | null = null;
+  private connectionConfig: ConnectionConfig | null = null;
+  private referencedVariables = new Set<string>();
+  private callSecrets = new Map<string, Set<string>>();
+
+  private rememberVariables(value: unknown, callSecrets?: Set<string>): void {
+    const references = new Set<string>();
+    const visit = (item: unknown): void => {
+      if (typeof item === "string") {
+        for (const match of item.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) { this.referencedVariables.add(match[1]!); references.add(match[1]!); }
+      } else if (item && typeof item === "object") {
+        for (const child of Object.values(item)) visit(child);
+      }
+    };
+    visit(value);
+    for (const [name, entry] of Object.entries(this.activeEnv)) {
+      if (this.referencedVariables.has(name) || isCredentialKey(name)) {
+        const resolved = interpolate(entry, this.activeEnv).result;
+        rememberDiagnosticSecret(resolved, this.diagnosticSecrets, isCredentialKey(name));
+        if (callSecrets && references.has(name)) rememberDiagnosticSecret(resolved, callSecrets, isCredentialKey(name));
+      }
+    }
+  }
+
+  private rebuildSecrets(): void {
+    this.diagnosticSecrets.clear();
+    if (this.connectionTemplate) this.rememberVariables(this.connectionTemplate);
+    else this.rememberVariables(null);
+    if (this.connectionConfig) rememberConnectionSecrets(this.connectionConfig, this.diagnosticSecrets);
+    this.client?.rememberDiagnosticSecrets(this.diagnosticSecrets);
+    for (const secrets of this.callSecrets.values()) for (const value of secrets) this.diagnosticSecrets.add(value);
+  }
 
   setActiveEnv(env: Record<string, string>): void {
     this.activeEnv = env;
+    this.rebuildSecrets();
   }
 
   async handle(msg: ClientMessage): Promise<void> {
@@ -121,6 +167,9 @@ export class SessionManager {
     this.send({ type: "log", level: "ERROR", source: "studio", message: reason, timestamp: Date.now() });
     this.setStatus("disconnected");
     this.send({ type: "disconnected", reason });
+    this.diagnosticSecrets.clear();
+    this.connectionTemplate = this.connectionConfig = null;
+    this.referencedVariables.clear();
   }
   private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) =>
     this.send({ type: "log", level, source, message, timestamp: Date.now(), ...(payload ? { payload } : {}) });
@@ -133,9 +182,11 @@ export class SessionManager {
   private async connect(msg: Extract<ClientMessage, { type: "connect" }>): Promise<void> {
     if (this.status === "connecting") return;
     this.verbose = msg.verbose ?? this.verbose;
-    let config: ReturnType<SessionManager["interpolateConfig"]>;
+    let config: ConnectionConfig;
     try {
-      config = this.interpolateConfig(msg);
+      const resolved = interpolate({ transport: msg.transport, config: msg.config } as ConnectionConfig, this.activeEnv);
+      if (resolved.missing.length) throw new Error(`Unresolved Variables: ${resolved.missing.join(", ")}`);
+      config = resolved.result;
     } catch (err) {
       if (!this.client?.isConnected) this.setStatus("error");
       const message = err instanceof Error ? err.message : String(err);
@@ -144,9 +195,11 @@ export class SessionManager {
       return;
     }
 
-    if (this.client?.isConnected) {
-      await this.disconnect();
-    }
+    if (this.client?.isConnected) await this.disconnect();
+    this.referencedVariables.clear();
+    this.connectionTemplate = { transport: msg.transport, config: msg.config } as ConnectionConfig;
+    this.connectionConfig = config;
+    this.rebuildSecrets();
 
     this.setStatus("connecting");
     const lifecycle = new AbortController();
@@ -156,6 +209,7 @@ export class SessionManager {
       const client: MCPClientInterface =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
+              diagnosticSecrets: this.diagnosticSecrets,
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,
@@ -164,6 +218,7 @@ export class SessionManager {
               onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
             })
           : new StreamableHTTPClient(config.config, {
+              diagnosticSecrets: this.diagnosticSecrets,
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,
@@ -230,6 +285,7 @@ export class SessionManager {
     const timeout = Math.min(seconds * 1000, 2_147_483_647);
     const controller = new AbortController();
     this.calls.set(requestId, controller);
+    this.callSecrets.set(requestId, new Set());
     let remaining = timeout;
     let started = Date.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -271,20 +327,22 @@ export class SessionManager {
       clearTimeout(timer);
       this.callClocks.delete(requestId);
       this.calls.delete(requestId);
+      this.callSecrets.delete(requestId);
+      this.rebuildSecrets();
     }
   }
 
   private invoke(msg: Extract<ClientMessage, { type: "invoke" }>): Promise<void> {
     return this.runCall(msg, async (client, requestId, options) => ({
       type: "result", requestId,
-      data: await client.callTool(msg.tool, this.resolveVariables(msg.params), requestId, options),
+      data: await client.callTool(msg.tool, this.resolveVariables(msg.params, requestId), requestId, options),
     }));
   }
 
   private invokePrompt(msg: Extract<ClientMessage, { type: "invoke_prompt" }>): Promise<void> {
     return this.runCall(msg, async (client, requestId, options) => ({
       type: "prompt_result", requestId,
-      messages: await client.callPrompt(msg.prompt, this.resolveVariables(msg.args), requestId, options),
+      messages: await client.callPrompt(msg.prompt, this.resolveVariables(msg.args, requestId), requestId, options),
     }));
   }
 
@@ -337,25 +395,32 @@ export class SessionManager {
     this.signInAbort?.abort();
     this.signInAbort = null;
     this.sessionOAuthStorage = null;
-    if (this.status === "disconnected") return;
+    if (this.status === "disconnected") {
+      this.diagnosticSecrets.clear();
+      this.connectionTemplate = this.connectionConfig = null;
+      this.referencedVariables.clear();
+      return;
+    }
     this.clearElicitations();
     for (const call of this.calls.values()) call.abort("cancelled");
     const client = this.client;
     this.client = null;
     this.setStatus("disconnected");
-    await client?.disconnect();
-    this.send({ type: "disconnected" });
+    try {
+      await client?.disconnect();
+      this.send({ type: "disconnected" });
+    } finally {
+      this.diagnosticSecrets.clear();
+      this.connectionTemplate = this.connectionConfig = null;
+      this.referencedVariables.clear();
+    }
   }
 
-  private resolveVariables<T>(value: T): T {
+  private resolveVariables<T>(value: T, requestId: string): T {
+    this.rememberVariables(value, this.callSecrets.get(requestId));
     const { result, missing } = interpolate(value, this.activeEnv);
     if (missing.length) throw new Error(`Unresolved Variables: ${missing.join(", ")}`);
     return result;
   }
 
-  private interpolateConfig(
-    msg: Extract<ClientMessage, { type: "connect" }>
-  ): ConnectionConfig {
-    return this.resolveVariables({ transport: msg.transport, config: msg.config } as ConnectionConfig);
-  }
 }
