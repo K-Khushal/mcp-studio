@@ -11,6 +11,7 @@ import { StdioForm } from './stdio-form';
 export function ConnectionPanel() {
   const {
     connectionStatus,
+    lastConnectionError,
     connect,
     disconnect,
     renameConnection,
@@ -233,6 +234,12 @@ export function ConnectionPanel() {
           {isSelectedConnectionConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
+      {lastConnectionError?.connectionId === selectedConnectionId && (
+        <p role="alert" className="mx-3 mb-3 flex items-start gap-2 text-xs leading-relaxed text-foreground">
+          <span className="shrink-0 font-semibold">Connection failed:</span>
+          <span className="min-w-0 whitespace-pre-wrap break-words">{lastConnectionError.message}</span>
+        </p>
+      )}
       {transport === 'stdio' && <StdioForm />}
       <OAuthSignInNotice />
     </div>
