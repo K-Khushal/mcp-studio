@@ -150,7 +150,7 @@ test("a transient DNS failure does not poison later endpoint validation", async 
   expect((await guarded("https://auth.example/token")).status).toBe(200);
 });
 
-test.each(["http://169.254.169.254/token", "http://[fe80::1]/token", "http://[febf::1]/token", "http://metadata.example/token"])("localhost MCP Server refuses link-local endpoint %s", async (endpoint) => {
+test.each(["http://169.254.169.254/token", "http://[::ffff:169.254.169.254]/token", "http://[::ffff:a9fe:a9fe]/token", "http://[64:ff9b::a9fe:a9fe]/token", "http://[fe80::1]/token", "http://[febf::1]/token", "http://metadata.example/token"])("localhost MCP Server refuses link-local endpoint %s", async (endpoint) => {
   vi.mocked(lookup).mockResolvedValue([{ address: "169.254.169.254", family: 4 }] as never);
   const network = vi.fn();
   await expect(createOAuthFetch(new URL("http://localhost/mcp"), network)(endpoint)).rejects.toThrow("OAuth endpoint refused");

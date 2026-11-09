@@ -25,9 +25,22 @@ function validateAuthorizationUrl(url: URL): void {
   if (!isSafeOAuthUrl(url.href)) throw new OAuthPolicyError("authorization");
 }
 
-// Only globally routable unicast addresses are public. URL parsing has already
-// normalized abbreviated/hex IPv4 and IPv4-mapped IPv6 spellings.
+/** Normalize IPv6 and unwrap IPv4-mapped and well-known NAT64 destinations. */
+function unwrapAddress(address: string): string {
+  if (isIP(address) !== 6) return address;
+  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  if (/^(?:::ffff:|64:ff9b::)(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(normalized)) {
+    const suffix = normalized.split(":");
+    const low = parseInt(suffix.pop() || "0", 16);
+    const high = parseInt(suffix.pop() || "0", 16);
+    return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+  }
+  return normalized;
+}
+
+// Only globally routable unicast addresses are public.
 function isPublicAddress(address: string): boolean {
+  address = unwrapAddress(address);
   if (isIP(address) === 4) {
     const [a = 0, b = 0, c = 0] = address.split(".").map(Number);
     return !(a === 0 || a === 10 || a === 127 || a >= 224 ||
@@ -38,21 +51,14 @@ function isPublicAddress(address: string): boolean {
       (a === 203 && b === 0 && c === 113));
   }
   if (isIP(address) !== 6) return false;
-  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
-  // Well-known NAT64 destinations inherit the embedded IPv4 policy.
-  if (/^64:ff9b::(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(normalized)) {
-    const suffix = normalized.slice("64:ff9b::".length).split(":");
-    const low = parseInt(suffix.pop() || "0", 16);
-    const high = parseInt(suffix.pop() || "0", 16);
-    return isPublicAddress(`${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`);
-  }
-  // Mapped addresses, ULA, link-local, multicast and unspecified are outside 2000::/3.
-  return /^[23][0-9a-f]{3}:/.test(normalized) &&
-    !normalized.startsWith("2002:") && !/^2001:(?:db8:|0:|:|2:0:|2::|[12][0-9a-f]:)/.test(normalized) &&
-    !/^3fff:(?:[0-9a-f]{1,3}:|:)/.test(normalized);
+  // ULA, link-local, multicast and unspecified are outside 2000::/3.
+  return /^[23][0-9a-f]{3}:/.test(address) &&
+    !address.startsWith("2002:") && !/^2001:(?:db8:|0:|:|2:0:|2::|[12][0-9a-f]:)/.test(address) &&
+    !/^3fff:(?:[0-9a-f]{1,3}:|:)/.test(address);
 }
 
 function isLinkLocalAddress(address: string): boolean {
+  address = unwrapAddress(address);
   if (isIP(address) === 4) return address.startsWith("169.254.");
   return isIP(address) === 6 && /^fe[89ab][0-9a-f]:/i.test(address);
 }
