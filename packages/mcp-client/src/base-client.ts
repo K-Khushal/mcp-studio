@@ -1,4 +1,4 @@
-import { ElicitRequestSchema, CallToolResultSchema } from "@modelcontextprotocol/sdk/types.js";
+import { ElicitRequestSchema, CallToolResultSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
@@ -212,6 +212,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
   async listPrompts(): Promise<MCPPrompt[]> {
     if (!this.client) throw new Error("Not connected");
+    if (!this.client.getServerCapabilities()?.prompts) return [];
 
     try {
       const response = await this.client.listPrompts();
@@ -226,9 +227,10 @@ export abstract class BaseMCPClient implements MCPClientInterface {
           required: a.required,
         })),
       }));
-    } catch {
-      // Server may not support prompts — return empty list gracefully
-      return [];
+    } catch (error) {
+      // Unsupported prompts are optional; authentication and network failures are not.
+      if (error instanceof McpError && error.code === ErrorCode.MethodNotFound) return [];
+      throw error;
     }
   }
 

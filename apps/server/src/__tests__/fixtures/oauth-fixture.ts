@@ -12,6 +12,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
  * authorization code grant and refresh tokens. /authorize approves immediately.
  */
 export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-first" = "streamable") {
+  let discoveryGate: { started(): void; resume: Promise<void> } | undefined;
   let tokenGate: { grant: string; phase: "request" | "response"; started: () => void; resume: Promise<void> } | undefined;
   const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean } = {};
   const legacy = mode !== "streamable" ? await startHTTPFixture("sse") : undefined;
@@ -62,6 +63,12 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
     const resourceMetadata = `${origin}/.well-known/oauth-protected-resource/mcp`;
     switch (url.pathname) {
       case "/.well-known/oauth-protected-resource/mcp":
+        if (discoveryGate) {
+          const gate = discoveryGate;
+          discoveryGate = undefined;
+          gate.started();
+          await gate.resume;
+        }
         return json({ resource: `${origin}/mcp`, authorization_servers: [origin] });
       case "/.well-known/oauth-authorization-server":
         return json({
@@ -154,6 +161,12 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
     }) satisfies ClientMessage,
     counts,
     faults,
+    pauseDiscovery() {
+      const started = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      discoveryGate = { started: () => started.resolve(), resume: resume.promise };
+      return { started: started.promise, resume: () => resume.resolve() };
+    },
     pauseTokens(grant: "refresh_token" | "authorization_code") {
       return pause(grant, "request");
     },

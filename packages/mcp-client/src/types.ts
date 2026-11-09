@@ -16,6 +16,8 @@ export interface MCPClientOptions {
   onHttpResponse?: (requestId: string, status: number, headers: Record<string, string>) => void;
   /** Required for HTTP Connections whose auth is `oauth`. */
   oauth?: OAuthSignIn;
+  /** Auth endpoint deadline; defaults to 30 seconds, independent of Session lifetime. */
+  oauthRequestTimeoutMs?: number;
 }
 
 export interface MCPClientInterface {

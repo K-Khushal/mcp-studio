@@ -8,7 +8,7 @@ export class OAuthFlowError extends Error {
   constructor() { super("OAuth authentication failed"); }
 }
 
-type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean };
+type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean; rejectBrowserSignIn(): void };
 type AuthorizationFlow = {
   controller: AbortController;
   waiters: Set<AuthWaiter>;
@@ -19,21 +19,40 @@ const authorizations = new WeakMap<object, AuthorizationFlow>();
 
 /** Clone log data while redacting secrets; wire frames and Call results stay intact. */
 export function redactOAuthValue<T>(value: T, secrets: ReadonlySet<string>): T {
+  const seen = new WeakSet<object>();
   const redact = (item: unknown): unknown => {
     if (typeof item === "string") {
       for (const secret of secrets) if (secret) item = (item as string).replaceAll(secret, "[REDACTED]");
       return item;
     }
-    if (item instanceof Error) {
-      const descriptors = Object.getOwnPropertyDescriptors(item);
-      for (const descriptor of Object.values(descriptors)) {
-        if ("value" in descriptor) descriptor.value = redact(descriptor.value);
+    if (!item || typeof item !== "object") return item;
+    if (seen.has(item)) return "[Circular]";
+    seen.add(item);
+    try {
+      if (item instanceof Error) {
+        const descriptors = Object.getOwnPropertyDescriptors(item);
+        for (const descriptor of Object.values(descriptors)) {
+          if ("value" in descriptor) descriptor.value = redact(descriptor.value);
+        }
+        const clone = Object.create(Object.getPrototypeOf(item), descriptors) as Error;
+        try {
+          // Branded prototype getters (e.g. DOMException.message) reject clones.
+          void clone.message;
+          void clone.name;
+          return clone;
+        } catch {
+          return Object.defineProperties(new Error(), {
+            ...descriptors,
+            message: { value: redact(item.message), writable: true, configurable: true },
+            name: { value: redact(item.name), writable: true, configurable: true },
+          });
+        }
       }
-      return Object.create(Object.getPrototypeOf(item), descriptors);
+      if (Array.isArray(item)) return item.map(redact);
+      return Object.fromEntries(Object.entries(item).map(([key, child]) => [redact(key), redact(child)]));
+    } finally {
+      seen.delete(item);
     }
-    if (Array.isArray(item)) return item.map(redact);
-    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, child]) => [redact(key), redact(child)]));
-    return item;
   };
   return redact(value) as T;
 }
@@ -62,7 +81,7 @@ export interface OAuthSignIn {
    * the redirect carrying `state` delivers. Rejecting aborts the connect.
    */
   authorize(authorizationUrl: URL, state: string, signal: AbortSignal): Promise<string>;
-  /** Delivers the shared approval link to each waiting Session, including late joiners. */
+  /** Delivers the shared approval link to browser-allowed connecting Sessions, including late joiners. */
   onAuthorization?(authorizationUrl: URL): void;
 }
 
@@ -114,7 +133,10 @@ export class StudioOAuthProvider implements OAuthClientProvider {
           shared.authorization = { url, state };
           // Register the redirect before sending the link to any browser.
           const approval = this.signIn.authorize(url, state, flowSignal);
-          for (const waiter of waiters) waiter.signIn.onAuthorization?.(url);
+          for (const waiter of waiters) {
+            if (waiter.allowBrowserSignIn) waiter.signIn.onAuthorization?.(url);
+            else waiter.rejectBrowserSignIn();
+          }
           return approval;
         },
       }, this.secrets);
@@ -143,11 +165,18 @@ export class StudioOAuthProvider implements OAuthClientProvider {
       authorizations.set(key, shared);
       flow = shared;
     }
-    const waiter = { signIn: this.signIn, allowBrowserSignIn };
+    let rejectBrowserSignIn: () => void = () => {};
+    const browserRequired = new Promise<never>((_, reject) => {
+      rejectBrowserSignIn = () => reject(new OAuthFlowError());
+    });
+    const waiter: AuthWaiter = { signIn: this.signIn, allowBrowserSignIn, rejectBrowserSignIn };
     flow.waiters.add(waiter);
     try {
-      if (flow.authorization) this.signIn.onAuthorization?.(flow.authorization.url);
-      await this.waitForFlow(flow.promise, signal);
+      if (flow.authorization) {
+        if (!allowBrowserSignIn) throw new OAuthFlowError();
+        this.signIn.onAuthorization?.(flow.authorization.url);
+      }
+      await this.waitForFlow(Promise.race([flow.promise, browserRequired]), signal);
       await this.credentials();
     } finally {
       flow.waiters.delete(waiter);

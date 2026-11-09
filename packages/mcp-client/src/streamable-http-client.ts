@@ -29,6 +29,22 @@ export class StreamableHTTPClient extends BaseMCPClient {
     this.oauthSecrets = secrets;
   }
 
+  override async listTools() {
+    try {
+      return await super.listTools();
+    } catch (error) {
+      throw this.safeError(error);
+    }
+  }
+
+  override async listPrompts() {
+    try {
+      return await super.listPrompts();
+    } catch (error) {
+      throw this.safeError(error);
+    }
+  }
+
   override async callTool(
     name: string,
     params: Record<string, unknown>,
@@ -37,7 +53,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
   ): Promise<unknown> {
     this.activeRequestId = requestId;
     try {
-      return await super.callTool(name, params, requestId);
+      return await super.callTool(name, params, requestId, options);
     } catch (error) {
       throw this.safeError(error);
     } finally {
@@ -53,7 +69,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
   ): Promise<MCPPromptMessage[]> {
     this.activeRequestId = requestId;
     try {
-      return await super.callPrompt(name, args, requestId);
+      return await super.callPrompt(name, args, requestId, options);
     } catch (error) {
       throw this.safeError(error);
     } finally {
@@ -113,8 +129,11 @@ export class StreamableHTTPClient extends BaseMCPClient {
 
     // Auth traffic has its own fetch: never expose token/discovery response metadata.
     // Shared auth outlives any individual Session. In particular, never abort a
-    // rotating-token exchange before its response can be persisted.
-    const authFetch: FetchLike = (input, init) => fetch(input, init);
+    // rotating-token exchange before its response can be persisted. Bound each
+    // auth endpoint independently so a hung endpoint cannot wedge the shared flow.
+    const authFetch: FetchLike = (input, init) => fetch(input, {
+      ...init, signal: AbortSignal.timeout(this.options.oauthRequestTimeoutMs ?? 30_000),
+    });
     const resourceFetch: FetchLike = (input, init) => {
       const signal = init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal;
       return fetch(input, { ...init, signal });

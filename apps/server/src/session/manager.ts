@@ -292,8 +292,14 @@ export class SessionManager {
       this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-    const tools = await this.client.listTools();
-    this.send({ type: "tools_listed", tools });
+    try {
+      const tools = await this.client.listTools();
+      this.send({ type: "tools_listed", tools });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
+      this.send({ type: "error", message, code: "TOOLS_ERROR" });
+    }
   }
 
   private async listPrompts(): Promise<void> {
@@ -301,8 +307,14 @@ export class SessionManager {
       this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-    const prompts = await this.client.listPrompts();
-    this.send({ type: "prompts_listed", prompts });
+    try {
+      const prompts = await this.client.listPrompts();
+      this.send({ type: "prompts_listed", prompts });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
+      this.send({ type: "error", message, code: "PROMPTS_ERROR" });
+    }
   }
 
   private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal): OAuthSignIn | undefined {

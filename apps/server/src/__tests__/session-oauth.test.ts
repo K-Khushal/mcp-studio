@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
+import { StreamableHTTPClient, StudioOAuthProvider } from "@mcp-studio/mcp-client";
 import { createCollection } from "../db/queries/collections";
 import { createConnection, updateConnection } from "../db/queries/connections";
 import { clearOAuthCredentials, oauthStorage } from "../db/queries/oauth-credentials";
@@ -407,3 +408,153 @@ test("OAuth failure after a Streamable POST 401 never attempts SSE fallback", as
   expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED", message: "OAuth authentication failed" });
   expect(session.messages.some(message => message.type === "log" && message.message.includes("trying legacy SSE"))).toBe(false);
 });
+
+test("cancelling an OAuth Call aborts MCP work and keeps the Session usable", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  const calling = session.send({ type: "invoke", requestId: "oauth-cancel", tool: "slow", params: { steps: 50 } });
+  await session.waitFor("progress", message => message.requestId === "oauth-cancel");
+  await session.send({ type: "cancel", requestId: "oauth-cancel" });
+  await session.waitFor("cancelled", message => message.requestId === "oauth-cancel", 500);
+  await session.waitFor("log", message => message.source === "server" && message.message.includes("Slow Call aborted"), 500);
+  await calling;
+  expect(session.messages.filter(message => (message.type === "result" || message.type === "error") && message.requestId === "oauth-cancel")).toEqual([]);
+  expect(await echo(session, "still connected")).toMatchObject({ data: { content: [{ text: "still connected" }] } });
+});
+
+test("an OAuth Call times out with CALL_TIMEOUT and aborts MCP work", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  await session.send({ type: "invoke", requestId: "oauth-timeout", requestTimeout: 0.12, tool: "slow", params: { steps: 50 } });
+  expect(await session.waitFor("error")).toMatchObject({ requestId: "oauth-timeout", code: "CALL_TIMEOUT", message: "Call timed out after 0.12 seconds" });
+  await session.waitFor("log", message => message.source === "server" && message.message.includes("Slow Call aborted"));
+  expect(session.messages.some(message => message.type === "result" && message.requestId === "oauth-timeout")).toBe(false);
+});
+
+test("an OAuth Connection delivers ordered Call progress and session phases", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  await session.send({ type: "invoke", requestId: "oauth-progress", tool: "slow", params: { steps: 3 } });
+  expect(await session.waitFor("result")).toMatchObject({ requestId: "oauth-progress" });
+  expect(session.messages.filter(message => message.type === "progress")).toEqual([
+    { type: "progress", requestId: "oauth-progress", progress: 1, total: 3, message: "Step 1 of 3" },
+    { type: "progress", requestId: "oauth-progress", progress: 2, total: 3, message: "Step 2 of 3" },
+    { type: "progress", requestId: "oauth-progress", progress: 3, total: 3, message: "Step 3 of 3" },
+  ]);
+  expect(session.messages.filter(message => message.type === "session_phase")).toMatchObject([{ phase: "connect" }, { phase: "initialize" }]);
+});
+
+test("a connected Session joining browser authorization fails its Call without receiving a link", async () => {
+  const calling = openSession();
+  await signInAndConnect(calling);
+  fixture.revokeTokens();
+  const connecting = openSession();
+  const connect = connecting.send(fixture.connection(connectionId));
+  const link = await connecting.waitFor("oauth_authorize");
+  const priorLinks = calling.messages.filter(message => message.type === "oauth_authorize").length;
+  const call = calling.send({ type: "invoke", requestId: "no-browser", tool: "echo", params: {} });
+  try {
+    expect(await calling.waitFor("error", message => message.requestId === "no-browser", 500)).toMatchObject({ code: "TOOL_ERROR", message: "OAuth authentication failed" });
+    expect(calling.messages.filter(message => message.type === "oauth_authorize")).toHaveLength(priorLinks);
+    await approveInBrowser(link.url);
+    await connect;
+    await connecting.waitFor("connected");
+  } finally {
+    await connecting.send({ type: "disconnect" });
+    await calling.send({ type: "disconnect" });
+    await call;
+    await connect;
+  }
+});
+
+test("browser authorization rejects an existing non-browser waiter while a connecting waiter signs in", async () => {
+  const url = new URL(fixture.connection().config.url);
+  const response = await fetch(url);
+  const controller = new AbortController();
+  const storage = oauthStorage(connectionId, url.toString());
+  const link = Promise.withResolvers<URL>();
+  const nonBrowserLinks: URL[] = [];
+  const signIn = {
+    redirectUrl: callback.redirectUrl, signal: controller.signal, storage,
+    authorize: (_url: URL, state: string, signal: AbortSignal) => callback.redirects.wait(state, signal),
+  };
+  const nonBrowser = new StudioOAuthProvider({ ...signIn, onAuthorization: url => nonBrowserLinks.push(url) });
+  const browser = new StudioOAuthProvider({ ...signIn, onAuthorization: url => link.resolve(url) });
+  // Both join before discovery can request browser approval.
+  const calling = nonBrowser.authenticate(url, null, response, fetch, false);
+  const failed = expect(calling).rejects.toThrow("OAuth authentication failed");
+  const connecting = browser.authenticate(url, null, response, fetch, true);
+  try {
+    const authorization = await link.promise;
+    await failed;
+    expect(nonBrowserLinks).toEqual([]);
+    await approveInBrowser(authorization.toString());
+    await connecting;
+    expect(fixture.counts.authorizations).toBe(1);
+  } finally {
+    controller.abort();
+    await Promise.allSettled([calling, connecting]);
+  }
+});
+
+for (const endpoint of ["token", "discovery"] as const) {
+  test(`a hung OAuth ${endpoint} endpoint cannot wedge the shared flow`, async () => {
+    const gate = endpoint === "token" ? fixture.pauseTokens("authorization_code") : fixture.pauseDiscovery();
+    const client = new StreamableHTTPClient(fixture.connection().config, {
+      oauthRequestTimeoutMs: 100,
+      oauth: {
+        redirectUrl: callback.redirectUrl, storage: oauthStorage(connectionId, fixture.connection().config.url),
+        authorize: (_url, state, signal) => callback.redirects.wait(state, signal),
+        onAuthorization: url => { void approveInBrowser(url.toString()); },
+      },
+    });
+    const connecting = client.connect();
+    try {
+      await gate.started;
+      const deadline = Promise.withResolvers<never>();
+      const timer = setTimeout(() => deadline.reject(new Error("OAuth endpoint remained hung")), 1000);
+      try {
+        const outcome = Promise.race([connecting, deadline.promise]);
+        if (endpoint === "token") await expect(outcome).rejects.toThrow("OAuth authentication failed");
+        else await expect(outcome).resolves.toMatchObject({ serverName: "protocol-fixture" });
+      } finally { clearTimeout(timer); }
+    } finally {
+      gate.resume();
+      await connecting.catch(() => {});
+      await client.disconnect();
+    }
+  });
+}
+
+for (const type of ["list_tools", "list_prompts"] as const) {
+  test(`${type} emits a sanitized error when OAuth refresh fails`, async () => {
+    const session = openSession();
+    await signInAndConnect(session);
+    fixture.expireAccessTokens();
+    fixture.faults.refresh = true;
+    await session.send({ type });
+    expect(await session.waitFor("error")).toMatchObject({
+      code: type === "list_tools" ? "TOOLS_ERROR" : "PROMPTS_ERROR", message: "OAuth authentication failed",
+    });
+    const messages = JSON.stringify(session.messages);
+    expect(messages).not.toContain("diagnostic");
+    for (const secret of fixture.issued) expect(messages).not.toContain(secret);
+    expect(session.messages.some(message => message.type === "oauth_authorize" && session.messages.indexOf(message) > session.messages.findIndex(message => message.type === "connected"))).toBe(false);
+  });
+}
+
+for (const outcome of ["cancel", "timeout"] as const) {
+  test(`an OAuth prompt Call forwards ${outcome} to the MCP Server`, async () => {
+    const session = openSession();
+    await signInAndConnect(session);
+    const requestId = `oauth-prompt-${outcome}`;
+    const calling = session.send({ type: "invoke_prompt", requestId, requestTimeout: outcome === "timeout" ? 0.12 : 30, prompt: "greet", args: { name: "slow" } });
+    await session.waitFor("log", message => message.message.includes("Slow prompt started"));
+    if (outcome === "cancel") await session.send({ type: "cancel", requestId });
+    if (outcome === "cancel") expect(await session.waitFor("cancelled")).toMatchObject({ requestId });
+    else expect(await session.waitFor("error")).toMatchObject({ requestId, code: "CALL_TIMEOUT" });
+    await session.waitFor("log", message => message.message.includes("Slow prompt aborted"));
+    await calling;
+    expect(session.messages.some(message => message.type === "prompt_result" && message.requestId === requestId)).toBe(false);
+  });
+}
