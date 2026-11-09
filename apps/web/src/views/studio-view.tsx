@@ -10,7 +10,7 @@ import { AuthPanel } from "@/components/auth/auth-panel";
 import { HeadersPanel } from "@/components/auth/headers-panel";
 import { useStore } from "@/store";
 
-type WorkspaceTab = 'auth' | 'headers' | 'prompts' | 'tools';
+type WorkspaceTab = 'auth' | 'headers' | 'tools' | 'prompts';
 
 export function StudioView() {
   const transport = useStore((s) => s.transport);
@@ -26,8 +26,8 @@ export function StudioView() {
   const tabs: { value: WorkspaceTab; label: string; httpOnly?: boolean }[] = [
     { value: 'auth', label: 'Auth', httpOnly: true },
     { value: 'headers', label: 'Headers', httpOnly: true },
-    { value: 'prompts', label: 'Prompts' },
     { value: 'tools', label: 'Tools' },
+    { value: 'prompts', label: 'Prompts' },
   ];
 
   const visibleTabs = tabs.filter((t) => !t.httpOnly || transport === 'http');
@@ -62,7 +62,7 @@ export function StudioView() {
 
       {/* Resizable Call/response split */}
       <ResizablePanelGroup orientation="vertical" className="flex-1 min-h-0">
-        <ResizablePanel defaultSize={45} minSize={15}>
+        <ResizablePanel defaultSize={60} minSize={15}>
           <div className="h-full overflow-y-auto">
             {workspaceTab === 'auth' && <AuthPanel />}
             {workspaceTab === 'headers' && <HeadersPanel />}
@@ -71,7 +71,7 @@ export function StudioView() {
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={55} minSize={40}>
+        <ResizablePanel defaultSize={40} minSize={40}>
           <ResponsePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
