@@ -7,10 +7,11 @@
     "lint": "eslint '*.ts'"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.14.0",
+    "@mcp-studio/types": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@modelcontextprotocol/server-everything": "2.2.1",
     "@playwright/test": "1.61.1",
-    "bun-types": "^1.4.4",
-    "@modelcontextprotocol/sdk": "^1.32.2",
-    "@mcp-studio/types": "workspace:*"
+    "bun-types": "^1.4.4"
   }
 }

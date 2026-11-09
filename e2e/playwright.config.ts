@@ -17,7 +17,7 @@ export default defineConfig({
     timeout: 30_000,
   },
   projects: [
-    { name: 'local', testMatch: 'local.spec.ts' },
+    { name: 'local', testMatch: ['local.spec.ts', 'connection-dialogs.spec.ts'] },
     { name: 'live', testMatch: 'live.spec.ts', timeout: 180_000 },
   ],
 });

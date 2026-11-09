@@ -10,13 +10,13 @@ export async function createConnection(page: Page, name: string, collection = na
   await page.getByRole('button', { name: 'Add Connection', exact: true }).last().click();
   const dialog = page.getByRole('dialog');
   await dialog.getByPlaceholder('Connection name').fill(name);
-  await dialog.getByRole('button', { name: 'Save', exact: true }).click();
+  await dialog.getByPlaceholder('Connection name').press('Enter');
   await page.getByText(name, { exact: true }).last().click();
   await expect(page.getByLabel('Command', { exact: true })).toBeVisible();
 }
 
 export async function configureStdio(page: Page, command: string, args: string[]) {
-  await page.getByRole('button', { name: 'STDIO', exact: true }).click();
+  await page.getByRole('radio', { name: 'STDIO', exact: true }).click();
   await page.getByLabel('Command', { exact: true }).fill(command);
   const settings = page.getByRole('button', { name: /^STDIO settings:/ });
   if (await settings.getAttribute('aria-expanded') === 'false') await settings.click();
