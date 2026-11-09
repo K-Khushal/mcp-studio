@@ -280,3 +280,66 @@ test('rotated Launch token locks an open tab and the new printed link restores a
     expect((await request.post(`${fixtureURL}/restart`)).ok()).toBeTruthy();
   }
 });
+
+test('Console keyboard controls, clipboard feedback and accessible states', async ({ page }, testInfo) => {
+  test.setTimeout(180_000);
+  const { default: AxeBuilder } = await import('@axe-core/playwright');
+  await page.setViewportSize({ width: 1366, height: 768 });
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
+  await fixtureConnection(page, 'Console keyboard');
+  const toggle = page.getByRole('button', { name: /^Console/ });
+  const shots = process.env.CONSOLE_SHOTS;
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(theme => {
+      document.documentElement.classList.toggle('dark', theme === 'dark');
+    }, theme);
+    for (const state of ['open', 'collapsed']) {
+      const open = await page.getByLabel('Search logs').isVisible();
+      if (open !== (state === 'open')) await toggle.click();
+      const results = await new AxeBuilder({ page }).include('div.relative.shrink-0.border-t').analyze();
+      await testInfo.attach(`${theme}-${state}-axe`, { body: JSON.stringify(results), contentType: 'application/json' });
+      console.log(`Console axe ${theme} ${state}: ${results.violations.length}`);
+      expect(results.violations).toEqual([]);
+      if (shots) await page.screenshot({ path: `${shots}-${theme}-${state}.png` });
+    }
+  }
+  await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  await toggle.focus();
+  await page.keyboard.press('Enter');
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('#logs-body')).toBeVisible();
+  await page.keyboard.press('Tab');
+  const level = page.getByRole('button', { name: 'INFO', exact: true });
+  await expect(level).toBeFocused();
+  await page.keyboard.press('Space');
+  await expect(level).toHaveAttribute('aria-pressed', 'true');
+  await page.keyboard.press('Space');
+  for (let i = 0; i < 7; i++) await page.keyboard.press('Tab');
+  await expect(page.getByLabel('Search logs')).toBeFocused();
+  await page.keyboard.type('no-match-keyboard');
+  await page.keyboard.press('ControlOrMeta+A');
+  await page.keyboard.press('Backspace');
+  await page.keyboard.press('Tab');
+  await expect(page.getByRole('button', { name: 'Copy logs', exact: true })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(page.getByRole('button', { name: 'Copied', exact: true })).toBeVisible();
+  await page.evaluate(() => { Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: () => Promise.reject(new Error('denied')) } }); });
+  await expect(page.getByRole('button', { name: 'Copy logs', exact: true })).toBeVisible();
+  await page.keyboard.press('Enter');
+  const failure = page.getByText('Could not copy to clipboard', { exact: true });
+  await expect(failure).toBeVisible();
+  // Keep the transient notice open while axe inspects both themes.
+  await failure.hover();
+  for (const theme of ['dark', 'light']) {
+    await page.evaluate(theme => document.documentElement.classList.toggle('dark', theme === 'dark'), theme);
+    const results = await new AxeBuilder({ page }).include('[data-sonner-toaster]').analyze();
+    console.log(`Toast axe ${theme}: ${results.violations.length}`);
+    await testInfo.attach(`${theme}-toast-axe`, { body: JSON.stringify(results), contentType: 'application/json' });
+    expect(results.violations).toEqual([]);
+    await expect.poll(async () => {
+      const box = await failure.locator('..').boundingBox();
+      return box ? box.y + box.height : Infinity;
+    }).toBeLessThanOrEqual(696);
+    if (shots) await page.screenshot({ path: `${shots}-${theme}-copy-error.png` });
+  }
+});
