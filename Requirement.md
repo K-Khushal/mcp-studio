@@ -1,5 +1,7 @@
 # MCP Studio — Product Requirements Document (PRD)
 
+> **Superseded.** This is the original 2026-04 PRD, kept for history. The current spec is [issue #31](https://github.com/K-Khushal/mcp-studio/issues/31); decisions are in [`docs/adr/`](docs/adr), vocabulary in [`GLOSSARY.md`](GLOSSARY.md), and shipped behaviour in [`README.md`](README.md) and [`CLAUDE.md`](CLAUDE.md). Where they disagree, they win. Notably superseded here: JSON file storage (now SQLite, ADR-0001), Call history and response diff (dropped, ADR-0002), saved "requests" with tool and params (now Connections, ADR-0003), HTTP/SSE as the remote transport (Streamable HTTP with SSE fallback, ADR-0005), and `localhost:8080` for the UI (one port, default 3000, ADR-0004).
+
 > **Project**: MCP Studio
 > **Author**: Khushal Khandelwal
 > **Date**: 2026-04-12
