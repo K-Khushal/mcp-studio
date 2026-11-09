@@ -16,6 +16,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
   private readonly oauthSecrets: Set<string>;
   private readonly lifetime = new AbortController();
   private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
+  private readonly activeCalls = new Set<AbortController>();
   // The UI runs one Call at a time; this shared id tags its HTTP response headers.
   // Concurrent programmatic Calls do not have independent HTTP header attribution.
   private activeRequestId: string | null = null;
@@ -51,12 +52,19 @@ export class StreamableHTTPClient extends BaseMCPClient {
     requestId: string,
     options?: { signal: AbortSignal; timeout: number }
   ): Promise<unknown> {
+    const controller = new AbortController();
+    this.activeCalls.add(controller);
+    const callOptions = {
+      timeout: options?.timeout ?? 60_000,
+      signal: options ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
+    };
     this.activeRequestId = requestId;
     try {
-      return await super.callTool(name, params, requestId, options);
+      return await super.callTool(name, params, requestId, callOptions);
     } catch (error) {
       throw this.safeError(error);
     } finally {
+      this.activeCalls.delete(controller);
       this.activeRequestId = null;
     }
   }
@@ -67,12 +75,19 @@ export class StreamableHTTPClient extends BaseMCPClient {
     requestId: string,
     options?: { signal: AbortSignal; timeout: number }
   ): Promise<MCPPromptMessage[]> {
+    const controller = new AbortController();
+    this.activeCalls.add(controller);
+    const callOptions = {
+      timeout: options?.timeout ?? 60_000,
+      signal: options ? AbortSignal.any([options.signal, controller.signal]) : controller.signal,
+    };
     this.activeRequestId = requestId;
     try {
-      return await super.callPrompt(name, args, requestId, options);
+      return await super.callPrompt(name, args, requestId, callOptions);
     } catch (error) {
       throw this.safeError(error);
     } finally {
+      this.activeCalls.delete(controller);
       this.activeRequestId = null;
     }
   }
@@ -167,7 +182,10 @@ export class StreamableHTTPClient extends BaseMCPClient {
         response.headers.forEach((value, key) => { respHeaders[key] = value; });
         this.options.onHttpResponse(reqId, response.status, respHeaders);
       }
-      return limitResponseBody(response);
+      return limitResponseBody(response, undefined, error => {
+        try { this.options.onLog?.("ERROR", "studio", error.message); }
+        finally { for (const call of this.activeCalls) call.abort(error); }
+      });
     };
 
     this.transport = new StreamableHTTPClientTransport(url, {
