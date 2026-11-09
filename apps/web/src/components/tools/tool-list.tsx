@@ -14,16 +14,16 @@ export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) 
   <button
     onClick={() => onSelect(tool)}
     className={cn(
-      'w-full text-left px-3 py-2 text-xs transition-colors',
+      'w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
       isSelected
-        ? 'bg-primary/10 text-primary font-medium'
-        : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+        ? 'border-l-primary bg-primary/15 text-foreground font-medium'
+        : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
     )}
   >
     <span className="flex items-center gap-2"><ToolIcon tool={tool} /><span className="truncate">{toolTitle(tool)}</span></span>
     <ToolBadges tool={tool} />
     {tool.description && (
-      <span className="block truncate text-[10px] opacity-70 mt-0.5">{tool.description}</span>
+      <span className="block truncate text-xs text-muted-foreground mt-0.5">{tool.description}</span>
     )}
   </button>
 );

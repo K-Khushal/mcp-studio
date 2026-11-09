@@ -60,7 +60,7 @@ export function HeadersPanel() {
               />
               <button
                 onClick={() => removeEntry(key)}
-                className="p-1 text-muted-foreground hover:text-destructive transition-colors"
+                className="p-1 text-muted-foreground hover:text-destructive-text transition-colors"
               >
                 <Trash2 size={13} />
               </button>

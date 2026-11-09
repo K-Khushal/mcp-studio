@@ -7,40 +7,6 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --color-border: hsl(var(--border));
-  --color-input: hsl(var(--input));
-  --color-ring: hsl(var(--ring));
-  --color-background: hsl(var(--background));
-  --color-foreground: hsl(var(--foreground));
-
-  --color-primary: hsl(var(--primary));
-  --color-primary-foreground: hsl(var(--primary-foreground));
-
-  --color-secondary: hsl(var(--secondary));
-  --color-secondary-foreground: hsl(var(--secondary-foreground));
-
-  --color-destructive: hsl(var(--destructive));
-  --color-destructive-foreground: hsl(var(--destructive-foreground));
-
-  --color-success: hsl(var(--success));
-  --color-success-foreground: hsl(var(--success-foreground));
-
-  --color-warning: hsl(var(--warning));
-  --color-warning-foreground: hsl(var(--warning-foreground));
-
-  --color-muted: hsl(var(--muted));
-  --color-muted-foreground: hsl(var(--muted-foreground));
-
-  --color-accent: hsl(var(--accent));
-  --color-accent-foreground: hsl(var(--accent-foreground));
-
-  --color-panel: hsl(var(--panel));
-  --color-sidebar: hsl(var(--sidebar));
-
-  --radius-lg: var(--radius);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-sm: calc(var(--radius) - 4px);
-
   --font-mono: JetBrains Mono, Menlo, monospace;
 }
 
@@ -65,6 +31,13 @@
   --color-success-foreground: var(--success-foreground);
   --color-warning: var(--warning);
   --color-warning-foreground: var(--warning-foreground);
+  --color-primary-text: var(--primary-text);
+  --color-success-text: var(--success-text);
+  --color-destructive-text: var(--destructive-text);
+  --color-syntax-key: var(--syntax-key);
+  --color-syntax-string: var(--syntax-string);
+  --color-syntax-number: var(--syntax-number);
+  --color-syntax-boolean: var(--syntax-boolean);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
@@ -138,17 +111,26 @@
   --secondary: oklch(0.9606 0.0017 275.0132);
   --secondary-foreground: oklch(0.5140 0.2276 276.9803);
   --muted: oklch(0.9606 0.0017 275.0132);
-  --muted-foreground: oklch(0.5409 0.0274 261.4214);
+  --muted-foreground: oklch(0.49 0.0274 261.4214);
   --accent: oklch(0.9606 0.0017 275.0132);
   --accent-foreground: oklch(0.5140 0.2276 276.9803);
   --destructive: oklch(0.6356 0.2082 25.3782);
   --destructive-foreground: oklch(1.0000 0 0);
   --success: oklch(0.72 0.14 150);
   --success-foreground: oklch(1 0 0);
+  /* Text-safe variants (>=4.5:1 on page and tinted rows); fills keep --primary/--success/--destructive. */
+  --primary-text: oklch(0.514 0.2276 277);
+  --success-text: oklch(0.52 0.13 150);
+  --destructive-text: oklch(0.5 0.2 25);
+  /* JSON/code syntax colours, >=4.5:1 on page and muted surfaces in both themes. */
+  --syntax-key: oklch(0.514 0.222 17);
+  --syntax-string: oklch(0.508 0.118 165);
+  --syntax-number: oklch(0.555 0.163 48);
+  --syntax-boolean: oklch(0.5 0.134 243);
   --warning: hsl(38 92% 50%);
   --warning-foreground: hsl(0 0% 0%);
   --border: oklch(0.9209 0.0027 286.3459);
-  --input: oklch(0.9209 0.0027 286.3459);
+  --input: oklch(0.64 0.006 286);
   --ring: oklch(0.5140 0.2276 276.9803);
   --chart-1: oklch(0.5140 0.2276 276.9803);
   --chart-2: oklch(0.2227 0.0053 274.7318);
@@ -204,11 +186,18 @@
   --destructive-foreground: oklch(1.0000 0 0);
   --success: oklch(0.72 0.14 150);
   --success-foreground: oklch(1 0 0);
+  --primary-text: oklch(0.72 0.15 277);
+  --success-text: oklch(0.72 0.14 150);
+  --destructive-text: oklch(0.7 0.17 25);
+  --syntax-key: oklch(0.81 0.117 12);
+  --syntax-string: oklch(0.765 0.177 163);
+  --syntax-number: oklch(0.828 0.189 84);
+  --syntax-boolean: oklch(0.746 0.16 233);
   --warning: hsl(38 92% 50%);
   --warning-foreground: hsl(0 0% 0%);
   --border: oklch(0.2948 0.0066 285.9889);
-  --input: oklch(0.2948 0.0066 285.9889);
-  --ring: oklch(0.5140 0.2276 276.9803);
+  --input: oklch(0.5 0.008 286);
+  --ring: oklch(0.65 0.18 277);
   --chart-1: oklch(0.5140 0.2276 276.9803);
   --chart-2: oklch(0.2227 0.0053 274.7318);
   --chart-3: oklch(0.6902 0.1481 162.3676);
@@ -267,11 +256,12 @@
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
-  background: hsl(var(--border));
+  /* --border alone is ~1.2:1 on the page; mix in muted-foreground so the thumb is findable in both themes. */
+  background: color-mix(in oklab, var(--muted-foreground) 50%, transparent);
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--muted-foreground));
+  background: var(--muted-foreground);
 }
 
 /* Keep diagnostic descriptions as readable as toast titles in either theme. */
@@ -279,4 +269,20 @@
   color: var(--popover-foreground);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+/*
+  Reduced motion: drop the zoom/slide from tw-animate-css enter/exit keyframes
+  but keep the opacity cross-fade, so overlays still appear without movement.
+  Unlayered on purpose: it must beat the utilities-layer `zoom-in-95` etc.
+*/
+@media (prefers-reduced-motion: reduce) {
+  [data-slot] {
+    --tw-enter-scale: 1;
+    --tw-exit-scale: 1;
+    --tw-enter-translate-x: 0;
+    --tw-enter-translate-y: 0;
+    --tw-exit-translate-x: 0;
+    --tw-exit-translate-y: 0;
+  }
 }

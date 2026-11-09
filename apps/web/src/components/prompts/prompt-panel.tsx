@@ -21,15 +21,15 @@ const PromptListItem = ({ prompt, isSelected, onSelect }: PromptListItemProps) =
   <button
     onClick={() => onSelect(prompt)}
     className={cn(
-      'w-full text-left px-3 py-2 text-xs transition-colors',
+      'w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
       isSelected
-        ? 'bg-primary/10 text-primary font-medium'
-        : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+        ? 'border-l-primary bg-primary/15 text-foreground font-medium'
+        : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
     )}
   >
     <span className="block truncate font-mono">{prompt.name}</span>
     {prompt.description && (
-      <span className="block truncate text-[10px] opacity-70 mt-0.5">{prompt.description}</span>
+      <span className="block truncate text-xs text-muted-foreground mt-0.5">{prompt.description}</span>
     )}
   </button>
 );
@@ -157,7 +157,7 @@ export function PromptPanel() {
                   <div key={arg.name} className="flex flex-col gap-1">
                     <label className="text-xs font-medium text-foreground">
                       {arg.name}
-                      {arg.required && <span className="text-destructive ml-0.5">*</span>}
+                      {arg.required && <span className="text-destructive-text ml-0.5">*</span>}
                       {arg.description && (
                         <span className="text-muted-foreground font-normal ml-1">— {arg.description}</span>
                       )}

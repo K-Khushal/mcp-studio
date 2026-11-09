@@ -7,7 +7,7 @@ export function TopNav() {
   return (
     <header className="flex h-11 shrink-0 items-center gap-4 border-b border-border bg-background px-4">
       <div className="flex shrink-0 items-center gap-2">
-        <Zap size={18} className="text-primary" />
+        <Zap size={18} className="text-primary-text" />
         <span className="text-sm font-bold tracking-tight text-foreground">MCP Studio</span>
       </div>
       <div className="h-4 w-px shrink-0 bg-border" aria-hidden />

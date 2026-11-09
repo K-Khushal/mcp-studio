@@ -21,7 +21,7 @@ export function ThemeToggle() {
           type="button"
           onClick={() => setConfig({ theme: next })}
           aria-label={`Theme: ${LABELS[theme]}. Switch to ${LABELS[next]}`}
-          className="relative flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] duration-150 ease-out outline-hidden hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/50 active:scale-[0.96]"
+          className="relative flex size-8 items-center justify-center rounded-md text-muted-foreground transition-[background-color,color,scale] duration-150 ease-out outline-hidden hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.96]"
         >
           {ORDER.map((t) => {
             const Icon = ICONS[t];

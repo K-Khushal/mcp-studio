@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 const STATUS = {
   connected: { label: "Connected", dot: "bg-success" },
-  connecting: { label: "Connecting…", dot: "bg-warning animate-pulse motion-reduce:animate-none" },
+  connecting: { label: "Connecting…", dot: "bg-warning motion-safe:animate-pulse" },
   error: { label: "Connection failed", dot: "bg-destructive" },
   disconnected: { label: "Not connected", dot: "bg-muted-foreground/40" },
 } as const;

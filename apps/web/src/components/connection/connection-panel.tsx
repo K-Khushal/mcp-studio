@@ -181,7 +181,7 @@ export function ConnectionPanel() {
                 setIsRenaming(false);
               }
             }}
-            className="h-6 max-w-[160px] rounded-md border border-input bg-background px-2 text-xs font-semibold font-mono text-foreground outline-hidden focus:ring-1 focus:ring-primary"
+            className="h-6 max-w-[160px] rounded-md border border-input bg-background px-2 text-xs font-semibold font-mono text-foreground outline-hidden focus:ring-2 focus:ring-ring"
           />
         ) : (
           <span
@@ -197,7 +197,7 @@ export function ConnectionPanel() {
             isSelectedConnectionConnected
               ? 'bg-success'
               : isSelectedConnectionConnecting
-                ? 'bg-warning animate-pulse'
+                ? 'bg-warning motion-safe:animate-pulse'
                 : 'bg-destructive'
           )} />
           <span className="text-xs text-muted-foreground">
@@ -246,12 +246,12 @@ export function ConnectionPanel() {
           className={cn(
             'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
             isSelectedConnectionConnected
-              ? 'bg-destructive/15 text-destructive hover:bg-destructive/25'
+              ? 'bg-destructive/15 text-destructive-text hover:bg-destructive/25'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
             (isConnecting || (!canConnect && !isSelectedConnectionConnected)) && 'opacity-50 cursor-not-allowed'
           )}
         >
-          {isSelectedConnectionConnecting ? <Loader2 size={14} className="animate-spin" /> : isSelectedConnectionConnected ? <Unplug size={14} /> : <Plug size={14} />}
+          {isSelectedConnectionConnecting ? <Loader2 size={14} className="motion-safe:animate-spin" /> : isSelectedConnectionConnected ? <Unplug size={14} /> : <Plug size={14} />}
           {isSelectedConnectionConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>

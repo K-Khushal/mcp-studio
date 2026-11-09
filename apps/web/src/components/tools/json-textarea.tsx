@@ -86,7 +86,7 @@ export function JsonTextarea({
         className={cn('text-xs font-mono resize-y')}
       />
       {error !== null && (
-        <p id={errorId} role="alert" className="text-[11px] text-destructive">
+        <p id={errorId} role="alert" className="text-[11px] text-destructive-text">
           {error}
         </p>
       )}

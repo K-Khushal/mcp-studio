@@ -55,7 +55,7 @@ export function AddConnectionDialog({ collection, open, onClose }: AddConnection
               autoFocus
             />
           </div>
-          {error && <p className="text-xs text-destructive">{error}</p>}
+          {error && <p className="text-xs text-destructive-text">{error}</p>}
           <div className="flex justify-end gap-2 pt-1">
             <Button variant="ghost" size="sm" onClick={onClose} className="text-xs">
               Cancel

@@ -10,7 +10,7 @@ const levelColors: Record<string, string> = {
   INFO: "text-foreground",
   DEBUG: "text-muted-foreground",
   WARN: "text-warning",
-  ERROR: "text-destructive",
+  ERROR: "text-destructive-text",
 };
 
 function formatTimestamp(ts: number): string {
@@ -22,15 +22,15 @@ function formatTimestamp(ts: number): string {
 }
 
 const sourceColors: Record<LogSource, string> = {
-  protocol: "text-primary",
+  protocol: "text-primary-text",
   server: "text-foreground",
   studio: "text-muted-foreground",
 };
 
 const chipClass = (active: boolean) =>
   cn(
-    "text-[10px] px-2 py-0.5 rounded font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50",
-    active ? "bg-primary/15 text-primary" : "text-muted-foreground hover:text-foreground",
+    "text-[11px] px-2 py-1 rounded font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+    active ? "bg-primary/15 text-primary-text" : "text-muted-foreground hover:text-foreground",
   );
 
 function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean; onToggle: () => void }) {
@@ -40,7 +40,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
     <>
       <span className="text-muted-foreground shrink-0 tabular-nums">[{formatTimestamp(log.timestamp)}]</span>
       <span className={cn("shrink-0 w-11 font-semibold", levelColors[log.level] ?? "text-foreground")}>{log.level}</span>
-      <span className={cn("shrink-0 w-14 text-[10px] leading-5 italic", sourceColors[log.source])}>{log.source}</span>
+      <span className={cn("shrink-0 w-14 text-[11px] leading-5 italic", sourceColors[log.source])}>{log.source}</span>
       <span className="text-foreground">{log.message}</span>
     </>
   );
@@ -54,7 +54,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
         onClick={onToggle}
         aria-expanded={expanded}
         aria-controls={detailId}
-        className="flex w-full gap-2 text-left rounded-sm outline-hidden hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring/50 transition-colors"
+        className="flex w-full gap-2 text-left rounded-sm outline-hidden hover:bg-muted/60 focus-visible:ring-2 focus-visible:ring-ring transition-colors"
       >
         <ChevronRight
           size={12}
@@ -195,10 +195,10 @@ export function LogsPanel() {
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Filter logs..."
                 className={cn(
-                  "bg-muted rounded w-36 text-[10px] text-foreground transition-colors duration-150",
+                  "bg-muted rounded w-36 text-xs text-foreground transition-colors duration-150",
                   "pl-7 pr-2 py-0.5",
                   "placeholder:text-muted-foreground",
-                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
+                  "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
               />
             </div>

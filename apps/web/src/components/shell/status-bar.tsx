@@ -116,7 +116,7 @@ export function StatusBar() {
 
       {/* Error count — only shown when non-zero */}
       {errorCount > 0 && (
-        <div className="flex items-center gap-1 text-destructive">
+        <div className="flex items-center gap-1 text-destructive-text">
           <AlertCircle size={11} />
           <span className="tabular-nums">{errorCount} err</span>
         </div>
