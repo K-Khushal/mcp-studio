@@ -20,11 +20,14 @@
     "typecheck": "turbo typecheck",
     "clean": "turbo clean && rm -rf node_modules",
     "smoke": "bun scripts/smoke-cli.ts",
-    "prepack": "bun run build"
+    "prepack": "bun run build",
+    "e2e": "bun run build && bun --cwd e2e playwright test --project=local",
+    "e2e:live": "bun run build && bun --cwd e2e playwright test --project=live"
   },
   "workspaces": [
     "apps/*",
-    "packages/*"
+    "packages/*",
+    "e2e"
   ],
   "version": "0.1.0",
   "license": "MIT",

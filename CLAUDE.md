@@ -113,4 +113,6 @@ Update after: new package/route/transport, schema change, arch decision, bug >15
 - **`inheritSystemEnv=false` still gets the MCP SDK's minimal safe env** (PATH, HOME, TERM, …) so commands resolve; only arbitrary parent vars are excluded.
 
 ## Tests
+Packaged-app browser suites live in `e2e/`; run `bun run e2e` locally/CI and `bun run e2e:live` for opt-in public servers. Setup, isolation and reports: `docs/testing.md`.
+
 Harness, fixtures (STDIO/HTTP/OAuth), elicitation and live-Call coverage: `docs/testing.md`. Session seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`.
