@@ -156,6 +156,25 @@ describe("components", () => {
     const offenders = files.filter(([, src]) => /text-(?:emerald|amber|sky|rose|green)-\d{3}/.test(src)).map(([p]) => p);
     expect(offenders).toEqual([]);
   });
+});
+
+describe("production sources", () => {
+  const sources = import.meta.glob<string>(
+    ["../**/*.{ts,tsx}", "!../**/__tests__/**", "!../**/*.{test,spec}.{ts,tsx}"],
+    { query: "?raw", import: "default", eager: true },
+  );
+  const files = Object.entries(sources).map(([path, src]) => [path.replace("../", ""), src] as const);
+
+  it("scans production sources across the app", () => {
+    expect(files.map(([path]) => path)).toEqual(expect.arrayContaining([
+      "App.tsx",
+      "pages/home.tsx",
+      "views/studio-view.tsx",
+      "lib/utils.ts",
+      "components/ui/button.tsx",
+    ]));
+    expect(files.every(([path, src]) => !/(?:__tests__\/|\.(?:test|spec)\.)/.test(path) && src.length > 0)).toBe(true);
+  });
 
   it("keeps all UI text at 12px or larger, including monospace metadata", () => {
     const offenders = files.flatMap(([p, src]) =>
