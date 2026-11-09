@@ -1,9 +1,10 @@
 import { expect, test } from "bun:test";
 import type { Collection, Connection, ConnectionConfig } from "@mcp-studio/types";
+import { TEST_TOKEN } from "./helpers/studio-server.js";
 
 test("STDIO fields round-trip through Connection create, patch and collection REST reads", async () => {
   const child = Bun.spawn([process.execPath, new URL("../index.ts", import.meta.url).pathname], {
-    env: { ...process.env, STUDIO_DB_PATH: ":memory:", PORT: "0" },
+    env: { ...process.env, STUDIO_DB_PATH: ":memory:", PORT: "0", STUDIO_TOKEN: TEST_TOKEN },
     stdout: "pipe", stderr: "pipe",
   });
   try {
@@ -17,7 +18,7 @@ test("STDIO fields round-trip through Connection create, patch and collection RE
     if (!port) throw new Error(`Studio Server did not start: ${output}`);
     const request = async (path: string, method = "GET", body?: unknown) => {
       const response = await fetch(`http://localhost:${port}${path}`, {
-        method, headers: { "Content-Type": "application/json" },
+        method, headers: { "Content-Type": "application/json", Authorization: `Bearer ${TEST_TOKEN}` },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
       });
       expect(response.ok).toBe(true);

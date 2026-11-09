@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --watch src/index.ts",
+    "dev": "STUDIO_DEV_TOKEN_FILE=.dev-token bun --watch src/index.ts",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit",
     "test": "STUDIO_DB_PATH=:memory: bun test src/__tests__",

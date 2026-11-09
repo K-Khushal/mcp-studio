@@ -1,0 +1,167 @@
+import { afterAll, beforeAll, describe, expect, test } from "bun:test";
+import { startStudioServer, TEST_TOKEN, type StudioServer } from "./helpers/studio-server.js";
+
+let studio: StudioServer;
+beforeAll(async () => { studio = await startStudioServer({ STUDIO_PRODUCTION: "1" }); });
+afterAll(() => studio.stop());
+
+const cookie = () => `mcp_studio_${studio.port}=${TEST_TOKEN}`;
+
+describe("requests without the Launch token are rejected", () => {
+  for (const [method, path] of [
+    ["GET", "/health"], ["GET", "/api/health"],
+    ["GET", "/collections"], ["GET", "/api/collections"], ["POST", "/collections"],
+    ["PATCH", "/collections/x"], ["DELETE", "/collections/x"],
+    ["POST", "/collections/x/connections"], ["PATCH", "/collections/x/connections/y"], ["DELETE", "/collections/x/connections/y"],
+    ["DELETE", "/collections/x/connections/y/oauth"],
+    ["GET", "/environments"], ["GET", "/api/environments"], ["POST", "/environments"], ["PATCH", "/environments/x"], ["DELETE", "/environments/x"],
+    ["GET", "/assets/app.js"], ["GET", "/index.html"],
+  ] as const) {
+    test(`${method} ${path} → 401`, async () => {
+      const response = await studio.request(path, { method, auth: false, ...(method === "GET" ? {} : { body: "{}" }) });
+      expect(response.status).toBe(401);
+      expect(await response.text()).not.toContain("STUDIO_APP_SHELL");
+    });
+  }
+
+  test("a wrong bearer token or cookie is rejected", async () => {
+    expect((await studio.request("/collections", { auth: false, headers: { Authorization: "Bearer nope" } })).status).toBe(401);
+    expect((await studio.request("/collections", { auth: false, headers: { Cookie: `mcp_studio_${studio.port}=nope` } })).status).toBe(401);
+    // A token cookie for another Studio port does not unlock this one.
+    expect((await studio.request("/collections", { auth: false, headers: { Cookie: `mcp_studio_1=${TEST_TOKEN}` } })).status).toBe(401);
+  });
+
+  test("another local process (curl, no Origin) cannot read Environments", () => {
+    const denied = Bun.spawnSync(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", `${studio.base}/environments`]);
+    expect(denied.stdout.toString()).toBe("401");
+    const allowed = Bun.spawnSync(["curl", "-s", "-o", "/dev/null", "-w", "%{http_code}", "-H", `Authorization: Bearer ${TEST_TOKEN}`, `${studio.base}/environments`]);
+    expect(allowed.stdout.toString()).toBe("200");
+  });
+
+  test("the /ws upgrade is rejected without the token, with or without an allowed Origin", async () => {
+    for (const origin of [undefined, studio.base]) {
+      const response = await studio.request("/ws", {
+        auth: false,
+        headers: {
+          Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==",
+          ...(origin ? { Origin: origin } : {}),
+        },
+      });
+      expect(response.status).toBe(401);
+    }
+    const opened = await new Promise<boolean>(resolve => {
+      const ws = new WebSocket(`ws://localhost:${studio.port}/ws`);
+      ws.onopen = () => { ws.close(); resolve(true); };
+      ws.onerror = () => resolve(false);
+    });
+    expect(opened).toBe(false);
+  });
+});
+
+describe("requests with the Launch token are served", () => {
+  test("bearer token and cookie both unlock REST, including the /api alias", async () => {
+    expect((await studio.request("/collections")).status).toBe(200);
+    expect((await studio.request("/api/collections")).status).toBe(200);
+    expect((await studio.request("/collections", { auth: false, headers: { Cookie: `other=1; ${cookie()}` } })).status).toBe(200);
+  });
+
+  test("the /ws upgrade opens with a bearer token or the cookie", async () => {
+    for (const headers of [{ Authorization: `Bearer ${TEST_TOKEN}` }, { Cookie: cookie() }]) {
+      const opened = await new Promise<boolean>(resolve => {
+        const ws = new WebSocket(`ws://localhost:${studio.port}/ws`, { headers } as unknown as string[]);
+        ws.onopen = () => { ws.close(); resolve(true); };
+        ws.onerror = () => resolve(false);
+      });
+      expect(opened).toBe(true);
+    }
+  });
+
+  test("the IPv6 loopback serves the same Studio", async () => {
+    const response = await fetch(`http://[::1]:${studio.port}/collections`, { headers: { Authorization: `Bearer ${TEST_TOKEN}` } });
+    expect(response.status).toBe(200);
+    expect((await fetch(`http://127.0.0.1:${studio.port}/collections`)).status).toBe(401);
+  });
+});
+
+describe("the printed link", () => {
+  test("?token= sets an HttpOnly SameSite=Strict cookie and redirects to strip the token", async () => {
+    const response = await studio.request(`/?token=${TEST_TOKEN}`, { auth: false });
+    expect(response.status).toBe(303);
+    expect(response.headers.get("Location")).toBe("/");
+    const setCookie = response.headers.get("Set-Cookie") ?? "";
+    expect(setCookie).toStartWith(`${cookie()};`);
+    for (const attribute of ["HttpOnly", "SameSite=Strict", "Path=/"]) expect(setCookie).toContain(attribute);
+    const app = await studio.request("/", { auth: false, headers: { Cookie: cookie() } });
+    expect(app.status).toBe(200);
+    expect(await app.text()).toContain("STUDIO_APP_SHELL");
+  });
+
+  test("other query parameters survive the redirect", async () => {
+    const response = await studio.request(`/?a=1&token=${TEST_TOKEN}&b=2`, { auth: false });
+    expect(response.headers.get("Location")).toBe("/?a=1&b=2");
+  });
+
+  for (const path of ["/", "/?token=wrong"]) {
+    test(`${path} without a valid token shows the help page`, async () => {
+      const response = await studio.request(path, { auth: false });
+      expect(response.status).toBe(401);
+      expect(response.headers.get("Content-Type")).toContain("text/html");
+      expect(response.headers.get("Set-Cookie")).toBeNull();
+      const text = await response.text();
+      expect(text).toContain("terminal");
+      expect(text).not.toContain("STUDIO_APP_SHELL");
+      expect(text).not.toContain("<script");
+    });
+  }
+
+  test("the OAuth callback is authenticated by its state, not the cookie", async () => {
+    const response = await studio.request("/oauth/callback?state=unknown&code=x", { auth: false });
+    expect(response.status).toBe(400);
+    expect(await response.text()).toContain("no longer pending");
+  });
+});
+
+describe("security headers", () => {
+  const expectHeaders = (response: Response) => {
+    const csp = response.headers.get("Content-Security-Policy") ?? "";
+    for (const directive of ["default-src 'self'", "frame-ancestors 'none'", "img-src 'self' data: https:", "connect-src 'self' ws://localhost:*", "object-src 'none'", "base-uri 'none'"]) {
+      expect(csp).toContain(directive);
+    }
+    expect(csp).not.toMatch(/script-src[^;]*'unsafe-inline'/);
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+    expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(response.headers.get("Referrer-Policy")).toBe("no-referrer");
+  };
+
+  test("on the app HTML, static assets, API JSON, help page, 401s and the OAuth callback", async () => {
+    expectHeaders(await studio.request("/"));
+    expectHeaders(await studio.request("/assets/app.js"));
+    expectHeaders(await studio.request("/collections"));
+    expectHeaders(await studio.request("/missing"));
+    expectHeaders(await studio.request("/", { auth: false }));
+    expectHeaders(await studio.request("/collections", { auth: false }));
+    expectHeaders(await studio.request(`/?token=${TEST_TOKEN}`, { auth: false }));
+    expectHeaders(await studio.request("/oauth/callback?state=x", { auth: false }));
+  });
+});
+
+describe("production errors", () => {
+  test("a thrown route error returns a generic 500, never Bun's development error page", async () => {
+    const response = await studio.request("/collections/missing/connections", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "x", connectionConfig: { transport: "http", config: { url: "http://x" } } }),
+    });
+    expect(response.status).toBe(500);
+    const text = await response.text();
+    expect(text).toBe("Internal error");
+    expect(response.headers.get("X-Frame-Options")).toBe("DENY");
+  });
+
+  test("an invalid JSON body is a 400", async () => {
+    for (const body of ["{", "null", "[]"]) {
+      const response = await studio.request("/collections", { method: "POST", body });
+      expect(response.status).toBe(400);
+    }
+    expect(studio.alive()).toBe(true);
+  });
+});
