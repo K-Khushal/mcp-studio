@@ -28,13 +28,15 @@
     "packages/*"
   ],
   "version": "0.1.0",
+  "license": "MIT",
   "description": "Local MCP server inspector powered by Bun",
   "bin": {
     "mcp-studio": "dist/cli.js"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "repository": {
     "type": "git",

@@ -149,3 +149,7 @@ Architecture, message protocol and test harness notes are in [`CLAUDE.md`](CLAUD
 - Electron desktop wrapper
 
 [`Requirement.md`](Requirement.md) is the original PRD and is partly superseded.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
