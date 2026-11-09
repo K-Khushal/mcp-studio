@@ -1,6 +1,6 @@
 # MCP Studio — Web Frontend
 
-React 19 + Vite + Tailwind. Talks to Bun server over WS + REST.
+React 19 + Vite + Tailwind. Talks to the Studio Server over WS + REST.
 
 ## Quick Start
 
@@ -14,22 +14,24 @@ bun --filter @mcp-studio/web typecheck
 
 ```text
 src/
-├── pages/                 # route entry
-├── views/                 # top-level view shells
+├── pages/                 # home (single screen), not-found
+├── views/                 # collections-view (sidebar), studio-view
 ├── components/
-│   ├── connection/        # connection header + transport/url controls
-│   ├── collections/       # sidebar + connection CRUD
-│   ├── tools/             # tool list + schema form + run
+│   ├── auth/              # HTTP auth panel (none/bearer/apikey/oauth), headers, OAuth sign-in notice
+│   ├── connection/        # connection panel, STDIO form
+│   ├── collections/       # sidebar, Connection CRUD, Claude config import
+│   ├── tools/             # tool list + schema form + args editor + elicitation dialog
 │   ├── prompts/           # prompt list + args + run
 │   ├── response/          # response panel (see below)
-│   ├── logs/              # request console
-│   ├── environments/      # env manager
-│   ├── configuration/     # UI/config dialog
-│   ├── shell/             # nav + status bar
-│   └── ui/                # shared primitives
-├── store/                 # single Zustand store
-├── transport/             # websocket transport
-└── lib/                   # helpers
+│   ├── logs/              # logs panel + level/source/search filters
+│   ├── environments/      # Environment + Variable manager
+│   ├── configuration/     # settings dialog
+│   ├── shared/            # variable-input (Variable highlighting + previews)
+│   ├── shell/             # top nav, session info, theme toggle, status bar
+│   └── ui/                # shadcn primitives
+├── store/                 # index.ts (single Zustand store), config.ts (settings), connection-form.ts
+├── transport/             # websocket-transport.ts
+└── lib/                   # claude-config (import parser), theme, utils
 ```
 
 ## Response Panel
@@ -43,15 +45,19 @@ response/
 ├── response-panel.tsx          # orchestrator: tab routing, store wiring
 ├── response-header.tsx         # header bar: status badges + tab buttons
 ├── pretty-tab.tsx              # pretty tab: dispatches over result shape
+├── structured-output.tsx       # structuredContent + Ajv outputSchema validation
+├── raw-tab.tsx                 # raw result / error JSON
 ├── headers-tab.tsx             # HTTP request/response headers tab
-├── timeline-panel.tsx          # invocation timeline tab
+├── timeline-panel.tsx          # Session phases + Call steps tab
 ├── json-viewer.tsx             # collapsible JSON tree viewer
 └── content-blocks/
     ├── content-block-renderer.tsx  # routes ContentBlock to correct renderer
     ├── text-block.tsx              # text: auto-detects JSON → tree, else <pre>
+    ├── image-block.tsx             # image (media.ts / media-frame.tsx helpers)
+    ├── audio-block.tsx             # audio player
     ├── resource-block.tsx          # embedded resource: URI card + text/blob
     ├── resource-link-block.tsx     # resource link: URI card with name/description
-    ├── unsupported-block.tsx       # graceful fallback for image / audio / unknown
+    ├── unsupported-block.tsx       # graceful fallback for unknown types
     └── utils.ts                    # tryParseJson helper (shared by text/resource)
 ```
 
@@ -62,8 +68,11 @@ response/
 | `text` | ✅ | Auto-detects JSON → tree viewer; otherwise plain `<pre>` |
 | `resource` (embedded) | ✅ | Shows URI header; text content with JSON detection; blob placeholder |
 | `resource_link` | ✅ | Card with URI, name, description |
-| `image` | 🔲 | Placeholder — [#27](https://github.com/K-Khushal/mcp-studio/issues/27) |
-| `audio` | 🔲 | Placeholder — [#28](https://github.com/K-Khushal/mcp-studio/issues/28) |
+| `image` | ✅ | Inline image |
+| `audio` | ✅ | Audio player |
+| unknown | ✅ | Fallback via `unsupported-block.tsx` |
+
+Tabs: **Pretty**, **Raw**, **Headers** (HTTP only), **Timeline**. Pretty validates `structuredContent` against the tool's `outputSchema` (Ajv 2020-12 by default, draft-07 when declared) and keeps content blocks next to the validation feedback.
 
 ### Result Shape Dispatch (`pretty-tab.tsx`)
 
@@ -78,13 +87,13 @@ Tool execution errors (`isError: true` in `CallToolResult`) show a red banner ab
 ### JSON Tree Viewer (`json-viewer.tsx`)
 
 - Expand/collapse nodes with chevrons; objects/arrays show item count when collapsed
-- First two levels auto-expanded on mount; keyed per invocation to reset stale state
+- First two levels auto-expanded on mount; keyed per Call to reset stale state
 - Color scheme: keys rose · strings emerald · numbers amber · booleans sky · null muted
 - Copy button appears on hover next to each primitive value
 
 ## Core State Model
 
-Single Zustand store in `src/store/index.ts`.
+Single Zustand store in `src/store/index.ts`; `handleServerMessage()` at the bottom is the only place `ServerMessage` events mutate state. Settings (`MCPConfig`) live in `src/store/config.ts` and persist to `localStorage` key `mcp-studio-config`.
 
 Two connection identities matter:
 
@@ -118,9 +127,11 @@ Not saved in DB:
 - selected tool/prompt
 - tool form values
 
+Settings live in browser `localStorage`, Environments in the DB.
+
 Live workspace is memory-only and only for the currently connected connection.
 
-## Connection Behavior
+## Selection Behavior
 
 Selecting a connection:
 
@@ -225,6 +236,8 @@ Collections:
 - `collections`
 - `selectedConnectionId`
 - `connectionDrafts`
+- `environments`, `activeEnvironmentId`
+- `config` (`requestTimeout`, `autoScrollLogs`, `verboseLogging`, `theme`)
 
 ## Key Actions
 
@@ -257,7 +270,7 @@ Collections:
 Sidebar click
   → store.loadConnection(connection)
   → selectedConnectionId = connection.id
-  → load req connectionConfig into panel
+  → load saved connectionConfig into panel
   → if connection.id === connectedConnectionId
       restore cached live workspace
     else
@@ -278,7 +291,7 @@ ConnectionPanel.handleConnect()
   → tools/prompts visible only for that connection
 ```
 
-### Tool Invocation
+### Call
 
 ```text
 Run Tool
@@ -313,7 +326,7 @@ Run Tool
   - understands MCP content block types
 
 - `src/components/logs/logs-panel.tsx`
-  - connection-scoped console
+  - connection-scoped Log entries; level/source filters + search; resizable (`logsHeight`)
 
 - `src/components/shell/status-bar.tsx`
   - shows connected connection name + runtime status
@@ -327,6 +340,7 @@ Current tests cover:
 - connection selection behavior
 - blank workspace when switching away from connected connection
 - restoring connected connection workspace when switching back
-- environment store behavior
+- environments, settings (`localStorage`), logs, live Calls, OAuth, structured output
+- Claude config import, Variable inputs, elicitation, WebSocket transport
 
-Frontend tests: `src/__tests__/*`
+Frontend tests (Vitest + jsdom): `src/__tests__/*`; run `bun --filter @mcp-studio/web test`.
