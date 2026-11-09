@@ -1,28 +1,36 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronRight, ChevronDown, Copy, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
-  const handleCopy = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1500);
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
+  useEffect(() => () => clearTimeout(timer.current), []);
+
+  const handleCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      clearTimeout(timer.current);
+      timer.current = setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // Keep the copy action available when clipboard access is denied.
+    }
   };
 
   return (
     <button
+      type="button"
       onClick={handleCopy}
       className={cn(
-        'opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded transition-[opacity,color,background-color]',
+        'absolute left-full top-0 z-10 ml-1 flex size-6 items-center justify-center rounded bg-card opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring transition-[opacity,color,background-color]',
         'text-muted-foreground hover:text-foreground hover:bg-muted',
       )}
       aria-label="Copy value"
       title="Copy value"
     >
-      {copied ? <Check size={9} className="text-success-text" /> : <Copy size={9} />}
+      {copied ? <Check size={13} className="text-success-text" /> : <Copy size={13} />}
     </button>
   );
 }
@@ -39,7 +47,7 @@ function PrimitiveValue({ value }: { value: string | number | boolean | null }) 
   return (
     <span
       className={cn(
-        'group inline-flex items-center',
+        'group relative inline-flex items-center',
         isNull && 'text-muted-foreground italic',
         isString && 'text-syntax-string',
         isNumber && 'text-syntax-number',
@@ -104,8 +112,11 @@ function JsonNode({ keyName, value, depth, isLast, defaultExpanded = false }: Js
 
   return (
     <div>
-      <div
-        className="group flex items-center gap-0.5 cursor-pointer select-none rounded -mx-0.5 px-0.5 hover:bg-muted/30 text-xs leading-6"
+      <button
+        type="button"
+        aria-expanded={expanded}
+        aria-label={keyName === undefined ? collapsedLabel : `${keyName}: ${collapsedLabel}`}
+        className="group flex items-center gap-0.5 cursor-pointer select-none text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded -mx-0.5 px-0.5 hover:bg-muted/30 text-xs leading-6"
         onClick={() => setExpanded(!expanded)}
       >
         <span className="w-3.5 shrink-0 text-muted-foreground/60 group-hover:text-muted-foreground transition-colors">
@@ -120,7 +131,7 @@ function JsonNode({ keyName, value, depth, isLast, defaultExpanded = false }: Js
           </>
         )}
         {!isLast && !expanded && <span className="text-muted-foreground">,</span>}
-      </div>
+      </button>
 
       {expanded && (
         <div className="ml-3.5 pl-3 border-l border-border/30">

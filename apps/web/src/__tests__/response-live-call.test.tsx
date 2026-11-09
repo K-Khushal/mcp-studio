@@ -21,7 +21,7 @@ it("shows advancing elapsed time, progress and Cancel; timeline is available dur
   expect(screen.getByText("1.2s elapsed")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Cancel Call" }));
   expect(cancel).toHaveBeenCalledOnce();
-  fireEvent.click(screen.getByRole("button", { name: "timeline" }));
+  fireEvent.mouseDown(screen.getByRole("tab", { name: "Timeline" }), { button: 0, ctrlKey: false });
   expect(screen.getByText("Session: initialize")).toBeTruthy();
   expect(screen.getByText("12ms")).toBeTruthy();
   expect(screen.getByRole("button", { name: "Cancel Call" })).toBeTruthy();

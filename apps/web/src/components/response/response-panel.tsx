@@ -1,7 +1,8 @@
 import { useStore } from '@/store';
+import { Tabs, TabsContent } from '@/components/ui/tabs';
 import { useState } from 'react';
 import { TimelinePanel } from './timeline-panel';
-import { ResponseHeader, type ResponseTab } from './response-header';
+import { ResponseHeader, RESPONSE_TABS, type ResponseTab } from './response-header';
 import { HeadersTab, buildEffectiveRequestHeaders } from './headers-tab';
 import { PrettyTab, hasToolError } from './pretty-tab';
 import { RawTab } from './raw-tab';
@@ -17,7 +18,9 @@ export function ResponsePanel() {
     httpHeaders,
     timeline,
   } = useStore();
-  const [activeTab, setActiveTab] = useState<ResponseTab>('pretty');
+  const [selectedTab, setActiveTab] = useState<ResponseTab>('pretty');
+  const isHttp = connectionConfig?.transport === 'http';
+  const activeTab = selectedTab === 'headers' && !isHttp ? 'pretty' : selectedTab;
 
   const hasResult = response.result !== null;
   const hasError = response.error !== null;
@@ -37,17 +40,14 @@ export function ResponsePanel() {
     timeline,
   );
 
-  const isHttp = connectionConfig?.transport === 'http';
-
   const effectiveRequestHeaders = isHttp
     ? buildEffectiveRequestHeaders(httpHeaders, httpAuth)
     : null;
 
   return (
-    <div className="flex flex-col bg-card h-full min-h-0">
+    <Tabs data-testid="response" value={activeTab} onValueChange={value => setActiveTab(value as ResponseTab)} className="flex flex-col bg-card h-full min-h-0">
       <ResponseHeader
-        activeTab={activeTab}
-        onTabChange={setActiveTab}
+        isHttp={isHttp}
         hasResult={hasResult}
         hasError={hasError}
         isToolError={isToolError}
@@ -59,37 +59,39 @@ export function ResponsePanel() {
       />
 
       {response.isRunning && <LiveCallStatus />}
-      <div className="flex-1 overflow-auto p-4">
-        {activeTab === 'timeline' ? (
-          <TimelinePanel />
-        ) : response.isRunning ? (
-          <LoadingState />
-        ) : response.outcome === "cancelled" ? (
-          <p className="text-sm text-muted-foreground">Call cancelled.</p>
-        ) : isEmpty ? (
-          <EmptyState />
-        ) : activeTab === 'pretty' ? (
-          <PrettyTab
-            key={response.startedAt ?? 0}
-            outputSchema={response.outputSchema}
-            result={response.result}
-            error={response.error}
-          />
-        ) : activeTab === 'raw' ? (
-          <RawTab result={response.result} error={response.error} />
-        ) : activeTab === 'headers' ? (
-          <HeadersTab
-            isHttp={isHttp}
-            httpStatus={response.httpStatus}
-            httpResponseHeaders={response.httpResponseHeaders}
-            effectiveRequestHeaders={effectiveRequestHeaders}
-            httpAuth={httpAuth}
-            hasResult={hasResult}
-          />
-        ) : (
-          <TimelinePanel />
-        )}
-      </div>
-    </div>
+      {RESPONSE_TABS.filter(tab => tab !== 'headers' || isHttp).map(tab => (
+        <TabsContent key={tab} value={tab} className="overflow-auto p-4">
+          {tab === 'timeline' ? (
+            <TimelinePanel />
+          ) : response.isRunning ? (
+            <LoadingState />
+          ) : response.outcome === "cancelled" ? (
+            <p className="text-sm text-muted-foreground">Call cancelled.</p>
+          ) : isEmpty ? (
+            <EmptyState />
+          ) : tab === 'pretty' ? (
+            <PrettyTab
+              key={response.startedAt ?? 0}
+              outputSchema={response.outputSchema}
+              result={response.result}
+              error={response.error}
+            />
+          ) : tab === 'raw' ? (
+            <RawTab result={response.result} error={response.error} />
+          ) : tab === 'headers' ? (
+            <HeadersTab
+              isHttp={isHttp}
+              httpStatus={response.httpStatus}
+              httpResponseHeaders={response.httpResponseHeaders}
+              effectiveRequestHeaders={effectiveRequestHeaders}
+              httpAuth={httpAuth}
+              hasResult={hasResult}
+            />
+          ) : (
+            <TimelinePanel />
+          )}
+        </TabsContent>
+      ))}
+    </Tabs>
   );
 }
