@@ -3,6 +3,7 @@ import { Plus, X } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 import { Switch } from '@/components/ui/switch';
 
 const fieldClass = 'h-7 font-mono text-xs';
@@ -63,7 +64,7 @@ export function StdioForm() {
         <div ref={argsRef} className="space-y-1.5">
           {stdio.args.map((arg, index) => (
             <div key={index} data-row className="flex items-center gap-1.5">
-              <Input
+              <VariableInput
                 value={arg}
                 onChange={(e) => setArg(index, e.target.value)}
                 aria-label={`Argument ${index + 1}`}
@@ -78,7 +79,7 @@ export function StdioForm() {
       </Section>
 
       <Section label="Working directory" htmlFor="stdio-cwd">
-        <Input
+        <VariableInput
           id="stdio-cwd"
           value={stdio.cwd}
           onChange={(e) => setStdio({ cwd: e.target.value })}
@@ -98,7 +99,7 @@ export function StdioForm() {
                 placeholder="NAME"
                 className={fieldClass}
               />
-              <Input
+              <VariableInput
                 value={row.value}
                 onChange={(e) => setEnv(index, { value: e.target.value })}
                 aria-label={`Environment variable value ${index + 1}`}

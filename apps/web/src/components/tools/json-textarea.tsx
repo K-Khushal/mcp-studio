@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from 'react';
-import { Textarea } from '@/components/ui/textarea';
+import { VariableTextarea } from '@/components/shared/variable-input';
 import { cn } from '@/lib/utils';
 
 interface JsonTextareaProps {
@@ -72,7 +72,8 @@ export function JsonTextarea({
 
   return (
     <div className="flex flex-col gap-1">
-      <Textarea
+      <VariableTextarea
+        json
         id={id}
         aria-label={label}
         aria-invalid={error !== null}

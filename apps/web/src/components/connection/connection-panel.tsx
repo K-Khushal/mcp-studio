@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
 import { Loader2, Plug, Unplug } from 'lucide-react';
-import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
 import { StdioForm } from './stdio-form';
 
@@ -208,7 +208,7 @@ export function ConnectionPanel() {
           </button>
         </div>
 
-        <Input
+        <VariableInput
           value={transport === 'stdio' ? stdio.command : connectionUrl}
           onChange={(e) => (transport === 'stdio' ? setStdio({ command: e.target.value }) : setConnectionUrl(e.target.value))}
           onKeyDown={(e) => e.key === 'Enter' && canConnect && !isSelectedConnectionConnected && !isSelectedConnectionConnecting && handleConnect()}

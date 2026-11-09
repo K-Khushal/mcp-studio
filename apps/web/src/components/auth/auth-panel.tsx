@@ -2,6 +2,7 @@ import { useStore } from '@/store';
 import type { HttpAuth } from '@mcp-studio/types';
 import { cn } from '@/lib/utils';
 import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 
 const AUTH_TYPES = [
   { value: 'none', label: 'None' },
@@ -45,7 +46,7 @@ export function AuthPanel() {
       {httpAuth.type === 'bearer' && (
         <div className="space-y-1.5">
           <label className="text-xs font-medium text-muted-foreground">Token</label>
-          <Input
+          <VariableInput
             value={httpAuth.token}
             onChange={(e) => setHttpAuth({ type: 'bearer', token: e.target.value })}
             placeholder="Enter bearer token or {{ENV_VAR}}"
@@ -72,7 +73,7 @@ export function AuthPanel() {
             </div>
             <div className="space-y-1.5">
               <label className="text-xs font-medium text-muted-foreground">Value</label>
-              <Input
+              <VariableInput
                 value={httpAuth.value}
                 onChange={(e) => setHttpAuth({ ...httpAuth, value: e.target.value })}
                 placeholder="Enter value or {{ENV_VAR}}"

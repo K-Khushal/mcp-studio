@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useId, useState } fr
 import { Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { VariableInput } from '@/components/shared/variable-input';
 import { JsonTextarea } from './json-textarea';
 import {
   fieldKind,
@@ -343,7 +344,7 @@ function PrimitiveControl({
     return <NumberInput id={id} label={label} prop={prop} value={value} onChange={onChange} aria={aria} />;
   }
   return (
-    <Input
+    <VariableInput
       id={id}
       aria-label={label}
       {...aria}
