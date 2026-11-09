@@ -221,4 +221,14 @@ describe("STDIO settings collapse", () => {
     act(() => useStore.getState().loadConnection(makeCollection().connections[0]!));
     expect(summary().getAttribute("aria-expanded")).toBe("true"); // conn-1 override kept
   });
+
+  it("starts each new Session collapsed even after a manual expand in the previous one", () => {
+    connectSelected();
+    render(<ConnectionPanel />);
+    fireEvent.click(summary());
+    expect(summary().getAttribute("aria-expanded")).toBe("true");
+    act(() => useStore.setState({ connectionStatus: "disconnected", connectedConnectionId: null }));
+    connectSelected();
+    expect(summary().getAttribute("aria-expanded")).toBe("false");
+  });
 });

@@ -58,6 +58,20 @@ export function ConnectionPanel() {
   const isSelectedConnectionConnecting =
     selectedConnectionId !== null && selectedConnectionId === connectingConnectionId && isConnecting;
 
+  // A Session ending (disconnect, crash, switching) forgets that Connection's override so the next Session starts collapsed
+  const liveConnectionId = isConnected ? connectedConnectionId : null;
+  const prevLiveConnectionId = useRef<string | null>(null);
+  useEffect(() => {
+    const ended = prevLiveConnectionId.current;
+    prevLiveConnectionId.current = liveConnectionId;
+    if (!ended || ended === liveConnectionId) return;
+    setStdioOpenOverrides((prev) => {
+      if (!(ended in prev)) return prev;
+      const { [ended]: _dropped, ...rest } = prev;
+      return rest;
+    });
+  }, [liveConnectionId]);
+
   const stdioOverride = selectedConnectionId ? stdioOpenOverrides[selectedConnectionId] : undefined;
   const stdioOpen =
     stdioOverride && stdioOverride.whileConnected === isSelectedConnectionConnected ? stdioOverride.open : !isSelectedConnectionConnected;

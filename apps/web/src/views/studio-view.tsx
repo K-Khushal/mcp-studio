@@ -10,7 +10,7 @@ import { AuthPanel } from "@/components/auth/auth-panel";
 import { HeadersPanel } from "@/components/auth/headers-panel";
 import { useStore } from "@/store";
 
-type WorkspaceTab = 'auth' | 'headers' | 'prompts' | 'tools';
+type WorkspaceTab = 'auth' | 'headers' | 'tools' | 'prompts';
 
 export function StudioView() {
   const transport = useStore((s) => s.transport);
@@ -26,8 +26,8 @@ export function StudioView() {
   const tabs: { value: WorkspaceTab; label: string; httpOnly?: boolean }[] = [
     { value: 'auth', label: 'Auth', httpOnly: true },
     { value: 'headers', label: 'Headers', httpOnly: true },
-    { value: 'prompts', label: 'Prompts' },
     { value: 'tools', label: 'Tools' },
+    { value: 'prompts', label: 'Prompts' },
   ];
 
   const visibleTabs = tabs.filter((t) => !t.httpOnly || transport === 'http');
