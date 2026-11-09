@@ -1,5 +1,5 @@
 import type { ElicitationResult } from "@mcp-studio/types";
-import { StdioMCPClient, StreamableHTTPClient, redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "@mcp-studio/mcp-client";
+import { boundedText, StdioMCPClient, StreamableHTTPClient, redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
@@ -172,7 +172,7 @@ export class SessionManager {
     this.referencedVariables.clear();
   }
   private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) =>
-    this.send({ type: "log", level, source, message, timestamp: Date.now(), ...(payload ? { payload } : {}) });
+    this.send({ type: "log", level, source, message: boundedText(message), timestamp: Date.now(), ...(payload ? { payload: { ...payload, body: new TextEncoder().encode(JSON.stringify(payload.body) ?? "").length > 16 * 1024 ? boundedText(JSON.stringify(payload.body) ?? "") : payload.body } } : {}) });
 
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
@@ -314,7 +314,14 @@ export class SessionManager {
       // Studio owns the pausable deadline; keep the SDK fallback from expiring behind a form.
       const result = await execute(this.client, requestId, { signal: controller.signal, timeout: 2_147_483_647 });
       if (controller.signal.aborted) throw controller.signal.reason;
-      this.send(result);
+      const serialized = JSON.stringify(result);
+      const bytes = new TextEncoder().encode(serialized).length;
+      if (bytes > 1024 * 1024) {
+        const text = `Response truncated, ${bytes} bytes (limit 1048576 bytes). Preview: ${boundedText(serialized, 16 * 1024)}`;
+        this.send(result.type === "result"
+          ? { type: "result", requestId, data: { content: [{ type: "text", text }] } }
+          : { type: "prompt_result", requestId, messages: [{ role: "assistant", content: { type: "text", text } }] });
+      } else this.send(result);
     } catch (err) {
       if (controller.signal.reason === "cancelled") {
         this.send({ type: "cancelled", requestId });

@@ -18,7 +18,7 @@ import type {
   LogSource,
   LogPayload,
 } from "@mcp-studio/types";
-import { prepareLog } from "@/components/logs/filter-logs";
+import { prepareLog, retainLogs } from "@/components/logs/filter-logs";
 import { transport } from "@/transport/websocket-transport";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
@@ -1083,17 +1083,16 @@ function handleServerMessage(msg: ServerMessage): void {
         id: `log_${nextLogIdCounter}`,
         level,
         source,
-        message,
         timestamp,
         ...prepareLog(message, payload),
       };
 
       if (!s.connectedConnectionCache) {
-        if (s.connectionStatus === "connecting") handshakeLogs = [...handshakeLogs, nextLog].slice(-500);
-        return { logIdCounter: nextLogIdCounter, logs: [...s.logs, nextLog].slice(-500) };
+        if (s.connectionStatus === "connecting") handshakeLogs = retainLogs([...handshakeLogs, nextLog]);
+        return { logIdCounter: nextLogIdCounter, logs: retainLogs([...s.logs, nextLog]) };
       }
 
-      const nextLogs = [...s.connectedConnectionCache.logs, nextLog].slice(-500);
+      const nextLogs = retainLogs([...s.connectedConnectionCache.logs, nextLog]);
       const nextCache: ConnectedConnectionCache = {
         ...cloneConnectedCache(s.connectedConnectionCache),
         logs: nextLogs,

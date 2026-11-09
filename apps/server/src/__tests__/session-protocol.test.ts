@@ -180,3 +180,19 @@ test("STDIO connects with tools and a Studio WARN when prompts/list fails", asyn
     await session.close();
   }
 });
+
+test('huge tool and prompt responses forward bounded previews with byte notices', async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.waitFor('connected');
+    await session.send({ type: 'invoke', tool: 'echo', params: { text: 'x'.repeat(2 * 1024 * 1024) } });
+    const result = await session.waitFor('result');
+    expect(JSON.stringify(result)).toContain('Response truncated,');
+    expect(JSON.stringify(result).length).toBeLessThan(20000);
+    await session.send({ type: 'invoke_prompt', prompt: 'greet', args: { name: 'x'.repeat(2 * 1024 * 1024) } });
+    const prompt = await session.waitFor('prompt_result');
+    expect(JSON.stringify(prompt)).toContain('Response truncated,');
+    expect(JSON.stringify(prompt).length).toBeLessThan(20000);
+  } finally { await session.close(); }
+});

@@ -8,6 +8,15 @@ import { JsonViewer } from './json-viewer';
 const validators = new WeakMap<Record<string, unknown>, ValidateFunction>();
 
 function compiledValidator(schema: Record<string, unknown>) {
+  const pending: unknown[] = [schema];
+  while (pending.length) {
+    const value = pending.pop();
+    if (!value || typeof value !== 'object') continue;
+    if (Object.hasOwn(value, 'pattern') || Object.hasOwn(value, 'patternProperties') || Object.hasOwn(value, 'format')) {
+      throw new Error('Pattern validation is disabled for server-supplied schemas (including patternProperties and formats).');
+    }
+    pending.push(...Object.values(value));
+  }
   const cached = validators.get(schema);
   if (cached) return cached;
   const dialect = typeof schema.$schema === 'string' ? schema.$schema.replace(/#$/, '') : schema.$schema;

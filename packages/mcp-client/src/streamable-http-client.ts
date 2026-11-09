@@ -1,4 +1,5 @@
 import { rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "./diagnostics.js";
+import { limitResponseBody } from "./limits.js";
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { UnauthorizedError, extractWWWAuthenticateParams } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -130,9 +131,9 @@ export class StreamableHTTPClient extends BaseMCPClient {
     // Shared auth outlives any individual Session. In particular, never abort a
     // rotating-token exchange before its response can be persisted. Bound each
     // auth endpoint independently so a hung endpoint cannot wedge the shared flow.
-    const authFetch: FetchLike = (input, init) => fetch(input, {
+    const authFetch: FetchLike = async (input, init) => limitResponseBody(await fetch(input, {
       ...init, signal: AbortSignal.timeout(this.options.oauthRequestTimeoutMs ?? 30_000),
-    });
+    }));
     const resourceFetch: FetchLike = (input, init) => {
       const signal = init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal;
       return fetch(input, { ...init, signal });
@@ -166,7 +167,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         response.headers.forEach((value, key) => { respHeaders[key] = value; });
         this.options.onHttpResponse(reqId, response.status, respHeaders);
       }
-      return response;
+      return limitResponseBody(response);
     };
 
     this.transport = new StreamableHTTPClientTransport(url, {

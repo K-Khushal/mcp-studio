@@ -4,15 +4,21 @@ const EXTENSIONS: Record<string, string> = {
   'audio/x-wav': 'wav',
   'audio/wave': 'wav',
   'image/jpeg': 'jpg',
-  'image/svg+xml': 'svg',
+  'image/png': 'png',
+  'image/gif': 'gif',
+  'image/webp': 'webp',
+  'image/avif': 'avif',
+  'audio/wav': 'wav',
+  'audio/ogg': 'ogg',
+  'audio/webm': 'webm',
+  'audio/flac': 'flac',
 };
 
 export function toDataUri(mimeType: string, base64: string): string {
-  return `data:${mimeType};base64,${base64}`;
+  return `data:${Object.hasOwn(EXTENSIONS, mimeType) ? mimeType : "application/octet-stream"};base64,${base64}`;
 }
 
 export function downloadName(kind: 'image' | 'audio', mimeType: string): string {
-  const subtype = mimeType.split('/')[1]?.split(';')[0]?.trim();
-  const ext = EXTENSIONS[mimeType] ?? (subtype && /^[a-z0-9.+-]+$/i.test(subtype) ? subtype : 'bin');
+  const ext = Object.hasOwn(EXTENSIONS, mimeType) ? EXTENSIONS[mimeType] : 'bin';
   return `${kind}.${ext}`;
 }

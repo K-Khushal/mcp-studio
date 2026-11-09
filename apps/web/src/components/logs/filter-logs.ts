@@ -40,7 +40,9 @@ export function formatLogLine(l: LogEntry, time: string): string {
 }
 
 /** Bound retained frame bodies and build the search index once, at ingestion. */
-export function prepareLog(message: string, payload?: LogPayload): { payload?: LogPayload; searchText: string } {
+export function prepareLog(message: string, payload?: LogPayload): { message: string; payload?: LogPayload; searchText: string } {
+  const originalBytes = new TextEncoder().encode(message);
+  if (originalBytes.length > 16 * 1024) message = new TextDecoder().decode(originalBytes.subarray(0, 16 * 1024)) + ` [truncated, ${originalBytes.length} bytes]`;
   const maxBodyLength = 64 * 1024;
   let storedPayload = payload;
   if (payload) {
@@ -50,8 +52,26 @@ export function prepareLog(message: string, payload?: LogPayload): { payload?: L
       storedPayload = { ...payload, body: body.slice(0, maxBodyLength - marker.length) + marker };
     }
   }
+  if (storedPayload) storedPayload = {
+    ...storedPayload,
+    method: storedPayload.method?.slice(0, 1024),
+    id: typeof storedPayload.id === 'string' ? storedPayload.id.slice(0, 1024) : storedPayload.id,
+  };
   const searchText = storedPayload
     ? `${message} ${storedPayload.method ?? ""} ${storedPayload.id ?? ""} ${JSON.stringify(storedPayload.body)}`.toLowerCase()
     : message.toLowerCase();
-  return { ...(storedPayload ? { payload: storedPayload } : {}), searchText };
+  return { message, ...(storedPayload ? { payload: storedPayload } : {}), searchText };
+}
+
+/** Count serialized retained data, including search indexes, against a 4 MiB budget. */
+export function retainLogs(logs: LogEntry[]): LogEntry[] {
+  let bytes = 0;
+  let start = logs.length;
+  while (start > 0 && logs.length - start < 500) {
+    const size = new TextEncoder().encode(JSON.stringify(logs[start - 1])).length;
+    if (bytes + size > 4 * 1024 * 1024) break;
+    bytes += size;
+    start--;
+  }
+  return logs.slice(start);
 }

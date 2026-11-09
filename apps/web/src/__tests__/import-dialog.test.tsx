@@ -32,3 +32,13 @@ it('creates a Collection from a chosen file and reports save failures without cl
   expect(useStore.getState().collections[0]?.connections).toEqual([]);
   expect(screen.getByRole('button', { name: 'Import 1 Connection' })).toBeEnabled();
 });
+
+it('previews args, env and inheritance for a Connection named __proto__', () => {
+  useStore.setState({ collections: [] });
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: '{"mcpServers":{"__proto__":{"command":"bun","args":["server.ts"],"env":{"MODE":"test"}}}}' } });
+  expect(screen.getByText(/Args:.*server.ts/)).toBeInTheDocument();
+  expect(screen.getByText(/Env:.*MODE.*test/)).toBeInTheDocument();
+  expect(screen.getByText(/Inherit system environment: Yes/)).toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Import 1 Connection' })).toBeDisabled();
+});

@@ -120,3 +120,6 @@ Update after: new package/route/transport, schema change, arch decision, bug >15
 Packaged-app browser suites live in `e2e/`; run `bun run e2e` locally/CI and `bun run e2e:live` for opt-in public servers. Setup, isolation and reports: `docs/testing.md`.
 
 Harness, fixtures (STDIO/HTTP/OAuth), elicitation and live-Call coverage: `docs/testing.md`. Session seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`.
+
+### Untrusted content budgets
+Calls forwarded to the browser are capped at 1 MiB (oversize results become a text preview with original byte count); HTTP response streams are capped at 4 MiB and fail on overflow. Stderr lines/log messages retain 16 KiB prefixes, logs retain at most 500 entries/4 MiB including search indexes, and output schemas containing regex keywords or formats are reported as unvalidated to avoid executing server-selected regex.

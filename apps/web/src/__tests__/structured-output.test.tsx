@@ -81,3 +81,10 @@ it.each([
   render(<PrettyTab result={{ content: [], structuredContent: { answer: "wrong" } }} error={null} outputSchema={{ ...schema, $schema }} />);
   expect(screen.getByRole("alert")).toHaveTextContent(/output schema mismatch.*answer.*number/i);
 });
+
+it('declines hostile regex validation without running the pattern', () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { value: 'a'.repeat(100) + '!' } }} error={null} outputSchema={{
+    type: 'object', properties: { value: { type: 'string', pattern: '(a+)+$' } },
+  }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent(/pattern validation is disabled/i);
+});

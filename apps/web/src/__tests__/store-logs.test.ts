@@ -108,3 +108,11 @@ for (const serverLog of [true, false]) {
     expect(useStore.getState().logs.some(log => log.message === "starting")).toBe(true);
   });
 }
+
+it('bounds huge log entries and total retained logs', () => {
+  for (let i = 0; i < 510; i++) deliver({ type: 'log', level: 'INFO', source: 'server', message: 'x'.repeat(20000), timestamp: i });
+  const logs = useStore.getState().logs;
+  expect(logs.length).toBeLessThanOrEqual(500);
+  expect(logs.at(-1)?.message).toContain('truncated, 20000 bytes');
+  expect(JSON.stringify(logs).length).toBeLessThan(5 * 1024 * 1024);
+});
