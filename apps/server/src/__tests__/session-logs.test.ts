@@ -145,7 +145,7 @@ test("stderr preserves lines and UTF-8 across chunks and flushes the final line"
   }
 });
 
-test("HTTP connection logs redact the configured auth query parameter", async () => {
+test("HTTP connection logs redact every query value", async () => {
   const http = await startHTTPFixture();
   const session = new SessionHarness();
   try {
@@ -156,7 +156,8 @@ test("HTTP connection logs redact the configured auth query parameter", async ()
     } });
     await session.waitFor("connected");
     const entry = logs(session).find(l => l.message.startsWith("Connecting via Streamable HTTP"));
-    expect(entry?.message).toContain("view=tools");
+    expect(entry?.message).not.toContain("view=tools");
+    expect(entry?.message).toContain("view=%5BREDACTED%5D");
     expect(entry?.message).toContain("REDACTED");
     expect(JSON.stringify(logs(session))).not.toContain("super-secret");
     expect(JSON.stringify(logs(session))).not.toContain("old-secret");

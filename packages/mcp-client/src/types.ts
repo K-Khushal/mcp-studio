@@ -23,6 +23,8 @@ export interface MCPClientOptions {
 }
 
 export interface MCPClientInterface {
+  /** Restore transport-owned credentials when the Session rebuilds Variable redaction. */
+  rememberDiagnosticSecrets(secrets: Set<string>): void;
   connect(): Promise<ConnectedServerInfo>;
   listTools(): Promise<MCPTool[]>;
   callTool(

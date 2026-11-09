@@ -28,13 +28,26 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   protected readonly options: MCPClientOptions;
   protected readonly diagnosticSecrets: Set<string>;
 
+  /** Transport-owned credentials survive an Environment rebuild within this Session. */
+  protected readonly authenticationSecrets = new Set<string>();
+
+  rememberDiagnosticSecrets(secrets: Set<string>): void {
+    for (const value of this.authenticationSecrets) secrets.add(value);
+  }
+
   constructor(options: MCPClientOptions = {}) {
     this.verbose = options.verbose ?? false;
     this.diagnosticSecrets = options.diagnosticSecrets ?? new Set<string>();
     this.options = { ...options,
-      onLog: (level, source, text, payload) => options.onLog?.(level, source,
-        redactDiagnosticValue(text, this.diagnosticSecrets), redactDiagnosticValue(payload, this.diagnosticSecrets)),
-      onHttpResponse: (id, status, headers) => options.onHttpResponse?.(id, status, redactDiagnosticValue(headers, this.diagnosticSecrets)),
+      onLog: (level, source, text, payload) => {
+        this.rememberDiagnosticSecrets(this.diagnosticSecrets);
+        options.onLog?.(level, source, redactDiagnosticValue(text, this.diagnosticSecrets),
+          payload ? { ...payload, body: redactDiagnosticValue(payload.body, this.diagnosticSecrets) } : payload);
+      },
+      onHttpResponse: (id, status, headers) => {
+        this.rememberDiagnosticSecrets(this.diagnosticSecrets);
+        options.onHttpResponse?.(id, status, redactDiagnosticValue(headers, this.diagnosticSecrets, true));
+      },
     };
   }
 

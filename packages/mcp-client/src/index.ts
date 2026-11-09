@@ -6,4 +6,4 @@ export { mapMcpLogLevel, formatMcpLogMessage } from "./log.js";
 export { StudioOAuthProvider } from "./oauth.js";
 export type { OAuthCredentials, OAuthSignIn, OAuthStorage } from "./oauth.js";
 
-export { redactDiagnosticValue, rememberConnectionSecrets } from "./diagnostics.js";
+export { redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "./diagnostics.js";

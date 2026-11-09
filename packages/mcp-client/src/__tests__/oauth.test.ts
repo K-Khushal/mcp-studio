@@ -10,7 +10,7 @@ describe("OAuth error redaction", () => {
       expect(redacted).toBeInstanceOf(Error);
       expect(redacted.message).toBe("[REDACTED] failed");
       expect(redacted.name).toBe(name);
-      expect(redacted.code).toBe("[REDACTED]-code");
+      expect(redacted.code).toBe("private-token-code");
       expect(original.message).toBe("private-token failed");
     });
   }

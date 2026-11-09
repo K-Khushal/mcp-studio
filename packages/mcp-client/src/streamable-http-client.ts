@@ -1,4 +1,4 @@
-import { rememberConnectionSecrets, isCredentialKey } from "./diagnostics.js";
+import { rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "./diagnostics.js";
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { UnauthorizedError, extractWWWAuthenticateParams } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -24,7 +24,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
     options: MCPClientOptions = {}
   ) {
     super(options);
-    this.oauthSecrets = this.diagnosticSecrets;
+    this.oauthSecrets = this.authenticationSecrets;
     rememberConnectionSecrets({ transport: "http", config }, this.diagnosticSecrets);
   }
 
@@ -88,7 +88,8 @@ export class StreamableHTTPClient extends BaseMCPClient {
   // Do not retain their message, cause or response on any public exception.
   private safeError(error: unknown): unknown {
     if (error instanceof OAuthFlowError || error instanceof UnauthorizedError) return new OAuthFlowError();
-    return redactOAuthValue(error, this.oauthSecrets);
+    this.rememberDiagnosticSecrets(this.diagnosticSecrets);
+    return redactOAuthValue(error, this.diagnosticSecrets);
   }
 
   private variant: "streamable" | "sse" = "streamable";
@@ -156,8 +157,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
       }
       response.headers.forEach((value, key) => {
         if (isCredentialKey(key)) {
-          this.diagnosticSecrets.add(value);
-          if (/^Bearer /i.test(value)) this.diagnosticSecrets.add(value.slice(7));
+          rememberDiagnosticSecret(value, this.authenticationSecrets, true);
         }
       });
       const reqId = this.activeRequestId;
@@ -176,10 +176,9 @@ export class StreamableHTTPClient extends BaseMCPClient {
     });
 
     const logUrl = new URL(url);
-    if (auth?.type === "apikey" && auth.in === "query" && auth.key) {
-      logUrl.searchParams.set(auth.key, "[REDACTED]");
-    }
+    for (const key of new Set(logUrl.searchParams.keys())) logUrl.searchParams.set(key, "[REDACTED]");
     let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
+
     this.options.onLog?.("INFO", "studio", `Connecting via Streamable HTTP to ${logUrl.toString()}`);
     this.variant = "streamable";
     try {
