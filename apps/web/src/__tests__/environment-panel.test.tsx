@@ -16,9 +16,12 @@ it('masks all existing and new values, reveals deliberately, and remasks on reop
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'password');
   expect(screen.getByDisplayValue('localhost')).toHaveAttribute('type', 'password');
   expect(screen.getByPlaceholderText('VALUE')).toHaveAttribute('type', 'password');
+  expect(screen.getByPlaceholderText('VALUE')).toHaveAttribute('autocomplete', 'off');
+  expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('autocomplete', 'off');
   await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'text');
-  await userEvent.click(screen.getByRole('button', { name: 'Hide CRED' }));
+  expect(screen.getByRole('button', { name: 'Reveal CRED' })).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'password');
   await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
   await userEvent.keyboard('{Escape}');

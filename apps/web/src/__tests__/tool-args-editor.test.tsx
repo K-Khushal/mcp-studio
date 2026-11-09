@@ -409,3 +409,20 @@ describe("integer array item left blank", () => {
     expect(args()).toEqual({ tags: [""] });
   });
 });
+
+it("leaves blocked server defaults visually empty for string and number fields", () => {
+  renderEditor({
+    type: "object",
+    properties: {
+      token: { type: "string", default: "{{SECRET}}" },
+      count: { type: "number", default: "{{SECRET}}" },
+    },
+  });
+  for (const name of ["token", "count"]) {
+    const input = screen.getByLabelText(name);
+    expect(input).toHaveValue(name === "count" ? null : "");
+    expect(input).not.toHaveAttribute("placeholder", "{{SECRET}}");
+    expect(input).toHaveAccessibleDescription('Server default (not applied): "{{SECRET}}"');
+  }
+  expect(screen.getAllByText(/Server default \(not applied\)/)).toHaveLength(2);
+});

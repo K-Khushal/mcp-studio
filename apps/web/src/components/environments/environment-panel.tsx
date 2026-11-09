@@ -165,10 +165,11 @@ export default function EnvironmentPanel() {
                   onBlur={handleBlur}
                   aria-label={`${key} value`}
                   type={revealedKeys.has(key) ? 'text' : 'password'}
+                  autoComplete="off"
                   className="h-7 text-xs font-mono bg-muted border-border"
                 />
                 <div className="flex items-center gap-1 w-20 justify-end">
-                  <button aria-label={`${revealedKeys.has(key) ? 'Hide' : 'Reveal'} ${key}`} aria-pressed={revealedKeys.has(key)} onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <button aria-label={`Reveal ${key}`} aria-pressed={revealedKeys.has(key)} onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     {revealedKeys.has(key) ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
                   <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
@@ -197,6 +198,7 @@ export default function EnvironmentPanel() {
           <Input
             placeholder="VALUE"
             type="password"
+            autoComplete="off"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}

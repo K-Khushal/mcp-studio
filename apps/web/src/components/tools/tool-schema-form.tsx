@@ -83,8 +83,9 @@ interface FieldProps {
 function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps) {
   const id = useId();
   const kind = fieldKind(prop, depth);
-  const defaultHint = containsVariableSyntax(prop.default) ? (
-    <p className="text-[10px] text-muted-foreground">
+  const hintId = containsVariableSyntax(prop.default) ? `${id}-default` : undefined;
+  const defaultHint = hintId ? (
+    <p id={hintId} className="text-[10px] text-muted-foreground">
       Server default (not applied): {JSON.stringify(prop.default)}
     </p>
   ) : null;
@@ -124,7 +125,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
       ) : kind === 'primitive-array' ? (
         <ArrayControl label={name} prop={prop} value={value} onChange={onChange} />
       ) : (
-        <PrimitiveControl id={id} label={name} prop={prop} kind={kind} value={value} onChange={onChange} />
+        <PrimitiveControl describedBy={hintId} id={id} label={name} prop={prop} kind={kind} value={value} onChange={onChange} />
       )}
     </div>
   );
@@ -358,7 +359,7 @@ function PrimitiveControl({
       {...aria}
       value={typeof value === 'string' ? value : ''}
       onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
-      placeholder={prop.default !== undefined ? String(prop.default) : ''}
+      placeholder={prop.default !== undefined && !containsVariableSyntax(prop.default) ? String(prop.default) : undefined}
       className="h-8 text-xs"
     />
   );
@@ -399,7 +400,7 @@ function NumberInput({
         const n = Number(text);
         onChange(text === '' ? undefined : isNaN(n) ? text : n);
       }}
-      placeholder={prop.default !== undefined ? String(prop.default) : ''}
+      placeholder={prop.default !== undefined && !containsVariableSyntax(prop.default) ? String(prop.default) : undefined}
       className="h-8 text-xs"
     />
   );

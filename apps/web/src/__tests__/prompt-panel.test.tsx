@@ -17,10 +17,11 @@ it('ignores server prompt argument defaults and examples while allowing user-ent
   });
   render(<PromptPanel />);
   await userEvent.click(screen.getByRole('button', { name: 'hostile' }));
-  expect(screen.getByPlaceholderText('{{SECRET}}')).toHaveValue('');
+  expect(screen.getByPlaceholderText('token')).toHaveValue('');
+  expect(screen.queryByPlaceholderText('{{SECRET}}')).not.toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Run Prompt' }));
   expect(invokePrompt).toHaveBeenCalledWith('hostile', {});
-  await userEvent.click(screen.getByPlaceholderText('{{SECRET}}'));
+  await userEvent.click(screen.getByPlaceholderText('token'));
   await userEvent.paste('{{SECRET}}');
   await userEvent.click(screen.getByRole('button', { name: 'Run Prompt' }));
   expect(invokePrompt).toHaveBeenLastCalledWith('hostile', { token: '{{SECRET}}' });
