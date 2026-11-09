@@ -14,7 +14,7 @@ for (const transport of ["stdio", "http"] as const) {
 
       await session.send({ type: "list_tools" });
       expect((await session.waitFor("tools_listed")).tools.map(t => t.name)).toEqual([
-        "structured-bad", "structured-missing", "echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash",
+        "structured-bad", "structured-missing", "form-controls", "echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash",
       ]);
       await session.send({ type: "list_prompts" });
       expect((await session.waitFor("prompts_listed")).prompts).toMatchObject([{ name: "greet", arguments: [{ name: "name", required: true }] }]);

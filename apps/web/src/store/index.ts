@@ -95,6 +95,9 @@ interface ConnectionWorkspaceState {
   pendingParams: Record<string, unknown> | null;
   toolFormValues: Record<string, unknown>;
   promptArgValues: Record<string, string>;
+  /** Typed arguments per tool/prompt name, kept for the Session so switching back restores them. */
+  toolArgsByName: Record<string, Record<string, unknown>>;
+  promptArgsByName: Record<string, Record<string, string>>;
   response: ResponseState;
   timeline: TimelineStep[];
   logs: LogEntry[];
@@ -127,6 +130,8 @@ interface AppState {
   pendingParams: Record<string, unknown> | null;
   toolFormValues: Record<string, unknown>;
   promptArgValues: Record<string, string>;
+  toolArgsByName: Record<string, Record<string, unknown>>;
+  promptArgsByName: Record<string, Record<string, string>>;
 
   // Response
   response: ResponseState;
@@ -273,6 +278,8 @@ function createBlankWorkspace(): ConnectionWorkspaceState {
     pendingParams: null,
     toolFormValues: {},
     promptArgValues: {},
+    toolArgsByName: {},
+    promptArgsByName: {},
     response: { ...BLANK_RESPONSE },
     timeline: [],
     logs: [],
@@ -290,6 +297,8 @@ function cloneWorkspace(workspace: ConnectionWorkspaceState): ConnectionWorkspac
     pendingParams: workspace.pendingParams ? { ...workspace.pendingParams } : null,
     toolFormValues: { ...workspace.toolFormValues },
     promptArgValues: { ...workspace.promptArgValues },
+    toolArgsByName: { ...workspace.toolArgsByName },
+    promptArgsByName: { ...workspace.promptArgsByName },
     response: {
       outputSchema: workspace.response.outputSchema,
       requestId: workspace.response.requestId,
@@ -344,6 +353,8 @@ function connectionWorkspacePatch(workspace: ConnectionWorkspaceState): Pick<
   | "pendingParams"
   | "toolFormValues"
   | "promptArgValues"
+  | "toolArgsByName"
+  | "promptArgsByName"
   | "response"
   | "timeline"
   | "logs"
@@ -359,6 +370,8 @@ function connectionWorkspacePatch(workspace: ConnectionWorkspaceState): Pick<
     pendingParams: clone.pendingParams,
     toolFormValues: clone.toolFormValues,
     promptArgValues: clone.promptArgValues,
+    toolArgsByName: clone.toolArgsByName,
+    promptArgsByName: clone.promptArgsByName,
     response: clone.response,
     timeline: clone.timeline,
     logs: clone.logs,
@@ -376,6 +389,8 @@ function blankWorkspacePatch(): Pick<
   | "pendingParams"
   | "toolFormValues"
   | "promptArgValues"
+  | "toolArgsByName"
+  | "promptArgsByName"
   | "response"
   | "timeline"
   | "logs"
@@ -559,21 +574,20 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- tools ----------
       selectTool: (tool) =>
-        set((s) => ({
-          selectedTool: tool,
-          selectedPrompt: null,
-          pendingParams: null,
-          toolFormValues: {},
-          promptArgValues: {},
-          ...syncConnectedWorkspace(s, (workspace) => ({
-            ...workspace,
+        set((s) => {
+          const toolFormValues = tool ? { ...s.toolArgsByName[tool.name] } : {};
+          return {
             selectedTool: tool,
-            selectedPrompt: null,
             pendingParams: null,
-            toolFormValues: {},
-            promptArgValues: {},
-          })),
-        })),
+            toolFormValues,
+            ...syncConnectedWorkspace(s, (workspace) => ({
+              ...workspace,
+              selectedTool: tool,
+              pendingParams: null,
+              toolFormValues,
+            })),
+          };
+        }),
       setToolSearch: (q) =>
         set((s) => ({
           toolSearch: q,
@@ -583,13 +597,18 @@ export const useStore = create<AppState & AppActions>()(
           })),
         })),
       setToolFormValues: (values) =>
-        set((s) => ({
-          toolFormValues: { ...values },
-          ...syncConnectedWorkspace(s, (workspace) => ({
-            ...workspace,
+        set((s) => {
+          const toolArgsByName = s.selectedTool ? { ...s.toolArgsByName, [s.selectedTool.name]: { ...values } } : s.toolArgsByName;
+          return {
             toolFormValues: { ...values },
-          })),
-        })),
+            toolArgsByName,
+            ...syncConnectedWorkspace(s, (workspace) => ({
+              ...workspace,
+              toolFormValues: { ...values },
+              toolArgsByName,
+            })),
+          };
+        }),
       setPromptSearch: (q) =>
         set((s) => ({
           promptSearch: q,
@@ -599,31 +618,35 @@ export const useStore = create<AppState & AppActions>()(
           })),
         })),
       setPromptArgValues: (values) =>
-        set((s) => ({
-          promptArgValues: { ...values },
-          ...syncConnectedWorkspace(s, (workspace) => ({
-            ...workspace,
+        set((s) => {
+          const promptArgsByName = s.selectedPrompt ? { ...s.promptArgsByName, [s.selectedPrompt.name]: { ...values } } : s.promptArgsByName;
+          return {
             promptArgValues: { ...values },
-          })),
-        })),
+            promptArgsByName,
+            ...syncConnectedWorkspace(s, (workspace) => ({
+              ...workspace,
+              promptArgValues: { ...values },
+              promptArgsByName,
+            })),
+          };
+        }),
 
       // ---------- prompts ----------
       selectPrompt: (prompt) =>
-        set((s) => ({
-          selectedPrompt: prompt,
-          selectedTool: null,
-          pendingParams: null,
-          promptArgValues: {},
-          toolFormValues: {},
-          ...syncConnectedWorkspace(s, (workspace) => ({
-            ...workspace,
+        set((s) => {
+          const promptArgValues = prompt ? { ...s.promptArgsByName[prompt.name] } : {};
+          return {
             selectedPrompt: prompt,
-            selectedTool: null,
             pendingParams: null,
-            promptArgValues: {},
-            toolFormValues: {},
-          })),
-        })),
+            promptArgValues,
+            ...syncConnectedWorkspace(s, (workspace) => ({
+              ...workspace,
+              selectedPrompt: prompt,
+              pendingParams: null,
+              promptArgValues,
+            })),
+          };
+        }),
 
       // ---------- invocation ----------
       cancelCall: () => {

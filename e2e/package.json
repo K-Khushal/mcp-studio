@@ -7,7 +7,7 @@
     "lint": "eslint '*.ts'"
   },
   "devDependencies": {
-    "@axe-core/playwright": "^4.14.0",
+    "@axe-core/playwright": "4.14.0",
     "@mcp-studio/types": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.32.2",
     "@modelcontextprotocol/server-everything": "2.2.1",

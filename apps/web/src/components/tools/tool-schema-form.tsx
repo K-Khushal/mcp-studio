@@ -6,6 +6,7 @@ import { VariableInput } from '@/components/shared/variable-input';
 import { JsonTextarea } from './json-textarea';
 import {
   containsVariableSyntax,
+  enumOptions,
   fieldKind,
   getProperties,
   getRequired,
@@ -17,6 +18,9 @@ export type Args = Record<string, unknown>;
 
 /** Lets fallback JSON fields tell the editor they hold unparseable text. */
 export const FieldValidityContext = createContext<(id: string, valid: boolean) => void>(() => {});
+
+/** When true, empty required fields show an inline error (set after a blocked Run). */
+export const ShowRequiredContext = createContext(false);
 
 interface SchemaFormProps {
   schema: Record<string, unknown>;
@@ -83,23 +87,29 @@ interface FieldProps {
 function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps) {
   const id = useId();
   const kind = fieldKind(prop, depth);
+  const showRequired = useContext(ShowRequiredContext);
   const hintId = containsVariableSyntax(prop.default) ? `${id}-default` : undefined;
   const defaultHint = hintId ? (
     <p id={hintId} className="text-xs text-muted-foreground">
       Server default (not applied): {JSON.stringify(prop.default)}
     </p>
   ) : null;
+  const descriptionId = prop.description ? `${id}-description` : undefined;
+  const errorId = `${id}-error`;
+  const missing = showRequired && required && (value === undefined || value === '');
+  const describedBy = [descriptionId, hintId, missing && errorId].filter(Boolean).join(' ') || undefined;
 
   if (kind === 'object') {
     const current = isPlainObject(value) ? value : {};
     return (
-      <fieldset className="flex flex-col gap-2 rounded-md border border-border p-3">
+      <fieldset aria-invalid={missing || undefined} aria-describedby={describedBy} className="flex flex-col gap-2 rounded-md border border-border p-3">
         <legend className="flex items-center gap-1 px-1 text-xs font-medium text-foreground">
           {name}
-          {required && <RequiredMark />}
+          {required && <><RequiredMark /><span className="sr-only">Required</span></>}
         </legend>
-        {prop.description && <p className="text-xs text-muted-foreground">{prop.description}</p>}
+        {prop.description && <p id={descriptionId} className="text-xs text-muted-foreground">{prop.description}</p>}
         {defaultHint}
+        {missing && <p id={errorId} className="text-xs text-destructive-text">Required</p>}
         <FieldList
           schema={prop}
           value={current}
@@ -118,15 +128,26 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
         {name}
         {required && <RequiredMark />}
       </label>
-      {prop.description && <p className="text-xs text-muted-foreground">{prop.description}</p>}
+      {prop.description && <p id={descriptionId} className="text-xs text-muted-foreground">{prop.description}</p>}
       {defaultHint}
       {kind === 'json' ? (
-        <JsonField id={id} label={name} value={value} onChange={onChange} />
+        <JsonField id={id} label={name} value={value} onChange={onChange} describedBy={describedBy} required={required} invalid={missing} />
       ) : kind === 'primitive-array' ? (
-        <ArrayControl label={name} prop={prop} value={value} onChange={onChange} />
+        <ArrayControl id={id} label={name} prop={prop} value={value} onChange={onChange} required={required} invalid={missing} describedBy={describedBy} />
       ) : (
-        <PrimitiveControl describedBy={hintId} id={id} label={name} prop={prop} kind={kind} value={value} onChange={onChange} />
+        <PrimitiveControl
+          describedBy={describedBy}
+          id={id}
+          label={name}
+          prop={prop}
+          kind={kind}
+          value={value}
+          onChange={onChange}
+          required={required}
+          invalid={missing || undefined}
+        />
       )}
+      {missing && <p id={errorId} className="text-xs text-destructive-text">Required</p>}
     </div>
   );
 }
@@ -136,7 +157,10 @@ function JsonField({
   label,
   value,
   onChange,
-}: Pick<PrimitiveControlProps, 'id' | 'label' | 'value' | 'onChange'>) {
+  describedBy,
+  required,
+  invalid,
+}: Pick<PrimitiveControlProps, 'id' | 'label' | 'value' | 'onChange' | 'describedBy' | 'required' | 'invalid'>) {
   const report = useContext(FieldValidityContext);
   const onValidChange = useCallback((valid: boolean) => report(id, valid), [report, id]);
   return (
@@ -146,6 +170,9 @@ function JsonField({
       value={value}
       onChange={onChange}
       onValidChange={onValidChange}
+      describedBy={describedBy}
+      required={required}
+      invalid={invalid}
       placeholder="JSON"
     />
   );
@@ -153,7 +180,7 @@ function JsonField({
 
 function RequiredMark() {
   return (
-    <span className="text-destructive-text" aria-label="required">
+    <span className="text-destructive-text" aria-hidden="true">
       *
     </span>
   );
@@ -167,17 +194,23 @@ function emptyItem(items: SchemaProperty): unknown {
   const kind = fieldKind(items, 1);
   if (kind === 'number') return 0;
   if (kind === 'boolean') return false;
-  if (kind === 'enum') return items.enum!.find((option) => !containsVariableSyntax(option)) ?? '';
+  if (kind === 'enum') return enumOptions(items)!.find((option) => !containsVariableSyntax(option.value))?.value ?? '';
   return '';
 }
 
 function ArrayControl({
+  id,
+  required,
+  invalid,
+  describedBy,
   label,
   prop,
   value,
   onChange,
-}: Pick<FieldProps, 'prop' | 'value' | 'onChange'> & { label: string }) {
-  const id = useId();
+}: Pick<PrimitiveControlProps, 'id' | 'label' | 'prop' | 'value' | 'onChange' | 'required' | 'invalid' | 'describedBy'>) {
+  // Groups/buttons do not support aria-required: announce it in their description.
+  const requiredId = `${id}-required`;
+  const controlDescription = [describedBy, required && !invalid && requiredId].filter(Boolean).join(' ') || undefined;
   const report = useContext(FieldValidityContext);
   const items = prop.items!;
   const list = Array.isArray(value) ? value : [];
@@ -216,7 +249,8 @@ function ArrayControl({
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
+    <div id={id} role="group" aria-label={label} aria-invalid={invalid || undefined} aria-describedby={controlDescription} className="flex flex-col gap-1.5">
+      {required && <span id={requiredId} className="sr-only">Required</span>}
       {list.map((item, i) => (
         <ArrayItem
           key={i}
@@ -225,6 +259,8 @@ function ArrayControl({
           kind={itemKind}
           value={blanks.has(i) ? undefined : item}
           blank={blanks.has(i)}
+          required={required}
+          describedBy={describedBy}
           onChange={(next) => setItem(i, next)}
           onRemove={() => removeItem(i)}
         />
@@ -235,7 +271,8 @@ function ArrayControl({
         size="xs"
         className="self-start gap-1"
         onClick={() => onChange([...list, emptyItem(items)])}
-        aria-label={`Add ${label} item`}
+        aria-label={`Add item to ${label}`}
+        aria-describedby={controlDescription}
       >
         <Plus size={12} />
         Add item
@@ -250,9 +287,11 @@ function ArrayItem({
   kind,
   value,
   blank,
+  required,
+  describedBy,
   onChange,
   onRemove,
-}: Pick<PrimitiveControlProps, 'label' | 'prop' | 'kind' | 'value' | 'onChange'> & {
+}: Pick<PrimitiveControlProps, 'label' | 'prop' | 'kind' | 'value' | 'onChange' | 'required' | 'describedBy'> & {
   blank: boolean;
   onRemove: () => void;
 }) {
@@ -269,7 +308,8 @@ function ArrayItem({
           value={value}
           onChange={onChange}
           invalid={blank}
-          describedBy={blank ? errorId : undefined}
+          required={required}
+          describedBy={[describedBy, blank && errorId].filter(Boolean).join(' ') || undefined}
         />
         {blank && (
           <p id={errorId} role="alert" className="text-xs text-destructive-text">
@@ -298,6 +338,7 @@ interface PrimitiveControlProps {
   value: unknown;
   onChange: (value: unknown) => void;
   invalid?: boolean;
+  required?: boolean;
   describedBy?: string | undefined;
 }
 
@@ -309,25 +350,27 @@ function PrimitiveControl({
   value,
   onChange,
   invalid,
+  required,
   describedBy,
 }: PrimitiveControlProps) {
-  const aria = { 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy };
+  const aria = { 'aria-invalid': invalid || undefined, 'aria-describedby': describedBy, 'aria-required': required || undefined };
+  const placeholder = prop.default !== undefined && !containsVariableSyntax(prop.default) ? `default: ${String(prop.default)}` : undefined;
   if (kind === 'enum') {
-    const options = prop.enum ?? [];
-    const index = options.findIndex((o) => o === value);
+    const options = enumOptions(prop) ?? [];
+    const index = options.findIndex((o) => o.value === value);
     return (
       <select
         id={id}
         aria-label={label}
         {...aria}
         value={index === -1 ? '' : String(index)}
-        onChange={(e) => onChange(e.target.value === '' ? undefined : options[Number(e.target.value)])}
+        onChange={(e) => onChange(e.target.value === '' ? undefined : options[Number(e.target.value)]!.value)}
         className={SELECT_CLASS}
       >
         <option value="">—</option>
         {options.map((option, i) => (
-          <option key={i} value={i} disabled={containsVariableSyntax(option)}>
-            {typeof option === 'string' ? option : JSON.stringify(option)}
+          <option key={i} value={i} disabled={containsVariableSyntax(option.value)}>
+            {option.label}
           </option>
         ))}
       </select>
@@ -350,7 +393,7 @@ function PrimitiveControl({
     );
   }
   if (kind === 'number') {
-    return <NumberInput id={id} label={label} prop={prop} value={value} onChange={onChange} aria={aria} />;
+    return <NumberInput id={id} label={label} prop={prop} value={value} onChange={onChange} aria={aria} placeholder={placeholder} />;
   }
   return (
     <VariableInput
@@ -359,7 +402,7 @@ function PrimitiveControl({
       {...aria}
       value={typeof value === 'string' ? value : ''}
       onChange={(e) => onChange(e.target.value === '' ? undefined : e.target.value)}
-      placeholder={prop.default !== undefined && !containsVariableSyntax(prop.default) ? String(prop.default) : undefined}
+      placeholder={placeholder}
       className="h-8 text-xs"
     />
   );
@@ -373,8 +416,10 @@ function NumberInput({
   value,
   onChange,
   aria,
+  placeholder,
 }: Pick<PrimitiveControlProps, 'id' | 'label' | 'prop' | 'value' | 'onChange'> & {
   aria: Record<string, unknown>;
+  placeholder: string | undefined;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
   const shown =
@@ -400,7 +445,7 @@ function NumberInput({
         const n = Number(text);
         onChange(text === '' ? undefined : isNaN(n) ? text : n);
       }}
-      placeholder={prop.default !== undefined && !containsVariableSyntax(prop.default) ? String(prop.default) : undefined}
+      placeholder={placeholder}
       className="h-8 text-xs"
     />
   );

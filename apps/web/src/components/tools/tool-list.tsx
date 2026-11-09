@@ -13,6 +13,7 @@ interface ToolListItemProps {
 export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) => (
   <button
     onClick={() => onSelect(tool)}
+    aria-current={isSelected ? 'true' : undefined}
     className={cn(
       'w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
       isSelected
@@ -21,7 +22,7 @@ export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) 
     )}
   >
     <span className="flex items-center gap-2"><ToolIcon tool={tool} /><span className="truncate">{toolTitle(tool)}</span></span>
-    <ToolBadges tool={tool} />
+    <ToolBadges tool={tool} compact />
     {tool.description && (
       <span className="block truncate text-xs text-muted-foreground mt-0.5">{tool.description}</span>
     )}
@@ -45,7 +46,7 @@ export function ToolList({ tools, selectedToolName, search, onSearch, onSelect }
   );
 
   return (
-    <div className="w-48 shrink-0 border-r border-border flex flex-col">
+    <div className="w-56 shrink-0 border-r border-border flex flex-col">
       <div className="p-2 border-b border-border">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />

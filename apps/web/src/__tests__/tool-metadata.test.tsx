@@ -19,10 +19,12 @@ it("shows the tool title, icon, explicit annotation hints and output schema", as
   useStore.setState({ connectionStatus: "connected", selectedConnectionId: "c", connectedConnectionId: "c", tools: [tool], selectedTool: tool, toolFormValues: {}, toolSearch: "", pendingParams: null });
   render(<ToolPanel />);
   const row = screen.getByRole("button", { name: /Structured answer/ });
-  expect(within(row).getByText("Read-only")).toBeVisible();
+  // List rows stay compact: only Destructive hints show; the detail header lists them all.
+  expect(within(row).queryByText("Read-only")).not.toBeInTheDocument();
+  expect(screen.getAllByText("Read-only")).toHaveLength(1);
   expect(within(row).getByRole("img", { name: "Structured answer icon" })).toHaveAttribute("src", "https://example.com/tool.png");
   expect(screen.getByRole("heading", { name: "Structured answer" })).toBeVisible();
-  for (const label of ["Non-destructive", "Idempotent", "Closed-world"]) expect(screen.getAllByText(label)).toHaveLength(2);
+  for (const label of ["Non-destructive", "Idempotent", "Closed-world"]) expect(screen.getAllByText(label)).toHaveLength(1);
   await userEvent.click(screen.getByText("Output schema"));
   expect(screen.getByText(/"answer":/)).toBeVisible();
   await userEvent.type(screen.getByPlaceholderText("Filter tools..."), "Structured answer");

@@ -14,6 +14,11 @@ export function createProtocolServer() {
       icons: [{ src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=", mimeType: "image/png" }],
       annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
       inputSchema: { type: "object" as const }, outputSchema: { type: "object" as const, properties: { answer: { type: "number" } }, required: ["answer"] } },
+    { name: "form-controls", inputSchema: { type: "object" as const, required: ["labels", "options", "payload"], properties: {
+      labels: { type: "array", items: { type: "string" }, description: "Labels for this Call" },
+      options: { type: "object", properties: { city: { type: "string" } }, description: "Call options" },
+      payload: { anyOf: [{ type: "string" }, { type: "number" }], description: "JSON payload" },
+    } } },
   ].sort((a, b) => ["echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash"].indexOf(a.name) - ["echo", "error", "slow", "structured", "elicit", "log", "stderr", "crash"].indexOf(b.name)) }));
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const args = request.params.arguments ?? {};
@@ -23,6 +28,7 @@ export function createProtocolServer() {
         { type: "text", text: "keep me" },
         { type: "image", mimeType: "image/png", data: "a".repeat(256 * 1024) },
       ] };
+      case "form-controls": return text(JSON.stringify(args));
       case "echo": return text(String(args.text ?? "hello"));
       case "error": return { ...text("Fixture tool error"), isError: true };
       case "structured-bad": return { ...text('{"answer":"wrong"}'), structuredContent: { answer: "wrong" } };

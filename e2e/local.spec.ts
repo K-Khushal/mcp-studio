@@ -21,7 +21,7 @@ test('STDIO: form and JSON Calls, prompts and structured output', async ({ page 
   await expect(page.getByRole('region', { name: 'Structured content' })).toContainText('42');
   await page.getByRole('tab', { name: /^Prompts/ }).click();
   await page.getByRole('button', { name: 'greet', exact: true }).click();
-  await page.getByPlaceholder('name', { exact: true }).fill('Ada');
+  await page.getByRole('textbox', { name: 'name', exact: true }).fill('Ada');
   await page.getByRole('button', { name: 'Run Prompt', exact: true }).click();
   await expect(page.getByText('Hello, Ada!', { exact: true })).toBeVisible();
   expect((await new AxeBuilder({ page }).include('[data-testid="response"]').analyze()).violations).toEqual([]);
