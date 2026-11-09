@@ -41,7 +41,7 @@ A key-value pair in an Environment, referenced as `{{NAME}}` in connection field
 _Avoid_: secret, placeholder
 
 **Elicitation**:
-A form the MCP Server asks the user to fill in during a Call; the Call's timeout pauses while it is open.
+A form the MCP Server asks the user to fill in during a Call.
 _Avoid_: prompt (that is an MCP prompt template), popup
 
 **Log entry**:

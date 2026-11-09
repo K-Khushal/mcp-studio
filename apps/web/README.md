@@ -105,10 +105,8 @@ These can differ.
 Example:
 
 - Connection A connected
-- user selects Connection B
-- UI shows B name + B saved connection fields
-- status bar still shows A as connected
-- tools/prompts/response/logs for B stay blank
+- user selects Connection B, confirmation dialog open
+- UI shows A until user confirms; on confirm A disconnects and B is selected with blank workspace
 
 ## What Persists
 
@@ -137,8 +135,8 @@ Selecting a connection:
 
 - loads that connection's saved transport/url into connection panel
 - sets `selectedConnectionId`
-- if selected connection is also connected connection, restores its live in-memory workspace
-- otherwise shows blank connection workspace
+- blanks tools/prompts/response/timeline/logs (live data is never restored)
+- selecting another connection while a Session is live asks for confirmation, then disconnects the live one
 
 Clicking same selected connection again:
 
@@ -181,19 +179,14 @@ Only connected connection can show live MCP data:
 - timeline
 - logs
 
-If user switches away from connected A to unconnected B:
+If user selects B while A is connected:
 
-- A remains connected
-- A live workspace kept in memory
-- B workspace blank
+- confirmation dialog first
+- on confirm: A disconnects, live workspace cleared
+- B workspace blank until connected
+- cancelling keeps A selected and connected
 
-If user switches back to A before reconnecting elsewhere:
-
-- restore A live workspace from memory
-
-If user disconnects A:
-
-- clear A live workspace
+Switching back to A later shows blank workspace until reconnect.
 
 ## Connection Field Persistence
 
@@ -244,7 +237,7 @@ Collections:
 - `loadConnection(connection)`
   - selects connection
   - loads saved connection fields
-  - restores connected workspace only if same connection is live
+  - blanks workspace (tools/prompts/response/timeline/logs)
 
 - `connect(config)`
   - switches live connection to selected connection
