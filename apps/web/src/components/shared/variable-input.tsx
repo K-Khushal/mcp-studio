@@ -2,6 +2,7 @@ import { useId, useLayoutEffect, useRef, useState, type ComponentProps, type Rea
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { useStore } from '@/store';
+import { isSecretName } from '@/lib/is-secret-name';
 import { cn } from '@/lib/utils';
 
 type InputProps = ComponentProps<'input'>;
@@ -41,7 +42,7 @@ function VariableField({ inputProps, textareaProps, json = false }: { inputProps
     parts.push(text.slice(offset, match.index));
     parts.push(<mark key={match.index} data-variable={name} data-resolved={resolved}
       className={cn('rounded-[2px] bg-primary/20 text-transparent', !resolved && 'bg-destructive/20 underline decoration-destructive decoration-wavy underline-offset-2')}>{match[0]}</mark>);
-    previews.push(`${name}: ${resolved ? (/secret|token|password|passwd|pwd|cred|auth|private|key/i.test(name) || inputProps?.type === 'password' ? '•••••••• (masked)' : variables![name] || '(empty)') : 'Unresolved Variable — define it in the active Environment'}`);
+    previews.push(`${name}: ${resolved ? (isSecretName(name) || inputProps?.type === 'password' ? '•••••••• (masked)' : variables![name] || '(empty)') : 'Unresolved Variable — define it in the active Environment'}`);
     offset = match.index + match[0].length;
   }
   parts.push(text.slice(offset), '\u200b');

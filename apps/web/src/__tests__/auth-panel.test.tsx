@@ -24,7 +24,7 @@ beforeEach(() => {
 describe("AuthPanel", () => {
   it("offers none, bearer, API key and OAuth", () => {
     render(<AuthPanel />);
-    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual(["None", "Bearer Token", "API Key", "OAuth"]);
+    expect(screen.getAllByRole("radio").map((button) => button.textContent)).toEqual(["None", "Bearer Token", "API Key", "OAuth"]);
   });
 
   it("switches the Connection to OAuth and signs it out", async () => {
@@ -33,7 +33,7 @@ describe("AuthPanel", () => {
     useStore.setState({ signOut });
     render(<AuthPanel />);
 
-    fireEvent.click(screen.getByRole("button", { name: "OAuth" }));
+    fireEvent.click(screen.getByRole("radio", { name: "OAuth" }));
     expect(useStore.getState().httpAuth).toEqual({ type: "oauth" });
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));

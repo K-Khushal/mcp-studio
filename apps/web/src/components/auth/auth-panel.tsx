@@ -1,7 +1,8 @@
 import { toast } from 'sonner';
 import { useStore } from '@/store';
 import type { HttpAuth } from '@mcp-studio/types';
-import { cn } from '@/lib/utils';
+import { useId } from 'react';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
 import { Button } from '@/components/ui/button';
@@ -14,6 +15,7 @@ const AUTH_TYPES = [
 ] as const;
 
 export function AuthPanel() {
+  const id = useId();
   const { httpAuth, setHttpAuth, selectedConnectionId, collections, signOut } = useStore();
   const selectedCollection = collections.find((c) => c.connections.some((r) => r.id === selectedConnectionId));
 
@@ -35,30 +37,16 @@ export function AuthPanel() {
     <div className="p-4 space-y-4">
       {/* Auth type selector */}
       <div className="space-y-1.5">
-        <label className="text-xs font-medium text-muted-foreground">Auth Type</label>
-        <div className="flex rounded-md overflow-hidden border border-border text-xs w-fit">
-          {AUTH_TYPES.map((t) => (
-            <button
-              key={t.value}
-              onClick={() => handleTypeChange(t.value)}
-              className={cn(
-                'px-3 py-1.5 font-medium transition-colors',
-                httpAuth.type === t.value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:text-foreground'
-              )}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
+        <div className="text-xs font-medium text-muted-foreground">Auth type</div>
+        <SegmentedControl aria-label="Auth type" value={httpAuth.type} onValueChange={handleTypeChange} options={AUTH_TYPES} />
       </div>
 
       {/* Bearer token */}
       {httpAuth.type === 'bearer' && (
         <div className="space-y-1.5">
-          <label className="text-xs font-medium text-muted-foreground">Token</label>
+          <label htmlFor={`${id}-token`} className="text-xs font-medium text-muted-foreground">Token</label>
           <VariableInput
+            id={`${id}-token`}
             value={httpAuth.token}
             onChange={(e) => setHttpAuth({ type: 'bearer', token: e.target.value })}
             placeholder="Enter bearer token or {{ENV_VAR}}"
@@ -75,8 +63,9 @@ export function AuthPanel() {
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Key</label>
+              <label htmlFor={`${id}-key`} className="text-xs font-medium text-muted-foreground">Key</label>
               <Input
+                id={`${id}-key`}
                 value={httpAuth.key}
                 onChange={(e) => setHttpAuth({ ...httpAuth, key: e.target.value })}
                 placeholder="x-api-key"
@@ -84,8 +73,9 @@ export function AuthPanel() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs font-medium text-muted-foreground">Value</label>
+              <label htmlFor={`${id}-value`} className="text-xs font-medium text-muted-foreground">Value</label>
               <VariableInput
+                id={`${id}-value`}
                 value={httpAuth.value}
                 onChange={(e) => setHttpAuth({ ...httpAuth, value: e.target.value })}
                 placeholder="Enter value or {{ENV_VAR}}"
@@ -94,23 +84,8 @@ export function AuthPanel() {
             </div>
           </div>
           <div className="space-y-1.5">
-            <label className="text-xs font-medium text-muted-foreground">Add to</label>
-            <div className="flex rounded-md overflow-hidden border border-border text-xs w-fit">
-              {(['header', 'query'] as const).map((loc) => (
-                <button
-                  key={loc}
-                  onClick={() => setHttpAuth({ ...httpAuth, in: loc })}
-                  className={cn(
-                    'px-3 py-1.5 font-medium transition-colors capitalize',
-                    httpAuth.in === loc
-                      ? 'bg-primary text-primary-foreground'
-                      : 'bg-muted text-muted-foreground hover:text-foreground'
-                  )}
-                >
-                  {loc === 'header' ? 'Header' : 'Query Param'}
-                </button>
-              ))}
-            </div>
+            <div className="text-xs font-medium text-muted-foreground">Add to</div>
+            <SegmentedControl aria-label="API-key location" value={httpAuth.in} onValueChange={location => setHttpAuth({ ...httpAuth, in: location })} options={[{ value: 'header', label: 'Header' }, { value: 'query', label: 'Query Param' }]} />
           </div>
         </div>
       )}

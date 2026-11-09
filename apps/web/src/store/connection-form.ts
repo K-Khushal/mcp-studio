@@ -76,3 +76,12 @@ export function buildConnectionConfig(form: {
 export function isConnectable(config: ConnectionConfig): boolean {
   return config.transport === "http" ? config.config.url.trim() !== "" : config.config.command !== "";
 }
+
+export interface HeaderRow extends EnvRow { id: string }
+
+/** Keep duplicate rows editable; never silently merge case-insensitive HTTP names. */
+export function headersFromRows(rows: HeaderRow[]): Record<string, string> | null {
+  const names = rows.map(row => row.key.trim().toLowerCase()).filter(Boolean);
+  if (new Set(names).size !== names.length) return null;
+  return Object.fromEntries(rows.filter(row => row.key.trim()).map(row => [row.key.trim(), row.value]));
+}

@@ -5,7 +5,8 @@ import EnvironmentPanel from '../environments/environment-panel';
 import { OAuthSignInNotice } from '../auth/oauth-sign-in-notice';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { VariableInput } from '@/components/shared/variable-input';
-import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
+import { buildConnectionConfig, headersFromRows, isConnectable } from '@/store/connection-form';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { StdioForm } from './stdio-form';
 
 export function ConnectionPanel() {
@@ -28,7 +29,10 @@ export function ConnectionPanel() {
     setStdio,
     selectedConnectionId,
     collections,
+    connectionDrafts,
   } = useStore();
+  const headerRows = selectedConnectionId ? connectionDrafts[selectedConnectionId]?.headerRows : undefined;
+  const invalidHeaders = transport === 'http' && headerRows !== undefined && headersFromRows(headerRows) === null;
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState('');
   const renameRef = useRef<HTMLInputElement>(null);
@@ -98,7 +102,11 @@ export function ConnectionPanel() {
 
   useEffect(() => {
     if (pendingSave.current && pendingSave.current.connectionId !== selectedConnection?.id) flushPendingSave();
-    if (!selectedConnection || !selectedCollection) return;
+    if (!selectedConnection || !selectedCollection || invalidHeaders) {
+      if (pendingSave.current) window.clearTimeout(pendingSave.current.timeoutId);
+      pendingSave.current = null;
+      return;
+    }
     const connectionConfig = buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth });
     if (!isConnectable(connectionConfig) && !selectedConnection.connectionConfig) return;
 
@@ -129,6 +137,7 @@ export function ConnectionPanel() {
     httpAuth,
     httpHeaders,
     updateConnectionConfig,
+    invalidHeaders,
   ]);
 
   const commitRename = async () => {
@@ -152,7 +161,7 @@ export function ConnectionPanel() {
     }
   };
 
-  const canConnect = isConnectable(buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth }));
+  const canConnect = !invalidHeaders && isConnectable(buildConnectionConfig({ transport, stdio, connectionUrl, httpHeaders, httpAuth }));
 
   const handleConnect = () => {
     if (isSelectedConnectionConnected) {
@@ -170,6 +179,7 @@ export function ConnectionPanel() {
       <div className="flex items-center gap-4 px-3 py-2 border-b border-border">
         {isRenaming && selectedConnection ? (
           <input
+            aria-label="Connection name"
             ref={renameRef}
             value={renameValue}
             onChange={(e) => setRenameValue(e.target.value)}
@@ -184,12 +194,15 @@ export function ConnectionPanel() {
             className="h-6 max-w-[160px] rounded-md border border-input bg-background px-2 text-xs font-semibold font-mono text-foreground outline-hidden focus:ring-2 focus:ring-ring"
           />
         ) : (
-          <span
+          <button
+            type="button"
+            aria-label={`Rename Connection ${selectedConnection?.name ?? 'untitled'}`}
+            onClick={() => selectedConnection && setIsRenaming(true)}
             onDoubleClick={() => selectedConnection && setIsRenaming(true)}
-            className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px] cursor-text"
+            className="text-xs font-semibold text-foreground font-mono bg-muted px-2 py-0.5 rounded truncate max-w-[160px] outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
           >
             {selectedConnection?.name ?? 'untitled'}
-          </span>
+          </button>
         )}
         <div className="flex items-center gap-1.5">
           <div className={cn(
@@ -210,26 +223,7 @@ export function ConnectionPanel() {
 
       {/* Connection controls */}
       <div className="flex items-center gap-3 p-3">
-        <div className="flex rounded-md overflow-hidden border border-border text-xs">
-          <button
-            onClick={() => setTransport('stdio')}
-            className={cn(
-              'px-3 py-1.5 font-medium transition-colors',
-              transport === 'stdio' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-            )}
-          >
-            STDIO
-          </button>
-          <button
-            onClick={() => setTransport('http')}
-            className={cn(
-              'px-3 py-1.5 font-medium transition-colors',
-              transport === 'http' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:text-foreground'
-            )}
-          >
-            HTTP
-          </button>
-        </div>
+        <SegmentedControl aria-label="Transport" value={transport} onValueChange={setTransport} options={[{ value: 'stdio', label: 'STDIO' }, { value: 'http', label: 'HTTP' }]} />
 
         <VariableInput
           value={transport === 'stdio' ? stdio.command : connectionUrl}
@@ -257,7 +251,7 @@ export function ConnectionPanel() {
       </div>
       {lastConnectionError?.connectionId === selectedConnectionId && (
         <p role="alert" className="mx-3 mb-3 flex items-start gap-2 text-xs leading-relaxed text-foreground">
-          <span className="shrink-0 font-semibold">Connection failed:</span>
+          <span className="shrink-0 font-semibold">{lastConnectionError.sessionEnded ? 'Session ended:' : 'Connection failed:'}</span>
           <span className="min-w-0 whitespace-pre-wrap break-words">{lastConnectionError.message}</span>
         </p>
       )}

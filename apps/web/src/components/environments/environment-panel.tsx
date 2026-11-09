@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useStore } from '@/store';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogDescription, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogTrigger, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -87,22 +88,23 @@ export default function EnvironmentPanel() {
     });
   };
 
-  const copyValue = (value: string) => {
-    navigator.clipboard.writeText(value);
-    toast.success('Copied to clipboard');
+  const copyValue = async (value: string) => {
+    try { await navigator.clipboard.writeText(value); toast.success('Copied to clipboard'); }
+    catch { toast.error('Could not copy to clipboard'); }
   };
 
   return (
     <Dialog open={open} onOpenChange={(next) => { setOpen(next); setRevealedKeys(new Set()); }}>
       <DialogTrigger asChild>
-        <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
+        <button title="Active Environment" className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
           <Globe size={13} />
-          Environment
+          {environments.find(e => e.id === activeEnvironmentId)?.name ?? 'No environment'}
         </button>
       </DialogTrigger>
-      <DialogContent className="max-w-lg bg-card border-border">
+      <DialogContent className="sm:max-w-lg bg-card border-border max-h-[90vh] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold text-foreground">Environment Variables</DialogTitle>
+          <DialogDescription className="text-xs">Manage Variables for your Connections and Calls.</DialogDescription>
         </DialogHeader>
 
         {/* Environment selector */}
@@ -110,6 +112,7 @@ export default function EnvironmentPanel() {
           {showNewEnv ? (
             <>
               <Input
+                aria-label="Environment name"
                 placeholder="Environment name"
                 value={newEnvName}
                 onChange={(e) => setNewEnvName(e.target.value)}
@@ -123,7 +126,7 @@ export default function EnvironmentPanel() {
           ) : (
             <>
               <Select value={activeEnv?.id ?? ''} onValueChange={setActiveEnvironment}>
-                <SelectTrigger className="h-8 text-xs flex-1">
+                <SelectTrigger aria-label="Active Environment" className="h-8 text-xs flex-1">
                   <SelectValue placeholder="Select environment" />
                 </SelectTrigger>
                 <SelectContent>
@@ -135,15 +138,29 @@ export default function EnvironmentPanel() {
               <Button size="sm" variant="outline" onClick={() => setShowNewEnv(true)} className="h-8 text-xs gap-1">
                 <Plus size={11} /> New
               </Button>
+              <AlertDialog>
+              <AlertDialogTrigger asChild>
               <Button
+                aria-label="Delete environment"
                 size="sm"
                 variant="ghost"
-                onClick={handleDeleteEnv}
                 disabled={environments.length <= 1}
                 className="h-8 text-xs text-muted-foreground hover:text-destructive-text"
               >
                 <Trash2 size={11} />
               </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete “{activeEnv?.name}”?</AlertDialogTitle>
+                  <AlertDialogDescription>Delete “{activeEnv?.name}” and its {Object.keys(localVars).length} Variables? This cannot be undone.</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                  <AlertDialogAction variant="destructive" onClick={() => void handleDeleteEnv()}>Delete environment</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+              </AlertDialog>
             </>
           )}
         </div>
@@ -155,7 +172,7 @@ export default function EnvironmentPanel() {
             <span>Value</span>
             <span className="w-20" />
           </div>
-          <div className="divide-y divide-border max-h-60 overflow-y-auto">
+          <div className="divide-y divide-border max-h-60 overflow-y-auto overscroll-contain">
             {Object.entries(localVars).map(([key, value]) => (
               <div key={key} className="grid grid-cols-[1fr_1fr_auto] items-center gap-2 px-3 py-2 group">
                 <span className="text-xs font-mono text-foreground truncate">{key}</span>
@@ -169,13 +186,13 @@ export default function EnvironmentPanel() {
                   className="h-7 text-xs font-mono bg-muted border-border"
                 />
                 <div className="flex items-center gap-1 w-20 justify-end">
-                  <button aria-label={`Reveal ${key}`} aria-pressed={revealedKeys.has(key)} onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <button aria-label={`${revealedKeys.has(key) ? 'Hide' : 'Show'} ${key}`} aria-pressed={revealedKeys.has(key)} onClick={() => toggleVisibility(key)} className="size-6 flex items-center justify-center rounded outline-hidden focus-visible:ring-2 focus-visible:ring-ring text-muted-foreground hover:text-foreground transition-colors">
                     {revealedKeys.has(key) ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
-                  <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                  <button aria-label={`Copy ${key}`} onClick={() => void copyValue(value)} className="size-6 flex items-center justify-center rounded outline-hidden focus-visible:ring-2 focus-visible:ring-ring text-muted-foreground hover:text-foreground transition-colors">
                     <Copy size={12} />
                   </button>
-                  <button onClick={() => handleRemove(key)} className="p-1 text-muted-foreground hover:text-destructive-text transition-colors">
+                  <button aria-label={`Delete ${key}`} onClick={() => handleRemove(key)} className="size-6 flex items-center justify-center rounded outline-hidden focus-visible:ring-2 focus-visible:ring-ring text-muted-foreground hover:text-destructive-text transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -188,29 +205,30 @@ export default function EnvironmentPanel() {
         </div>
 
         {/* Add new variable */}
-        <div className="flex gap-2 items-center">
+        <form onSubmit={e => { e.preventDefault(); handleAdd(); }} className="flex gap-2 items-center">
           <Input
+            aria-label="New Variable name"
             placeholder="KEY"
             value={newKey}
             onChange={(e) => setNewKey(e.target.value)}
             className="h-8 text-xs font-mono bg-muted border-border flex-1"
           />
           <Input
+            aria-label="New Variable value"
             placeholder="VALUE"
             type="password"
             autoComplete="off"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
             className="h-8 text-xs font-mono bg-muted border-border flex-1"
           />
-          <Button size="sm" variant="outline" onClick={handleAdd} className="h-8 text-xs gap-1">
+          <Button type="submit" size="sm" variant="outline" className="h-8 text-xs gap-1">
             <Plus size={12} /> Add
           </Button>
-        </div>
+        </form>
 
         <p className="text-xs text-muted-foreground">
-          Use <code className="font-mono text-primary-text">{'{{VARIABLE_NAME}}'}</code> in prompts and tool inputs for auto-substitution.
+          Use <code className="font-mono text-primary-text">{'{{NAME}}'}</code> in any connection field or Call argument.
         </p>
       </DialogContent>
     </Dialog>

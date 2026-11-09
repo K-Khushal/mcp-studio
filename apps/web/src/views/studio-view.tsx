@@ -1,7 +1,7 @@
 import { ConnectionPanel } from "@/components/connection/connection-panel";
 import { ErrorBoundary } from "@/components/error-boundary";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from '@/components/ui/resizable';
 import { PromptPanel } from "@/components/prompts/prompt-panel";
 import ToolPannel from "@/components/tools/tool-panel";
@@ -33,9 +33,9 @@ export function StudioView() {
   const visibleTabs = tabs.filter((t) => !t.httpOnly || transport === 'http');
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 min-h-0">
+    <Tabs value={workspaceTab} onValueChange={value => setWorkspaceTab(value as WorkspaceTab)} className="flex-1 min-w-0 min-h-0">
       <ErrorBoundary fallback={
-        <div className="p-2 text-xs text-destructive bg-destructive/10 rounded-md m-2">
+        <div className="p-2 text-xs text-destructive-text bg-destructive/10 rounded-md m-2">
           Connection panel failed to load.
         </div>
       }>
@@ -43,31 +43,18 @@ export function StudioView() {
       </ErrorBoundary>
 
       {/* Tabs */}
-      <div className="flex border-b border-border">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.value}
-            onClick={() => setWorkspaceTab(tab.value)}
-            className={cn(
-              'px-4 py-2 text-xs font-medium transition-colors capitalize border-b-2',
-              workspaceTab === tab.value
-                ? 'border-primary text-foreground'
-                : 'border-transparent text-muted-foreground hover:text-foreground'
-            )}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <TabsList aria-label="Workspace">
+        {visibleTabs.map(tab => <TabsTrigger key={tab.value} value={tab.value}>{tab.label}</TabsTrigger>)}
+      </TabsList>
 
       {/* Resizable Call/response split */}
       <ResizablePanelGroup orientation="vertical" className="flex-1 min-h-0">
         <ResizablePanel defaultSize={60} minSize={15}>
           <div className="h-full overflow-y-auto">
-            {workspaceTab === 'auth' && <AuthPanel />}
-            {workspaceTab === 'headers' && <HeadersPanel />}
-            {workspaceTab === 'prompts' && <PromptPanel />}
-            {workspaceTab === 'tools' && <ToolPannel />}
+            <TabsContent className="h-full" value="auth"><AuthPanel /></TabsContent>
+            <TabsContent className="h-full" value="headers"><HeadersPanel /></TabsContent>
+            <TabsContent className="h-full" value="prompts"><PromptPanel /></TabsContent>
+            <TabsContent className="h-full" value="tools"><ToolPannel /></TabsContent>
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -75,6 +62,6 @@ export function StudioView() {
           <ResponsePanel />
         </ResizablePanel>
       </ResizablePanelGroup>
-    </div>
+    </Tabs>
   );
 }

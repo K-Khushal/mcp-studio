@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useId, useRef } from 'react';
 import { ChevronRight, Plus, X } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
@@ -10,11 +10,11 @@ import { cn } from '@/lib/utils';
 const fieldClass = 'h-7 font-mono text-xs';
 
 function Section({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+  const id = useId();
   return (
-    <div className="grid grid-cols-[8rem_1fr] items-start gap-3">
-      <label htmlFor={htmlFor} className="pt-1.5 text-xs font-medium text-muted-foreground">
-        {label}
-      </label>
+    <div role={htmlFor ? undefined : 'group'} aria-labelledby={htmlFor ? undefined : id} className="grid grid-cols-[8rem_1fr] items-start gap-3">
+      {htmlFor ? <label htmlFor={htmlFor} className="pt-1.5 text-xs font-medium text-muted-foreground">{label}</label>
+        : <div id={id} className="pt-1.5 text-xs font-medium text-muted-foreground">{label}</div>}
       <div className="min-w-0 space-y-1.5">{children}</div>
     </div>
   );
