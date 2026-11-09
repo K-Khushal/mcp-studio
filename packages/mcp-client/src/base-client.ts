@@ -39,17 +39,23 @@ export abstract class BaseMCPClient implements MCPClientInterface {
 
   protected abstract readonly transportPhase: "spawn" | "connect";
   private initializeStartedAt: number | undefined;
+  private initializePhase: { timestamp: number; durationMs: number } | undefined;
 
   /** Capture the SDK's initialize result while preserving transport negotiation. */
   protected async connectTransport(client: Client, transport: Transport): Promise<void> {
     this.protocolVersion = undefined;
+    this.initializePhase = undefined;
     this.pendingMethods.clear();
     this.captureFrames(transport);
+    const connectStartedAt = Date.now();
+    let transportStartedAt = connectStartedAt;
+    let transportDuration = 0;
     const start = transport.start.bind(transport);
     transport.start = async () => {
       const timestamp = Date.now();
       await start();
-      this.options.onSessionPhase?.(this.transportPhase, timestamp, Date.now() - timestamp);
+      transportStartedAt = timestamp;
+      transportDuration = Date.now() - timestamp;
     };
     client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {
       const { level, ...rest } = notification.params;
@@ -65,11 +71,20 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       this._isConnected = false;
       if (wasConnected) this.options.onClose?.();
     };
-    client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
       if ("url" in request.params) return { action: "cancel" as const };
-      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }) ?? { action: "cancel" as const }) };
+      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }, extra.signal) ?? { action: "cancel" as const }) };
     });
     await client.connect(transport);
+    // Emit only after successful negotiation; rejected HTTP attempts must not
+    // leave a completed connect phase before the SSE fallback.
+    this.options.onSessionPhase?.(this.transportPhase, transportStartedAt,
+      this.transportPhase === "connect" ? Date.now() - connectStartedAt : transportDuration);
+    this.emitInitializePhase();
+  }
+
+  private emitInitializePhase(): void {
+    if (this.initializePhase) this.options.onSessionPhase?.("initialize", this.initializePhase.timestamp, this.initializePhase.durationMs);
   }
 
   /** Tap both directions of the transport so every JSON-RPC frame is seen, including the initialize handshake. */
@@ -115,7 +130,7 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     if (method === "initialize") {
       if (direction === "out" && !isResponse) this.initializeStartedAt = Date.now();
       if (direction === "in" && isResponse && this.initializeStartedAt !== undefined) {
-        this.options.onSessionPhase?.("initialize", this.initializeStartedAt, Date.now() - this.initializeStartedAt);
+        this.initializePhase = { timestamp: this.initializeStartedAt, durationMs: Date.now() - this.initializeStartedAt };
         this.initializeStartedAt = undefined;
       }
     }

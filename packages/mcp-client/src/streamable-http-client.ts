@@ -10,7 +10,8 @@ import { BaseMCPClient } from "./base-client.js";
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
   private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
-  // Tracks the in-flight requestId so the fetch wrapper can tag response headers
+  // The UI runs one Call at a time; this shared id tags its HTTP response headers.
+  // Concurrent programmatic Calls do not have independent HTTP header attribution.
   private activeRequestId: string | null = null;
 
   constructor(

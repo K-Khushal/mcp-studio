@@ -1180,7 +1180,7 @@ function handleServerMessage(msg: ServerMessage): void {
         connectingConnectionId: null,
         connectedConnectionCache: null,
         connectedAt: null,
-        ...(s.selectedConnectionId === s.connectedConnectionId ? { tools: [], prompts: [], response: { ...s.response, isRunning: false } } : {}),
+        ...(s.selectedConnectionId === s.connectedConnectionId ? { tools: [], prompts: [], response: { ...s.response, isRunning: false, ...(s.response.isRunning ? { outcome: msg.reason ? "error" as const : "cancelled" as const, error: msg.reason ?? null, completedAt: Date.now() } : {}) } } : {}),
       }));
       break;
 
@@ -1199,7 +1199,7 @@ function handleServerMessage(msg: ServerMessage): void {
         return {
           ...workspace,
           response: { ...workspace.response, progress: { progress, ...(total !== undefined ? { total } : {}), ...(message !== undefined ? { message } : {}) } },
-          timeline: [...workspace.timeline, { scope: "call", label: "Progress", detail: `${progress}${total !== undefined ? ` / ${total}` : ""}${message ? ` — ${message}` : ""}`, timestamp: fmtTime(Date.now()), durationMs: elapsed, status: "completed" }],
+          timeline: [...workspace.timeline.filter(step => step.label !== "Progress"), ...workspace.timeline.filter(step => step.label === "Progress").slice(-49), { scope: "call", label: "Progress", detail: `${progress}${total !== undefined ? ` / ${total}` : ""}${message ? ` — ${message}` : ""}`, timestamp: fmtTime(Date.now()), durationMs: elapsed, status: "completed" }],
         };
       }));
       break;
@@ -1250,7 +1250,7 @@ function handleServerMessage(msg: ServerMessage): void {
     }
 
     case "prompt_result": {
-      if (!matchesCall(msg.requestId)) break;
+      if (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning) break;
       const completedAt = Date.now();
       useStore.setState((s) => {
         const startedAt = s.connectedConnectionCache?.response.startedAt;
@@ -1298,7 +1298,7 @@ function handleServerMessage(msg: ServerMessage): void {
         toast.error("Connection failed", { description: msg.message });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
-        if (msg.requestId && !matchesCall(msg.requestId)) break;
+        if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;
         const errorAt = Date.now();
         useStore.setState((s) => {
           const startedAt = s.connectedConnectionCache?.response.startedAt;
@@ -1334,7 +1334,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
 
     case "http_response":
-      if (!matchesCall(msg.requestId)) break;
+      if (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning) break;
       useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
         ...workspace,
         response: {

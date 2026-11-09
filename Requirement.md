@@ -27,7 +27,7 @@ The official `mcp-inspector` tool covers basic tool invocation but lacks collect
 - A **browser-based UI** (`localhost:8080`) backed by a **local Bun server** (`localhost:3000`) that handles subprocess spawning and MCP communication.
 - Support for both **STDIO** and **HTTP/SSE** MCP transports.
 - A **dynamic form builder** that generates parameter forms from MCP tool JSON Schemas, plus a raw JSON fallback.
-- **Real-time response streaming** with progressive rendering.
+- **Live Call progress** with cancellation.
 - **Protocol-level and raw subprocess log capture** with filtering.
 - **Persistent collections** — save and replay tool calls across sessions.
 - **Rolling invocation history** with **side-by-side response diff view** for regression detection.
@@ -68,11 +68,11 @@ All data is stored locally at `~/.mcp-studio/` — no database, no authenticatio
 
 ### Response Viewing & Streaming
 
-19. As a developer, I want to see tool responses rendered progressively as chunks arrive over the WebSocket, so that I get real-time feedback for slow or long-running tools.
+19. As a developer, I want to see live progress updates over the WebSocket and cancel a running Call, so that I get real-time feedback for slow or long-running tools.
 20. As a developer, I want to view the response in "Pretty" mode (formatted JSON), so that I can easily read structured output.
 21. As a developer, I want to view the response in "Raw" mode (unformatted text), so that I can see the exact payload.
 22. As a developer, I want to view response headers and metadata, so that I can debug protocol-level details.
-23. As a developer, I want to view a timeline of the request lifecycle (connect, initialize, tool call, response chunks, completion), so that I can identify performance bottlenecks.
+23. As a developer, I want to view a timeline of the request lifecycle (connect, initialize, tool call, live progress, cancellation, completion), so that I can identify performance bottlenecks.
 
 ### Logging & Observability
 
@@ -150,7 +150,7 @@ mcp-studio/
 ### Communication Protocol
 
 - **WebSockets** for browser-to-backend communication. Full-duplex persistent connection per session. Maps naturally to MCP's message-passing model and enables the backend to push streamed responses, logs, and connection status updates in real time.
-- **Typed JSON with discriminated unions** as the message protocol. A `ClientMessage` type covers: `connect` (stdio or sse), `invoke`, and `disconnect`. A `ServerMessage` type covers: `connected`, `chunk`, `result`, `error`, `log`, and `disconnected`.
+- **Typed JSON with discriminated unions** as the message protocol. A `ClientMessage` type covers: `connect` (stdio or sse), `invoke`, and `disconnect`. A `ServerMessage` type covers: `connected`, `progress`, `cancelled`, `result`, `error`, `log`, and `disconnected`.
 
 ### Transport Abstraction (`StudioTransport` Interface)
 
@@ -169,9 +169,9 @@ Single MCP server session at a time. One active connection per running instance.
 
 Dynamically generates forms from MCP tool JSON Schemas. Supports: flat types (string, number, boolean, enum), arrays of primitives, and one level of nested objects — covering ~95% of real-world MCP tools. A raw JSON editor tab handles anything the form builder cannot render.
 
-### Response Streaming
+### Live Call Progress and Cancellation
 
-The backend forwards MCP response chunks to the browser as they arrive over the WebSocket. The UI renders output progressively, providing real-time feedback.
+The Studio Server forwards MCP progress notifications over the WebSocket as they arrive. The UI displays live progress, allows cancellation, and renders the final response when the Call completes. Call timeouts pause while elicitation forms are open and resume on answer; forms expire separately after 120 seconds.
 
 ### Log Capture
 
@@ -219,11 +219,13 @@ export type ClientMessage =
   | { type: "connect"; transport: "stdio"; config: StdioConfig }
   | { type: "connect"; transport: "sse"; url: string; headers: Record<string, string> }
   | { type: "invoke"; tool: string; params: Record<string, unknown> }
+  | { type: "cancel"; requestId: string }
   | { type: "disconnect" };
 
 export type ServerMessage =
   | { type: "connected"; tools: MCPTool[] }
-  | { type: "chunk"; data: unknown }
+  | { type: "progress"; requestId: string; progress: number; total?: number; message?: string }
+  | { type: "cancelled"; requestId: string }
   | { type: "result"; data: unknown }
   | { type: "error"; message: string; code?: string }
   | { type: "log"; level: "info" | "warn" | "error"; text: string }
@@ -267,8 +269,8 @@ Bun Server → Browser: {type:"connected", tools}
 User → Browser: Select tool, fill params
 Browser → Bun Server: {type:"invoke", tool:"weather", params:{city:"London"}}
 Bun Server → MCP Process: tools/call {name:"weather", arguments:{city:"London"}}
-MCP Process → Bun Server: content chunks (streaming)
-Bun Server → Browser: {type:"chunk", data} (per chunk)
+MCP Process → Bun Server: notifications/progress
+Bun Server → Browser: {type:"progress", requestId, progress, total, message}
 MCP Process → Bun Server: final result
 Bun Server → Browser: {type:"result", data}
 ```
@@ -368,7 +370,7 @@ The implementation is organized into **deep modules** — each encapsulates sign
 - **Connection UI**: `ConnectionPanel` + `EnvironmentManager` — transport selection, config input, `claude_desktop_config.json` import.
 - **Tool UI**: `ToolExplorer` + dynamic form builder + JSON editor.
 - **Prompt UI**: `PromptPanel`.
-- **Response UI**: `ResponseViewer` with pretty/raw/headers/timeline tabs + progressive streaming render.
+- **Response UI**: `ResponseViewer` with pretty/raw/headers/timeline tabs + live progress and cancel controls.
 - **Logs UI**: `LogsPanel` with protocol/raw toggles and level filters.
 - **Collections UI**: `CollectionsPanel` — browse, save, replay.
 - **History UI**: History panel + response diff view (side-by-side JSON diff).
@@ -388,7 +390,7 @@ The implementation is organized into **deep modules** — each encapsulates sign
 
 1. **`packages/types`** — Type-level tests (compile-time checks that discriminated unions work correctly). Lightweight.
 
-2. **`packages/mcp-client`** — Integration tests against a mock MCP server process. Test: initialize handshake, tool listing, tool invocation with various parameter shapes, streaming response chunks, error handling, disconnect. This is the most critical module to test since it encapsulates all MCP protocol interaction.
+2. **`packages/mcp-client`** — Integration tests against a mock MCP server process. Test: initialize handshake, tool listing, tool invocation with various parameter shapes, live progress notifications and cancellation, error handling, disconnect. This is the most critical module to test since it encapsulates all MCP protocol interaction.
 
 3. **`apps/server` — Session Manager & WebSocket Server** — Integration tests that send `ClientMessage` JSON over a WebSocket and assert the `ServerMessage` responses. Test: connection lifecycle, tool invocation round-trip, streaming, error propagation, persistence read/write.
 
@@ -416,7 +418,7 @@ The implementation is organized into **deep modules** — each encapsulates sign
 | 4 | STDIO transport — `Bun.spawn`, env var injection (inherit toggle + user overrides), `claude_desktop_config.json` import |
 | 5 | HTTP/SSE transport — `EventSource` connection, custom headers, `{{VAR}}` interpolation via Env Manager |
 | 6 | Dynamic form builder — flat primitives + one-level nesting + raw JSON fallback |
-| 7 | Response streaming — chunk forwarding over WebSocket, progressive rendering in ResponseViewer |
+| 7 | Live Calls — progress forwarding over WebSocket and cancellation in ResponseViewer |
 | 8 | Log capture — protocol events + raw stdout/stderr, LogsPanel filter UI wired up |
 | 9 | Persistent history — rolling `history.json`, history panel, replay from history |
 | 10 | Response diff view — side-by-side JSON diff between any two history entries |

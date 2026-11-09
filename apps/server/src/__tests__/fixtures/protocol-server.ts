@@ -41,7 +41,11 @@ export function createProtocolServer() {
         }
         return text("Finished");
       }
-      case "elicit": return text(JSON.stringify(await server.elicitInput({ message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } })));
+      case "elicit": {
+        const result = await server.elicitInput({ message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } });
+        if (args.text === "slow-after-answer") await new Promise(resolve => setTimeout(resolve, 500));
+        return text(JSON.stringify(result));
+      }
       case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Fixture log" }); return text("Logged");
       case "stderr": {
         if (args.text === "chunks") {

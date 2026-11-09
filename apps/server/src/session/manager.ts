@@ -20,18 +20,25 @@ type Send = (msg: ServerMessage) => void;
 export class SessionManager {
   private pendingElicitations = new Map<string, (result: ElicitationResult) => void>();
 
-  private requestElicitation = (request: { message: string; requestedSchema: Record<string, unknown> }): Promise<ElicitationResult> => {
+  private requestElicitation = (request: { message: string; requestedSchema: Record<string, unknown> }, signal: AbortSignal): Promise<ElicitationResult> => {
     const elicitationId = nanoid();
     return new Promise(resolve => {
       const finish = (result: ElicitationResult) => {
+        if (!this.pendingElicitations.has(elicitationId)) return;
         clearTimeout(timer);
+        signal.removeEventListener("abort", abort);
         this.pendingElicitations.delete(elicitationId);
         this.send({ type: "elicitation_closed", elicitationId });
+        if (!this.pendingElicitations.size) for (const clock of this.callClocks.values()) clock.resume();
         resolve(result);
       };
+      const abort = () => finish({ action: "cancel" });
       const timer = setTimeout(() => finish({ action: "cancel" }), 120_000);
       this.pendingElicitations.set(elicitationId, finish);
+      for (const clock of this.callClocks.values()) clock.pause();
       this.send({ type: "elicitation_request", elicitationId, ...request });
+      signal.addEventListener("abort", abort, { once: true });
+      if (signal.aborted) abort();
     });
   };
 
@@ -44,6 +51,7 @@ export class SessionManager {
   private activeEnv: Record<string, string> = {};
   private verbose = false;
   private calls = new Map<string, AbortController>();
+  private callClocks = new Map<string, { pause(): void; resume(): void }>();
 
   constructor(private readonly send: Send) {}
 
@@ -87,6 +95,7 @@ export class SessionManager {
   private connectionClosed(client: MCPClientInterface): void {
     if (this.client !== client) return;
     this.clearElicitations();
+    for (const call of this.calls.values()) call.abort("cancelled");
     if (this.status !== "connected") return;
     const reason = "MCP Server connection closed unexpectedly";
     this.client = null;
@@ -181,17 +190,45 @@ export class SessionManager {
       this.send({ type: "error", requestId, message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-    if (this.calls.has(requestId)) return;
+    if (this.calls.has(requestId)) {
+      this.send({ type: "error", requestId, code: "DUPLICATE_REQUEST", message: "A Call with this requestId is already running" });
+      return;
+    }
     const seconds = typeof msg.requestTimeout === "number" && Number.isFinite(msg.requestTimeout) && msg.requestTimeout > 0
       ? msg.requestTimeout : 30;
     // Browsers store seconds. Clamp to the timer limit rather than overflowing to 1ms.
     const timeout = Math.min(seconds * 1000, 2_147_483_647);
     const controller = new AbortController();
     this.calls.set(requestId, controller);
-    const timer = setTimeout(() => controller.abort("timeout"), timeout);
+    let remaining = timeout;
+    let started = Date.now();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const clock = {
+      pause: () => {
+        if (timer === undefined) return;
+        clearTimeout(timer);
+        timer = undefined;
+        remaining = Math.max(0, remaining - (Date.now() - started));
+      },
+      resume: () => {
+        if (timer !== undefined || controller.signal.aborted) return;
+        started = Date.now();
+        timer = setTimeout(() => controller.abort("timeout"), remaining);
+      },
+    };
+    this.callClocks.set(requestId, clock);
+    if (!this.pendingElicitations.size) clock.resume();
+    // The UI runs one Call at a time. MCP form requests have no parent Call id;
+    // pause active clocks while any form is open, and close local forms on abort
+    // when this is the only Call. SDK cancellation handles correlated remote forms.
+    controller.signal.addEventListener("abort", () => {
+      if (this.calls.size === 1) this.clearElicitations();
+    }, { once: true });
     try {
-      const result = await execute(this.client, requestId, { signal: controller.signal, timeout });
-      if (!controller.signal.aborted) this.send(result);
+      // Studio owns the pausable deadline; keep the SDK fallback from expiring behind a form.
+      const result = await execute(this.client, requestId, { signal: controller.signal, timeout: 2_147_483_647 });
+      if (controller.signal.aborted) throw controller.signal.reason;
+      this.send(result);
     } catch (err) {
       if (controller.signal.reason === "cancelled") {
         this.send({ type: "cancelled", requestId });
@@ -202,6 +239,7 @@ export class SessionManager {
       }
     } finally {
       clearTimeout(timer);
+      this.callClocks.delete(requestId);
       this.calls.delete(requestId);
     }
   }

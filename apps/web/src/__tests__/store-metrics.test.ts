@@ -38,7 +38,7 @@ it("counts connection failures, Calls and tool errors, retaining last latency", 
 });
 
 
-it("a crash counts once and retains the pending Call error after cache cleanup", async () => {
+it("a crash counts once and retains its terminal reason after cache cleanup", async () => {
   let receive!: (message: ServerMessage) => void;
   vi.spyOn(transport, "onMessage").mockImplementation(handler => { receive = handler; });
   vi.spyOn(transport, "connect").mockResolvedValue();
@@ -52,6 +52,7 @@ it("a crash counts once and retains the pending Call error after cache cleanup",
   receive({ type: "disconnected", reason: "MCP Server connection closed unexpectedly" });
   receive({ type: "error", requestId: useStore.getState().response.requestId!, code: "TOOL_ERROR", message: "Connection closed" });
   expect(useStore.getState().errorCount).toBe(1);
-  expect(useStore.getState().response.error).toBe("Connection closed");
+  expect(useStore.getState().response.error).toBe("MCP Server connection closed unexpectedly");
+  expect(useStore.getState().response.outcome).toBe("error");
   vi.restoreAllMocks();
 });

@@ -58,3 +58,25 @@ it("ignores stale progress/results and applies timeouts to prompt Calls too", as
   expect(useStore.getState().response.outcome).toBe("timeout");
   expect(useStore.getState().timeline.at(-1)?.label).toBe("Timeout");
 });
+
+it("ignores late prompt results and matching errors after a terminal frame", async () => {
+  await useStore.getState().invokePrompt("greet", {});
+  const requestId = useStore.getState().response.requestId!;
+  receive({ type: "cancelled", requestId });
+  const terminal = useStore.getState();
+  receive({ type: "prompt_result", requestId, messages: [] });
+  receive({ type: "error", requestId, code: "PROMPT_ERROR", message: "late" });
+  expect(useStore.getState().response).toEqual(terminal.response);
+  expect(useStore.getState().timeline).toEqual(terminal.timeline);
+  expect(useStore.getState().errorCount).toEqual(terminal.errorCount);
+});
+
+it("retains only the latest 50 progress steps and preserves Session phases", async () => {
+  await useStore.getState().invokeTool("slow", {});
+  const requestId = useStore.getState().response.requestId!;
+  for (let progress = 1; progress <= 200; progress++) receive({ type: "progress", requestId, progress });
+  const timeline = useStore.getState().timeline;
+  expect(timeline.filter(step => step.label === "Progress")).toHaveLength(50);
+  expect(timeline.filter(step => step.label === "Progress")[0]?.detail).toBe("151");
+  expect(timeline.filter(step => step.scope === "session")).toHaveLength(2);
+});

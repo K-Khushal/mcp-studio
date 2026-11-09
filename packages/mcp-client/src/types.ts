@@ -6,7 +6,7 @@ import type { CallProgress, ElicitationResult, MCPTool, MCPPrompt, MCPPromptMess
 
 export interface MCPClientOptions {
   onClose?: () => void;
-  onElicitation?: (request: { message: string; requestedSchema: Record<string, unknown> }) => Promise<ElicitationResult>;
+  onElicitation?: (request: { message: string; requestedSchema: Record<string, unknown> }, signal: AbortSignal) => Promise<ElicitationResult>;
   /** Capture JSON-RPC frames as Protocol log entries. Toggle live with `setVerbose`. */
   verbose?: boolean;
   onProgress?: (requestId: string, progress: CallProgress) => void;
