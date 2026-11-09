@@ -64,3 +64,38 @@ test("untrusted type objects cannot escape parsing or break subsequent dispatch"
   for (const reply of replies.slice(0, -1)) expect(reply).toMatchObject({ type: "error", code: "PROTOCOL_ERROR" });
   expect(replies.at(-1)).toMatchObject({ type: "error", code: "NOT_CONNECTED" });
 }, 3000);
+
+test("invalid Connection fields are rejected and a clean connect works on the same socket", async () => {
+  const bad = { toString: null };
+  const configs = [
+    { transport: "stdio", config: { command: "bun", env: { A: bad } } },
+    { transport: "stdio", config: { command: bad } },
+    { transport: "stdio", config: { command: "bun", args: [bad] } },
+    { transport: "stdio", config: { command: "bun", cwd: bad } },
+    { transport: "http", config: { url: bad } },
+    { transport: "http", config: { url: "http://localhost", headers: { "X-A": bad } } },
+    ...[{ type: "bearer", token: bad }, { type: "apikey", key: bad, value: "x", in: "header" },
+      { type: "apikey", key: "x", value: bad, in: "query" }, { type: "apikey", key: "x", value: "x", in: bad },
+      { type: bad }].map(auth => ({ transport: "http", config: { url: "http://localhost", auth } })),
+  ];
+  const socket = new WebSocket(`ws://localhost:${studio.port}/ws`, ["mcp-studio", `token.${TEST_TOKEN}`]);
+  try {
+    await new Promise<void>((resolve, reject) => { socket.onopen = () => resolve(); socket.onerror = reject; });
+    for (const config of configs) {
+      const reply = new Promise(resolve => { socket.onmessage = event => resolve(JSON.parse(String(event.data))); });
+      socket.send(JSON.stringify({ type: "connect", ...config }));
+      expect(await reply).toMatchObject({ code: "PROTOCOL_ERROR" });
+    }
+    const connected = new Promise((resolve, reject) => {
+      socket.onmessage = event => {
+        const reply = JSON.parse(String(event.data));
+        if (reply.type === "connected") resolve(reply);
+        if (reply.type === "error") reject(new Error(JSON.stringify(reply)));
+      };
+    });
+    socket.send(JSON.stringify({ type: "connect", transport: "stdio", config: {
+      command: process.execPath, args: [new URL("./fixtures/protocol-server.ts", import.meta.url).pathname], env: {}, inheritSystemEnv: true,
+    } }));
+    expect(await connected).toMatchObject({ type: "connected", serverInfo: { name: "protocol-fixture" } });
+  } finally { socket.close(); }
+}, 10000);

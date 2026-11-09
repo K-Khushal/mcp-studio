@@ -7,7 +7,7 @@ export function LaunchGate({ children }: { children: ReactNode }) {
   const [state, setState] = useState<"checking" | "allowed" | "locked">("checking");
 
   useEffect(() => {
-    consumeLaunchToken();
+    const consumed = consumeLaunchToken();
     let active = true;
     let locked = false;
     const unsubscribe = onAccessDenied(() => {
@@ -16,18 +16,27 @@ export function LaunchGate({ children }: { children: ReactNode }) {
     });
     const check = () => {
       studioFetch("/api/health").then(
-        () => { if (active && !locked) setState("allowed"); },
+        response => {
+          if (!active) return;
+          if (response.ok) locked = false;
+          if (!locked) setState("allowed");
+        },
         () => { if (active && !locked) setState("allowed"); },
       );
     };
-    check();
+    void consumed.then(check);
     window.addEventListener("focus", check);
     window.addEventListener("online", check);
+    const storageChanged = (event: StorageEvent) => {
+      if (event.key === "mcp-studio.launch-token" || event.key === null) check();
+    };
+    window.addEventListener("storage", storageChanged);
     return () => {
       active = false;
       unsubscribe();
       window.removeEventListener("focus", check);
       window.removeEventListener("online", check);
+      window.removeEventListener("storage", storageChanged);
     };
   }, []);
 

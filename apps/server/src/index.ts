@@ -230,7 +230,7 @@ function serve(hostname: string, requestedPort: number): Server<SocketData> {
     async fetch(req, server) {
       try {
         const response = await route(req, server);
-        return response && withSecurityHeaders(clearLegacyCookie(response, port));
+        return response && withSecurityHeaders(clearLegacyCookie(response, port, req));
       } catch (error) {
         if (error instanceof BadRequest) return withSecurityHeaders(new Response(error.message, { status: 400 }));
         throw error;

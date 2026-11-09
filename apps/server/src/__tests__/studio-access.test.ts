@@ -94,7 +94,14 @@ describe("the printed link", () => {
       const response = await studio.request(path, { auth: false });
       expect(response.status).toBe(200);
       expect(response.headers.get("Location")).toBeNull();
-      expect(response.headers.get("Set-Cookie")).not.toContain(TEST_TOKEN);
+      expect(response.headers.get("Set-Cookie")).toBeNull();
+    }
+  });
+
+  test("requests without this port's legacy cookie do not receive cookie expiry", async () => {
+    for (const headers of [{}, { Cookie: "other=1; mcp_studio_1=old" }, { Cookie: `prefix_mcp_studio_${studio.port}=old` }] as Record<string, string>[]) {
+      const response = await studio.request("/", { auth: false, headers });
+      expect(response.headers.get("Set-Cookie")).toBeNull();
     }
   });
 

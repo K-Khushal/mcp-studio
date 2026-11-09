@@ -33,7 +33,9 @@ function randomToken(): string {
 }
 
 /** Expire the pre-origin-credential cookie, including its HttpOnly flag. Never use it for access. */
-export function clearLegacyCookie(response: Response, port: number): Response {
+export function clearLegacyCookie(response: Response, port: number, request: Request): Response {
+  const carriesCookie = request.headers.get("Cookie")?.split(";").some(entry => entry.trim().split("=")[0] === `mcp_studio_${port}`);
+  if (!carriesCookie) return response;
   response.headers.append("Set-Cookie", `mcp_studio_${port}=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/`);
   return response;
 }

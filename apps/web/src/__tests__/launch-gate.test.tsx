@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen } from "@testing-library/react";
 import { WebSocketTransport } from "../transport/websocket-transport";
@@ -12,12 +13,30 @@ describe("LaunchGate", () => {
   it("stores the printed link credential at this origin, cleans the URL and authenticates health", async () => {
     const token = "test-launch-token-0123456789abcdefgh";
     history.replaceState(null, "", `/?a=1&token=${token}&b=2#saved`);
-    stubHealth(200);
-    render(<LaunchGate><p>Studio app</p></LaunchGate>);
+    vi.stubGlobal("fetch", vi.fn(async (_path: string, init?: RequestInit) => {
+      const accepted = new Headers(init?.headers).get("Authorization") === `Bearer ${token}`;
+      if (accepted) await new Promise(resolve => setTimeout(resolve, 10));
+      return new Response(null, { status: accepted ? 200 : 401 });
+    }));
+    render(<StrictMode><LaunchGate><p>Studio app</p></LaunchGate></StrictMode>);
     expect(await screen.findByText("Studio app")).toBeTruthy();
     expect(localStorage.getItem("mcp-studio.launch-token")).toBe(token);
     expect(location.pathname + location.search + location.hash).toBe("/?a=1&b=2#saved");
     expect(fetch).toHaveBeenCalledWith("/api/health", expect.objectContaining({ headers: expect.objectContaining({ authorization: `Bearer ${token}` }) }));
+  });
+
+  it("keeps the stored token when a candidate launch link is rejected", async () => {
+    const stored = "stored-launch-token-0123456789abcdefgh";
+    const candidate = "garbage-launch-token-0123456789abcdefgh";
+    localStorage.setItem("mcp-studio.launch-token", stored);
+    history.replaceState(null, "", `/?token=${candidate}#saved`);
+    vi.stubGlobal("fetch", vi.fn(async (_path: string, init?: RequestInit) =>
+      new Response(null, { status: new Headers(init?.headers).get("Authorization") === `Bearer ${stored}` ? 200 : 401 })));
+    render(<LaunchGate><p>Studio app</p></LaunchGate>);
+    expect(await screen.findByText("Studio app")).toBeTruthy();
+    expect(localStorage.getItem("mcp-studio.launch-token")).toBe(stored);
+    expect(location.search + location.hash).toBe("#saved");
+    expect(fetch).toHaveBeenCalledWith("/api/health", expect.objectContaining({ headers: expect.objectContaining({ authorization: `Bearer ${candidate}` }) }));
   });
 
   it("shows the app once the Studio Server accepts this browser", async () => {
@@ -65,6 +84,19 @@ describe("LaunchGate", () => {
     expect(await screen.findByRole("heading", { name: "Open MCP Studio from your terminal" })).toBeTruthy();
     expect(screen.queryByText("Studio app")).toBeNull();
   });
+
+  for (const event of ["storage", "focus"]) {
+    it(`recovers a locked tab after a successful ${event} recheck`, async () => {
+      stubHealth(401);
+      render(<LaunchGate><p>Studio app</p></LaunchGate>);
+      await screen.findByRole("heading", { name: "Open MCP Studio from your terminal" });
+      localStorage.setItem("mcp-studio.launch-token", "new-launch-token-0123456789abcdefgh");
+      stubHealth(200);
+      await act(async () => { window.dispatchEvent(event === "storage"
+        ? new StorageEvent("storage", { key: "mcp-studio.launch-token" }) : new Event("focus")); });
+      expect(await screen.findByText("Studio app")).toBeTruthy();
+    });
+  }
 
   it("still shows the app when the Studio Server is unreachable, so connection errors stay visible", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("Failed to fetch"); }));

@@ -187,6 +187,8 @@ export class SessionManager {
       const resolved = interpolate({ transport: msg.transport, config: msg.config } as ConnectionConfig, this.activeEnv);
       if (resolved.missing.length) throw new Error(`Unresolved Variables: ${resolved.missing.join(", ")}`);
       config = resolved.result;
+      // Collect before committing the Connection: a failed collection must not poison later messages.
+      rememberConnectionSecrets(config, new Set<string>());
     } catch (err) {
       if (!this.client?.isConnected) this.setStatus("error");
       const message = err instanceof Error ? err.message : String(err);

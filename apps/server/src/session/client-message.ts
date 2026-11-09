@@ -8,7 +8,19 @@ const object: Check = value => typeof value === "object" && value !== null && !A
 const optional = (check: Check): Check => value => value === undefined || check(value);
 const oneOf = (...values: string[]): Check => value => typeof value === "string" && values.includes(value);
 
-/** Required and optional top-level fields per `ClientMessage` type; deeper values are checked by their handlers. */
+const stringRecord: Check = value => object(value) && Object.values(value as Record<string, unknown>).every(string);
+const httpAuth: Check = value => {
+  if (!stringRecord(value)) return false;
+  const auth = value as Record<string, unknown>;
+  switch (auth["type"]) {
+    case "none": case "oauth": return true;
+    case "bearer": return string(auth["token"]);
+    case "apikey": return string(auth["key"]) && string(auth["value"]) && oneOf("header", "query")(auth["in"]);
+    default: return false;
+  }
+};
+
+/** Required and optional top-level fields per `ClientMessage` type; Connection fields are validated before Session state can change. */
 const SHAPES: Record<ClientMessage["type"], Record<string, Check>> = {
   elicitation_response: { elicitationId: string, action: oneOf("accept", "decline", "cancel"), content: optional(object) },
   connect: { transport: oneOf("stdio", "http"), config: object, verbose: optional(boolean), connectionId: optional(string) },
@@ -22,8 +34,8 @@ const SHAPES: Record<ClientMessage["type"], Record<string, Check>> = {
 };
 
 const CONFIG_SHAPES: Record<"stdio" | "http", Record<string, Check>> = {
-  stdio: { command: string, args: optional(value => Array.isArray(value) && value.every(string)), env: optional(object), cwd: optional(string), inheritSystemEnv: optional(boolean) },
-  http: { url: string, headers: optional(object), auth: optional(object) },
+  stdio: { command: string, args: optional(value => Array.isArray(value) && value.every(string)), env: optional(stringRecord), cwd: optional(string), inheritSystemEnv: optional(boolean) },
+  http: { url: string, headers: optional(stringRecord), auth: optional(httpAuth) },
 };
 
 type ProtocolError = Extract<ServerMessage, { type: "error" }>;

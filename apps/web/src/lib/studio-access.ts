@@ -8,14 +8,24 @@ export function onAccessDenied(listener: () => void): () => void {
 
 const TOKEN_KEY = "mcp-studio.launch-token";
 
-export function consumeLaunchToken(): void {
+let tokenConsumption: Promise<void> | undefined;
+
+export function consumeLaunchToken(): Promise<void> {
+  // StrictMode may repeat the mount effect while the candidate is still being checked.
+  if (tokenConsumption) return tokenConsumption;
   const url = new URL(location.href);
   const token = url.searchParams.get("token");
-  if (token === null) return;
+  if (token === null) return Promise.resolve();
   // Clean even an invalid link; never leave a credential in the address bar or this history entry.
   url.searchParams.delete("token");
   history.replaceState(history.state, "", `${url.pathname}${url.search}${url.hash}`);
-  if (/^[A-Za-z0-9_-]{32,}$/.test(token)) localStorage.setItem(TOKEN_KEY, token);
+  if (!/^[A-Za-z0-9_-]{32,}$/.test(token)) return Promise.resolve();
+  // A navigation from another site is only a candidate, not permission to replace our credential.
+  tokenConsumption = fetch("/api/health", { headers: { authorization: `Bearer ${token}` } })
+    .then(response => { if (response.ok) localStorage.setItem(TOKEN_KEY, token); })
+    .catch(() => { /* Keep the stored credential when the Studio Server is unreachable. */ })
+    .finally(() => { tokenConsumption = undefined; });
+  return tokenConsumption;
 }
 
 export function launchToken(): string | null {
