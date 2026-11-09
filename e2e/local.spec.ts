@@ -1,4 +1,4 @@
-import { fixtureURL } from './ports';
+import { fixtureURL, studioToken, studioURL } from './ports';
 import { test, expect } from '@playwright/test';
 import { fixtureConnection, selectTool, runTool, jsonArgs, createConnection, configureStdio, connect, fixtureInfo } from './helpers';
 
@@ -201,4 +201,42 @@ test('public everything STDIO package returns tools and image content', async ({
   await expect(page.getByRole('img', { name: /^Image response/ })).toBeVisible();
   await expect.poll(() => page.getByRole('img', { name: /^Image response/ }).evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
   await page.screenshot({ path: testInfo.outputPath('everything-image.png') });
+});
+
+test('launch token: printed link, reload, tokenless tab and CSP', async ({ browser }) => {
+  // A fresh context has no session cookie, like a browser that never opened the printed link.
+  const context = await browser.newContext({ baseURL: studioURL, viewport: { width: 1440, height: 1000 }, storageState: { cookies: [], origins: [] } });
+  try {
+    const violations: string[] = [];
+    context.on('console', message => { if (/Content Security Policy|Refused to/i.test(message.text())) violations.push(message.text()); });
+    const stranger = await context.newPage();
+    const denied = await stranger.goto('/');
+    expect(denied?.status()).toBe(401);
+    await expect(stranger.getByRole('heading', { name: 'Open MCP Studio from your terminal' })).toBeVisible();
+    await expect(stranger.locator('script')).toHaveCount(0);
+    const cookieName = `mcp_studio_${new URL(studioURL).port}`;
+    expect((await context.cookies()).some(cookie => cookie.name === cookieName)).toBe(false);
+
+    const page = await context.newPage();
+    const opened = await page.goto(`/?token=${studioToken}`);
+    expect(opened?.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
+    expect(page.url()).toBe(`${studioURL}/`);
+    await expect(page.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.cookie)).not.toContain(studioToken);
+    await page.reload();
+    await expect(page.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
+    const sameBrowserTab = await context.newPage();
+    await sameBrowserTab.goto('/');
+    await expect(sameBrowserTab.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
+
+    await stranger.reload();
+    await expect(stranger.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
+    await fixtureConnection(page, 'CSP Fixture');
+    await selectTool(page, 'Structured answer');
+    await runTool(page);
+    await expect(page.getByRole('status').filter({ hasText: 'Matches output schema' })).toBeVisible();
+    expect(violations).toEqual([]);
+  } finally {
+    await context.close();
+  }
 });

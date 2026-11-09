@@ -1,6 +1,6 @@
 // Bun-only lifecycle controller; Playwright itself runs in Node.
 import { rmSync } from 'node:fs';
-import { studioURL, fixtureURL } from './ports';
+import { studioURL, fixtureURL, studioToken } from './ports';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -25,11 +25,11 @@ const sse = await startHTTPFixture('sse');
 const root = new URL('../', import.meta.url).pathname;
 async function start() {
   child = Bun.spawn([process.execPath, join(root, 'dist/cli.js'), '--port', new URL(studioURL).port, '--no-open'], {
-    cwd: root, env: { ...process.env, STUDIO_DB_PATH: join(directory, 'studio.db') }, stdout: 'inherit', stderr: 'inherit',
+    cwd: root, env: { ...process.env, STUDIO_DB_PATH: join(directory, 'studio.db'), STUDIO_TOKEN: studioToken }, stdout: 'inherit', stderr: 'inherit',
   });
   for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) throw new Error(`Packaged CLI exited: ${child.exitCode}`);
-    if (await fetch(`${studioURL}/health`).then(r => r.ok).catch(() => false)) return;
+    if (await fetch(`${studioURL}/health`, { headers: { Authorization: `Bearer ${studioToken}` } }).then(r => r.ok).catch(() => false)) return;
     await Bun.sleep(100);
   }
   throw new Error('Packaged CLI did not become healthy');
