@@ -75,3 +75,10 @@ describe("logs panel height", () => {
     vi.unstubAllGlobals();
   });
 });
+
+it('keeps the reason for an unexpected Session end scoped to its Connection', async () => {
+  await useStore.getState().connect(stdio);
+  deliver({ type: 'connected', protocolVersion: '2025-06-18', tools: [], prompts: [] });
+  deliver({ type: 'disconnected', reason: 'MCP Server exited with code 1' });
+  expect(useStore.getState().lastConnectionError).toEqual({ connectionId: 'conn-1', message: 'MCP Server exited with code 1', sessionEnded: true });
+});

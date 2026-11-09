@@ -18,7 +18,7 @@ test('STDIO: form and JSON Calls, prompts and structured output', async ({ page 
   await runTool(page);
   await expect(page.getByRole('status').filter({ hasText: 'Matches output schema' })).toBeVisible();
   await expect(page.getByRole('region', { name: 'Structured content' })).toContainText('42');
-  await page.getByRole('button', { name: /^Prompts/ }).click();
+  await page.getByRole('tab', { name: /^Prompts/ }).click();
   await page.getByRole('button', { name: 'greet', exact: true }).click();
   await page.getByPlaceholder('name', { exact: true }).fill('Ada');
   await page.getByRole('button', { name: 'Run Prompt', exact: true }).click();
@@ -29,7 +29,7 @@ for (const variant of ['streamable', 'sse'] as const) {
   test(`HTTP ${variant}: discovers tools and executes a Call`, async ({ page }) => {
     await createConnection(page, `HTTP ${variant}`, `${variant} Collection`);
     const info = await fixtureInfo(page);
-    await page.getByRole('button', { name: 'HTTP', exact: true }).click();
+    await page.getByRole('radio', { name: 'HTTP', exact: true }).click();
     await page.getByLabel('Server URL').fill(info[variant]);
     await connect(page);
     await expect(page.getByRole('banner').getByText(variant === 'sse' ? /HTTP · SSE/ : /HTTP · Streamable/)).toBeVisible();
@@ -95,12 +95,13 @@ test('verbose protocol logs and source, level and search filters', async ({ page
 
 test('Environment Variables resolve and missing Variables block Calls and connect', async ({ page }) => {
   await fixtureConnection(page, 'Variables');
-  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page.getByTitle('Active Environment', { exact: true }).click();
   await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByPlaceholder('Environment name').fill('E2E Environment');
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('combobox').click();
   await page.getByRole('option', { name: 'E2E Environment', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Active Environment' })).toContainText('E2E Environment');
   await page.getByPlaceholder('KEY', { exact: true }).fill('GREETING');
   await page.getByPlaceholder('VALUE', { exact: true }).fill('resolved greeting');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -136,15 +137,20 @@ test('config import, theme and saved entities survive a packaged CLI restart', a
   await page.getByRole('radio', { name: 'Light', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByText('Imported fixture', { exact: true }).click();
-  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page.getByTitle('Active Environment', { exact: true }).click();
   await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByPlaceholder('Environment name').fill('Restart Environment');
   await page.getByRole('button', { name: 'Create', exact: true }).click();
   await page.getByRole('combobox').click();
   await page.getByRole('option', { name: 'Restart Environment', exact: true }).click();
+  await expect(page.getByRole('combobox', { name: 'Active Environment' })).toContainText('Restart Environment');
   await page.getByPlaceholder('KEY', { exact: true }).fill('PERSISTED');
   await page.getByPlaceholder('VALUE', { exact: true }).fill('saved variable');
+  const savedVariable = page.waitForResponse(response => response.url().includes('/environments/')
+    && response.request().method() === 'PATCH'
+    && response.request().postDataJSON()?.variables?.PERSISTED === 'saved variable');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
+  await savedVariable;
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   expect((await request.post(`${fixtureURL}/restart`)).ok()).toBeTruthy();
   await page.reload();
@@ -158,10 +164,10 @@ test('config import, theme and saved entities survive a packaged CLI restart', a
   await jsonArgs(page, { text: 'after restart' });
   await runTool(page);
   await expect(page.getByText('after restart', { exact: true }).last()).toBeVisible();
-  await page.getByRole('button', { name: 'Environment', exact: true }).click();
+  await page.getByTitle('Active Environment', { exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Environment Variables' })).toContainText('Restart Environment');
   await expect(page.getByRole('dialog')).toContainText('PERSISTED');
-  await expect(page.getByRole('dialog').getByRole('textbox').first()).toHaveValue('saved variable');
+  await expect(page.getByRole('dialog').getByLabel('PERSISTED value')).toHaveValue('saved variable');
 });
 
 test('Connection failure is visible; Connections and Collections can be renamed and deleted', async ({ page }) => {

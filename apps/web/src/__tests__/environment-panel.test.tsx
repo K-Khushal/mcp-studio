@@ -1,9 +1,11 @@
-import { beforeEach, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it } from 'vitest';
+import { cleanup, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import '@testing-library/jest-dom/vitest';
 import EnvironmentPanel from '@/components/environments/environment-panel';
 import { useStore } from '@/store';
+
+afterEach(cleanup);
 
 beforeEach(() => useStore.setState({
   environments: [{ id: 'env', name: 'Test', isActive: true, variables: { CRED: 'synthetic-secret', HOST: 'localhost' } }],
@@ -12,19 +14,32 @@ beforeEach(() => useStore.setState({
 
 it('masks all existing and new values, reveals deliberately, and remasks on reopen', async () => {
   render(<EnvironmentPanel />);
-  await userEvent.click(screen.getByRole('button', { name: 'Environment' }));
+  await userEvent.click(screen.getByTitle('Active Environment'));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'password');
   expect(screen.getByDisplayValue('localhost')).toHaveAttribute('type', 'password');
   expect(screen.getByPlaceholderText('VALUE')).toHaveAttribute('type', 'password');
   expect(screen.getByPlaceholderText('VALUE')).toHaveAttribute('autocomplete', 'off');
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('autocomplete', 'off');
-  await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Show CRED' }));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'text');
-  expect(screen.getByRole('button', { name: 'Reveal CRED' })).toHaveAttribute('aria-pressed', 'true');
-  await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
+  expect(screen.getByRole('button', { name: 'Hide CRED' })).toHaveAttribute('aria-pressed', 'true');
+  await userEvent.click(screen.getByRole('button', { name: 'Hide CRED' }));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'password');
-  await userEvent.click(screen.getByRole('button', { name: 'Reveal CRED' }));
+  await userEvent.click(screen.getByRole('button', { name: 'Show CRED' }));
   await userEvent.keyboard('{Escape}');
-  await userEvent.click(screen.getByRole('button', { name: 'Environment' }));
+  await userEvent.click(screen.getByTitle('Active Environment'));
   expect(screen.getByDisplayValue('synthetic-secret')).toHaveAttribute('type', 'password');
+});
+
+it('requires confirmation before deleting an Environment', async () => {
+  useStore.setState({ environments: [
+    { id: 'env', name: 'Test', isActive: true, variables: { HOST: 'localhost' } },
+    { id: 'other', name: 'Other', isActive: false, variables: {} },
+  ] });
+  render(<EnvironmentPanel />);
+  await userEvent.click(screen.getByTitle('Active Environment'));
+  await userEvent.click(screen.getByRole('button', { name: 'Delete environment' }));
+  expect(screen.getByRole('alertdialog')).toHaveTextContent('and its 1 Variables');
+  await userEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  expect(useStore.getState().environments).toHaveLength(2);
 });

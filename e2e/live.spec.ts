@@ -39,7 +39,7 @@ for (const candidate of candidates) {
       await createConnection(page, candidate.name, `${candidate.name} live`);
       const info = await fixtureInfo(page);
       if (candidate.url) {
-        await page.getByRole('button', { name: 'HTTP', exact: true }).click();
+        await page.getByRole('radio', { name: 'HTTP', exact: true }).click();
         await page.getByLabel('Server URL').fill(candidate.url);
       } else {
         await configureStdio(page, 'npx', ['-y', candidate.package!, ...(candidate.name === 'Filesystem' ? [info.directory] : [])]);

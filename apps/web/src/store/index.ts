@@ -25,6 +25,8 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
 import {
   DEFAULT_STDIO_DRAFT,
+  headersFromRows,
+  type HeaderRow,
   stdioDraftFromConfig,
   type StdioDraft,
 } from "./connection-form";
@@ -79,6 +81,7 @@ interface ConnectionDraft {
   stdio?: StdioDraft;
   httpAuth?: HttpAuth;
   httpHeaders?: Record<string, string>;
+  headerRows?: HeaderRow[];
 }
 
 interface ConnectionWorkspaceState {
@@ -104,7 +107,7 @@ interface AppState {
   elicitations: Extract<ServerMessage, { type: "elicitation_request" }>[];
   // Connection
   connectionStatus: ConnectionStatus;
-  lastConnectionError: { connectionId: string; message: string } | null;
+  lastConnectionError: { connectionId: string; message: string; sessionEnded?: boolean } | null;
   connectionConfig: ConnectionConfig | null;
   serverInfo: { name?: string; version?: string } | null;
   protocolVersion: string | null;
@@ -213,6 +216,7 @@ interface AppActions {
   setConnectionUrl: (url: string) => void;
   setHttpAuth: (auth: HttpAuth) => void;
   setHttpHeaders: (headers: Record<string, string>) => void;
+  setHeaderRows: (rows: HeaderRow[]) => void;
 
   // Environments
   loadEnvironments: () => Promise<void>;
@@ -417,7 +421,7 @@ function buildConnectionDraftsPatch(
   return {
     connectionDrafts: {
       ...drafts,
-      [selectedConnectionId]: { ...draft },
+      [selectedConnectionId]: { ...draft, headerRows: drafts[selectedConnectionId]?.headerRows },
     },
   };
 }
@@ -1032,6 +1036,14 @@ export const useStore = create<AppState & AppActions>()(
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
           };
         }),
+      setHeaderRows: (rows) => {
+        const headers = headersFromRows(rows);
+        if (headers) get().setHttpHeaders(headers);
+        set(s => s.selectedConnectionId ? { connectionDrafts: {
+          ...s.connectionDrafts,
+          [s.selectedConnectionId]: { ...s.connectionDrafts[s.selectedConnectionId]!, headerRows: rows },
+        } } : {});
+      },
       setHttpHeaders: (headers) =>
         set((s) => {
           const draft: ConnectionDraft = {
@@ -1168,6 +1180,7 @@ function handleServerMessage(msg: ServerMessage): void {
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       }
       useStore.setState((s) => ({
+        lastConnectionError: msg.reason && (s.connectedConnectionId ?? s.connectingConnectionId) ? { connectionId: (s.connectedConnectionId ?? s.connectingConnectionId)!, message: msg.reason, sessionEnded: true } : s.lastConnectionError,
         elicitations: [],
         connectionStatus: "disconnected",
         oauthAuthorizationUrl: null,

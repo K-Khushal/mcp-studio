@@ -45,7 +45,7 @@ export function ConfigurationPanel() {
           Settings
         </TooltipContent>
       </Tooltip>
-      <DialogContent className="max-w-md gap-0 bg-card" onOpenAutoFocus={(e) => e.preventDefault()}>
+      <DialogContent className="sm:max-w-md gap-0 bg-card">
         <DialogHeader>
           <DialogTitle className="text-sm font-semibold text-foreground">Settings</DialogTitle>
           <DialogDescription className="text-xs">Changes apply immediately.</DialogDescription>
