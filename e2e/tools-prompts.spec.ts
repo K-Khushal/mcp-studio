@@ -36,8 +36,10 @@ async function shot(page: Page, name: string, theme: string) {
   if (shotsDir) await page.screenshot({ path: `${shotsDir}/94-${label ?? 'after'}-${name}-${theme}.png` });
 }
 
+for (const width of [1366, 1024]) {
 for (const theme of ['dark', 'light'] as const) {
-  test(`axe and screenshots: tools, prompts, elicitation (${theme})`, async ({ page }) => {
+  test(`axe and screenshots: tools, prompts, elicitation (${theme}, ${width})`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 768 });
     await page.addInitScript((t) => localStorage.setItem('mcp-studio-config', JSON.stringify({ theme: t })), theme);
     await fixtureConnection(page, `Axe ${theme}`);
 
@@ -48,11 +50,29 @@ for (const theme of ['dark', 'light'] as const) {
     await shot(page, 'tool-form', theme);
 
     await page.getByPlaceholder('Filter tools...').fill('');
+    await selectTool(page, 'form-controls');
+    const add = page.getByRole('button', { name: 'Add item to labels' });
+    await expect(add).toBeVisible();
+    await page.getByRole('textbox', { name: 'payload', exact: true }).press('Control+Enter');
+    await expect(add).toBeFocused();
+    await axe(page, `composite required errors ${width}`, theme, 'panel');
+    await add.click();
+    await page.getByRole('textbox', { name: 'labels item 1' }).fill('sample');
+    await axe(page, `array items ${width}`, theme, 'panel');
+
+    await page.getByRole('button', { name: 'JSON', exact: true }).click();
+    const json = page.getByRole('textbox', { name: 'Arguments JSON' });
+    await json.press('Meta+Enter');
+    await expect(json).toBeFocused();
+    await expect(json).toHaveAttribute('aria-invalid', 'true');
+    await expect(json).toHaveAccessibleDescription('Required: options, payload');
+    await axe(page, `JSON required errors ${width}`, theme, 'panel');
+
     await selectTool(page, 'structured', 'Structured answer');
     await axe(page, 'annotated tool', theme, 'panel');
     await shot(page, 'tool-annotated', theme);
 
-    await page.getByRole('button', { name: /^Prompts/ }).click();
+    await page.getByRole('tab', { name: 'Prompts', exact: true }).click();
     await page.getByRole('button', { name: /^greet/ }).click();
     await axe(page, 'prompt arguments', theme, 'panel');
     await shot(page, 'prompt-args', theme);
@@ -60,7 +80,7 @@ for (const theme of ['dark', 'light'] as const) {
     await axe(page, 'prompt required error', theme, 'panel');
     await shot(page, 'prompt-required', theme);
 
-    await page.getByRole('button', { name: /^Tools/ }).click();
+    await page.getByRole('tab', { name: 'Tools', exact: true }).click();
     await page.getByPlaceholder('Filter tools...').fill('elicit');
     await page.getByRole('button', { name: /^elicit/ }).click();
     await page.getByRole('button', { name: 'Run Tool' }).click();
@@ -71,6 +91,8 @@ for (const theme of ['dark', 'light'] as const) {
     await shot(page, 'elicitation', theme);
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click();
   });
+}
+
 }
 
 test.afterAll(() => {
@@ -103,8 +125,8 @@ test('keyboard-only: pick a tool, run it, keep args across tabs, answer an elici
   await expect(page.getByText('typed by keyboard', { exact: true }).last()).toBeVisible();
 
   // Prompts tab, then back: the Tool's typed arguments survive.
-  await tabTo(page, (el) => el?.textContent?.trim() === 'Prompts' && el.tagName === 'BUTTON', 'Shift+Tab');
-  await page.keyboard.press('Enter');
+  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim() === 'Tools', 'Shift+Tab');
+  await page.keyboard.press('ArrowRight');
   await tabTo(page, (el) => el?.tagName === 'BUTTON' && el.textContent?.startsWith('greet') === true);
   await page.keyboard.press('Enter');
   await tabTo(page, (el) => el?.tagName === 'INPUT' && el.getAttribute('aria-required') === 'true');
@@ -117,8 +139,8 @@ test('keyboard-only: pick a tool, run it, keep args across tabs, answer an elici
   await page.keyboard.press('Control+Enter');
   await expect(page.getByText('Hello, Ada!', { exact: true })).toBeVisible();
 
-  await tabTo(page, (el) => el?.textContent?.trim() === 'Tools' && el.tagName === 'BUTTON', 'Shift+Tab');
-  await page.keyboard.press('Enter');
+  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim() === 'Prompts', 'Shift+Tab');
+  await page.keyboard.press('ArrowLeft');
   await expect(page.getByRole('textbox', { name: 'text', exact: true })).toHaveValue('typed by keyboard');
 
   // Elicitation: opens on the first field, Accept by keyboard.

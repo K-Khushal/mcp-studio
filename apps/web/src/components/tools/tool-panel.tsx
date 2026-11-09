@@ -49,7 +49,13 @@ export default function ToolPanel() {
   }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
 
   useEffect(() => {
-    if (attempts > 0) argsRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+    if (attempts > 0) {
+      const invalid = argsRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]');
+      const target = invalid?.matches('input, select, textarea, button')
+        ? invalid
+        : invalid?.querySelector<HTMLElement>('input, select, textarea, button');
+      target?.focus();
+    }
   }, [attempts]);
 
   useEffect(() => setAttempts(0), [selectedTool?.name]);

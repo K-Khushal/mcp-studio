@@ -4,6 +4,8 @@ import { cn } from '@/lib/utils';
 
 interface JsonTextareaProps {
   id?: string;
+  required?: boolean;
+  invalid?: boolean;
   label: string;
   value: unknown;
   /** Called with the parsed value, or undefined when the text is empty. */
@@ -45,6 +47,8 @@ export function JsonTextarea({
   rows = 3,
   placeholder,
   describedBy,
+  required,
+  invalid,
 }: JsonTextareaProps) {
   const [draft, setDraft] = useState(() => pretty(value));
   const [error, setError] = useState<string | null>(null);
@@ -79,7 +83,8 @@ export function JsonTextarea({
         json
         id={id}
         aria-label={label}
-        aria-invalid={error !== null}
+        aria-required={required || undefined}
+        aria-invalid={invalid || error !== null}
         aria-describedby={[describedBy, error !== null && errorId].filter(Boolean).join(' ') || undefined}
         value={draft}
         onChange={(e) => handleChange(e.target.value)}

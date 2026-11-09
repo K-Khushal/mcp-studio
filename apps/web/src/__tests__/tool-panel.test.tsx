@@ -42,7 +42,7 @@ describe("ToolPanel Run", () => {
     render(<ToolPanel />);
 
     await userEvent.type(screen.getByRole("textbox", { name: "query" }), "cats");
-    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to tags/i }));
     await userEvent.type(screen.getByRole("textbox", { name: "tags item 1" }), "pets");
     await userEvent.click(screen.getByRole("button", { name: /run tool/i }));
 
@@ -118,7 +118,7 @@ describe("ToolPanel Run", () => {
     };
     useStore.setState({ selectedTool: ids, tools: [ids] });
     render(<ToolPanel />);
-    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to ids/i }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "4");
     await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
 
@@ -145,7 +145,7 @@ it('never submits server defaults or enum choices containing Variable syntax', a
   render(<ToolPanel />);
   expect(screen.getByRole('textbox', { name: 'token' })).toHaveValue('');
   expect(screen.getByRole('option', { name: '{{SECRET}}' })).toBeDisabled();
-  await userEvent.click(screen.getByRole('button', { name: /add choices item/i }));
+  await userEvent.click(screen.getByRole('button', { name: /add item to choices/i }));
   await userEvent.click(screen.getByRole('button', { name: /run tool/i }));
   expect(invokeTool).toHaveBeenCalledWith('hostile', { safe: 'hello', choices: ['safe'] });
   // The user can still deliberately enter a Variable reference.
@@ -239,4 +239,55 @@ describe('ToolList density and selection', () => {
     expect(screen.getAllByText('Idempotent')).toHaveLength(1);
     expect(screen.getAllByText('Closed-world')).toHaveLength(1);
   });
+});
+
+describe('required composite arguments', () => {
+  for (const [name, prop, targetRole, targetName] of [
+    ['labels', { type: 'array', items: { type: 'string' }, description: 'Labels help' }, 'button', 'Add item to labels'],
+    ['options', { type: 'object', properties: { city: { type: 'string' } }, description: 'Options help' }, 'textbox', 'city'],
+    ['payload', { anyOf: [{ type: 'string' }, { type: 'number' }], description: 'Payload help' }, 'textbox', 'payload'],
+  ] as const) {
+    it(`announces and focuses missing ${name} on repeated blocked shortcuts`, async () => {
+      const composite: MCPTool = { name: 'composite', description: '', inputSchema: { type: 'object', required: [name], properties: { [name]: prop, other: { type: 'string' } } } };
+      useStore.setState({ selectedTool: composite, tools: [composite], toolFormValues: {} });
+      render(<ToolPanel />);
+      const target = screen.getByRole(targetRole, { name: targetName });
+      const other = screen.getByRole('textbox', { name: 'other' });
+      if (name === 'labels') expect(target).toHaveAccessibleDescription('Labels help Required');
+      for (let i = 0; i < 2; i++) {
+        await userEvent.click(other);
+        await userEvent.keyboard('{Control>}{Enter}{/Control}');
+        expect(target).toHaveFocus();
+      }
+      expect(invokeTool).not.toHaveBeenCalled();
+      expect(screen.getByRole('button', { name: 'Run Tool' })).toBeDisabled();
+      if (name === 'payload') {
+        expect(target).toHaveAttribute('aria-required', 'true');
+        expect(target).toBeInvalid();
+        expect(target).toHaveAccessibleDescription('Payload help Required');
+      } else {
+        const group = screen.getByRole('group', { name: new RegExp(name) });
+        expect(group).toHaveAttribute('aria-invalid', 'true');
+        expect(group).toHaveAccessibleDescription(`${name === 'labels' ? 'Labels' : 'Options'} help Required`);
+      }
+    });
+  }
+});
+
+it('announces all missing JSON arguments and focuses the editor on a blocked shortcut', async () => {
+  render(<ToolPanel />);
+  await userEvent.click(screen.getByRole('button', { name: 'JSON' }));
+  const editor = screen.getByRole('textbox', { name: 'Arguments JSON' });
+  await userEvent.click(editor);
+  await userEvent.keyboard('{Meta>}{Enter}{/Meta}');
+  expect(editor).toBeInvalid();
+  expect(editor).toHaveAccessibleDescription('Required: query');
+  expect(editor).toHaveFocus();
+  expect(invokeTool).not.toHaveBeenCalled();
+  await userEvent.clear(editor);
+  await userEvent.paste('{"query":"cats"}');
+  expect(editor).not.toBeInvalid();
+  expect(editor).not.toHaveAccessibleDescription();
+  await userEvent.keyboard('{Control>}{Enter}{/Control}');
+  expect(invokeTool).toHaveBeenCalledWith('search', { query: 'cats' });
 });

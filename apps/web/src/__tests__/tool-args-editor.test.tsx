@@ -55,8 +55,8 @@ describe("array of primitives", () => {
   it("adds items, edits them and removes one", async () => {
     const { args } = renderEditor(schema);
 
-    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to tags/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to tags/i }));
     await userEvent.type(screen.getByRole("textbox", { name: "tags item 1" }), "red");
     await userEvent.type(screen.getByRole("textbox", { name: "tags item 2" }), "blue");
     expect(args()).toEqual({ tags: ["red", "blue"] });
@@ -74,7 +74,7 @@ describe("array of primitives", () => {
     };
     const { args } = renderEditor(numbers);
 
-    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to ids/i }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "42");
 
     expect(args()).toEqual({ ids: [42] });
@@ -105,7 +105,7 @@ describe("nested object", () => {
     expect(group).toBeInTheDocument();
     await userEvent.type(within(group).getByRole("spinbutton", { name: "retries" }), "3");
     await userEvent.selectOptions(within(group).getByRole("combobox", { name: "mode" }), "safe");
-    await userEvent.click(within(group).getByRole("button", { name: /add labels item/i }));
+    await userEvent.click(within(group).getByRole("button", { name: /add item to labels/i }));
     await userEvent.type(within(group).getByRole("textbox", { name: "labels item 1" }), "x");
 
     expect(args()).toEqual({ options: { retries: 3, mode: "safe", labels: ["x"] } });
@@ -167,7 +167,7 @@ describe("form / JSON toggle", () => {
     const { args } = renderEditor(richSchema);
     await userEvent.type(screen.getByRole("textbox", { name: "query" }), "hello");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "level" }), "info");
-    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to tags/i }));
     await userEvent.type(screen.getByRole("textbox", { name: "tags item 1" }), "a");
     await userEvent.type(screen.getByRole("spinbutton", { name: "retries" }), "2");
     const expected = { query: "hello", level: "info", tags: ["a"], options: { retries: 2 } };
@@ -359,8 +359,8 @@ describe("integer array item left blank", () => {
 
   it("keeps the blank draft, flags it, and blocks Run until corrected or removed", async () => {
     const { args, onValidChange } = renderEditor(schema);
-    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
-    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to ids/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to ids/i }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 2" }), "7");
 
     await userEvent.clear(screen.getByRole("spinbutton", { name: "ids item 1" }));
@@ -385,7 +385,7 @@ describe("integer array item left blank", () => {
 
   it("blocks switching to JSON while an item draft is invalid", async () => {
     renderEditor(schema);
-    await userEvent.click(screen.getByRole("button", { name: /add ids item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to ids/i }));
     await userEvent.type(screen.getByRole("spinbutton", { name: "ids item 1" }), "4");
     const jsonToggle = screen.getByRole("button", { name: "JSON" });
     expect(jsonToggle).toBeEnabled();
@@ -404,7 +404,7 @@ describe("integer array item left blank", () => {
       properties: { tags: { type: "array", items: { type: "string" } } },
     };
     const { args } = renderEditor(strings);
-    await userEvent.click(screen.getByRole("button", { name: /add tags item/i }));
+    await userEvent.click(screen.getByRole("button", { name: /add item to tags/i }));
     await userEvent.type(screen.getByRole("textbox", { name: "tags item 1" }), "a");
     await userEvent.clear(screen.getByRole("textbox", { name: "tags item 1" }));
 
@@ -450,4 +450,9 @@ describe("titled enums", () => {
     renderEditor({ type: "object", properties: { v: { oneOf: [{ type: "string" }, { type: "number" }] } } });
     expect(screen.getByRole("textbox", { name: "v" })).toBeInTheDocument();
   });
+});
+
+it('names array actions with their visible Add item text', () => {
+  renderEditor({ type: 'object', properties: { labels: { type: 'array', items: { type: 'string' } } } });
+  expect(screen.getByRole('button', { name: 'Add item to labels' })).toHaveTextContent('Add item');
 });

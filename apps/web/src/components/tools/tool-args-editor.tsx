@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useId, useState } from 'react';
 import { cn } from '@/lib/utils';
+import { missingRequired } from './tool-schema-helpers';
 import { JsonTextarea } from './json-textarea';
 import { FieldValidityContext, SchemaForm, ShowRequiredContext, type Args } from './tool-schema-form';
 
@@ -20,6 +21,8 @@ interface ToolArgsEditorProps {
 const JSON_FIELD = 'arguments-json';
 
 export function ToolArgsEditor({ schema, args, onChange, onValidChange, showRequired = false, label = 'Arguments' }: ToolArgsEditorProps) {
+  const requiredId = useId();
+  const missing = showRequired ? missingRequired(schema, args) : [];
   const [mode, setMode] = useState<Mode>('form');
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
   const reportField = useCallback((id: string, valid: boolean) => {
@@ -52,14 +55,19 @@ export function ToolArgsEditor({ schema, args, onChange, onValidChange, showRequ
           </ShowRequiredContext.Provider>
         </FieldValidityContext.Provider>
       ) : (
-        <JsonTextarea
-          label="Arguments JSON"
-          value={args}
-          onChange={(next) => onChange(next as Args)}
-          onValidChange={reportJson}
-          requireObject
-          rows={10}
-        />
+        <div className="flex flex-col gap-1">
+          <JsonTextarea
+            invalid={missing.length > 0}
+            describedBy={missing.length > 0 ? requiredId : undefined}
+            label="Arguments JSON"
+            value={args}
+            onChange={(next) => onChange(next as Args)}
+            onValidChange={reportJson}
+            requireObject
+            rows={10}
+          />
+          {missing.length > 0 && <p id={requiredId} role="alert" className="text-xs text-destructive-text">Required: {missing.join(', ')}</p>}
+        </div>
       )}
     </div>
   );
