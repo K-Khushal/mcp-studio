@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { resolveToken } from "../http/access.js";
@@ -62,7 +62,9 @@ test("the development token file keeps one owner-only token across restarts", as
     const first = resolveToken({ STUDIO_DEV_TOKEN_FILE: file });
     expect(first).toMatch(/^[A-Za-z0-9_-]{43}$/);
     expect((await stat(file)).mode & 0o777).toBe(0o600);
+    await chmod(file, 0o644);
     expect(resolveToken({ STUDIO_DEV_TOKEN_FILE: file })).toBe(first);
+    expect((await stat(file)).mode & 0o777).toBe(0o600);
     expect(resolveToken({})).not.toBe(first);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

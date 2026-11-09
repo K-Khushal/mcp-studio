@@ -43,7 +43,7 @@ export function parseClientMessage(raw: string): { message: ClientMessage } | { 
   if (!object(value)) return { error: protocolError("Message must be a JSON object") };
   const message = value as Record<string, unknown>;
   const type = message["type"];
-  if (typeof type !== "string" || !Object.hasOwn(SHAPES, type)) return { error: protocolError(`Unknown message type: ${String(type).slice(0, 64)}`) };
+  if (typeof type !== "string" || !Object.hasOwn(SHAPES, type)) return { error: protocolError(typeof type === "string" ? `Unknown message type: ${type.slice(0, 64)}` : "Message type must be a string") };
   const field = invalidField(message, SHAPES[type as ClientMessage["type"]]);
   if (field) return { error: protocolError(`Invalid ${type} message: bad ${field}`, message["requestId"]) };
   if (type === "connect") {

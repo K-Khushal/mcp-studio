@@ -11,7 +11,7 @@ const usage = `Usage: mcp-studio [options]
 
 Each launch prints a link like http://localhost:3000/?token=<launch token>
 and opens it. The Studio Server only answers browsers that opened that link
-(they get a cookie) and scripts that send Authorization: Bearer <launch token>.
+(the page stores an origin-scoped credential) and scripts that send Authorization: Bearer <launch token>.
 Other tabs see a page asking for the printed link.
 
 Environment:

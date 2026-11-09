@@ -50,3 +50,17 @@ test("JSON that is not a well-formed ClientMessage yields a protocol error and t
     { type: "error", message: "Not connected", code: "NOT_CONNECTED" },
   ]);
 }, 10000);
+
+test("untrusted type objects cannot escape parsing or break subsequent dispatch", async () => {
+  const frames = [
+    '{"type":{"toString":null}}',
+    '{"type":{"toString":{},"valueOf":null}}',
+    '{"type":{"__proto__":{"toString":null}}}',
+    '{"type":[{"toString":null}]}',
+    '{"type":"constructor"}',
+    '{"__proto__":{"type":"list_tools"}}',
+  ];
+  const replies = await exchange([...frames, '{"type":"list_tools"}']);
+  for (const reply of replies.slice(0, -1)) expect(reply).toMatchObject({ type: "error", code: "PROTOCOL_ERROR" });
+  expect(replies.at(-1)).toMatchObject({ type: "error", code: "NOT_CONNECTED" });
+}, 3000);

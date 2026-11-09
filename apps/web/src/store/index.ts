@@ -1,3 +1,4 @@
+import { studioFetch } from "@/lib/studio-access";
 import { toast } from "sonner";
 import type { ElicitationResult } from "@mcp-studio/types";
 import { create } from "zustand";
@@ -549,7 +550,7 @@ export const useStore = create<AppState & AppActions>()(
           await get().disconnect();
         }
         try {
-          const response = await fetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
+          const response = await studioFetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
           if (!response.ok) throw new Error("Sign-out failed");
           return true;
         } catch {
@@ -757,13 +758,13 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- collections ----------
       loadCollections: async () => {
-        const res = await fetch("/api/collections");
+        const res = await studioFetch("/api/collections");
         const collections = (await res.json()) as Collection[];
         set({ collections });
       },
 
       createCollection: async (name) => {
-        const res = await fetch("/api/collections", {
+        const res = await studioFetch("/api/collections", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
@@ -773,7 +774,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       renameCollection: async (id, name) => {
-        await fetch(`/api/collections/${id}`, {
+        await studioFetch(`/api/collections/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
@@ -793,7 +794,7 @@ export const useStore = create<AppState & AppActions>()(
           );
           return deletedConnIds.has(state.connectedConnectionId ?? "");
         })();
-        await fetch(`/api/collections/${id}`, { method: "DELETE" });
+        await studioFetch(`/api/collections/${id}`, { method: "DELETE" });
         if (wasConnected) {
           await get().disconnect();
         }
@@ -825,7 +826,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       addConnection: async (collectionId, data) => {
-        const res = await fetch(`/api/collections/${collectionId}/connections`, {
+        const res = await studioFetch(`/api/collections/${collectionId}/connections`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(data),
@@ -841,7 +842,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       renameConnection: async (collectionId, connId, name) => {
-        await fetch(`/api/collections/${collectionId}/connections/${connId}`, {
+        await studioFetch(`/api/collections/${collectionId}/connections/${connId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
@@ -861,7 +862,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       updateConnectionConfig: async (collectionId, connId, connectionConfig) => {
-        await fetch(`/api/collections/${collectionId}/connections/${connId}`, {
+        await studioFetch(`/api/collections/${collectionId}/connections/${connId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ connectionConfig }),
@@ -882,7 +883,7 @@ export const useStore = create<AppState & AppActions>()(
 
       deleteConnection: async (collectionId, connId) => {
         const wasConnected = get().connectedConnectionId === connId;
-        await fetch(`/api/collections/${collectionId}/connections/${connId}`, { method: "DELETE" });
+        await studioFetch(`/api/collections/${collectionId}/connections/${connId}`, { method: "DELETE" });
         if (wasConnected) {
           await get().disconnect();
         }
@@ -915,7 +916,7 @@ export const useStore = create<AppState & AppActions>()(
 
       // ---------- environments ----------
       loadEnvironments: async () => {
-        const res = await fetch("/api/environments");
+        const res = await studioFetch("/api/environments");
         const environments = (await res.json()) as Environment[];
         set({
           environments,
@@ -924,7 +925,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       createEnvironment: async (name) => {
-        const res = await fetch("/api/environments", {
+        const res = await studioFetch("/api/environments", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ name }),
@@ -934,7 +935,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       updateEnvironment: async (id, partial) => {
-        await fetch(`/api/environments/${id}`, {
+        await studioFetch(`/api/environments/${id}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(partial),
@@ -947,7 +948,7 @@ export const useStore = create<AppState & AppActions>()(
       },
 
       deleteEnvironment: async (id) => {
-        await fetch(`/api/environments/${id}`, { method: "DELETE" });
+        await studioFetch(`/api/environments/${id}`, { method: "DELETE" });
         set((s) => ({ environments: s.environments.filter((e) => e.id !== id) }));
       },
 
@@ -955,7 +956,7 @@ export const useStore = create<AppState & AppActions>()(
         const envs = get().environments;
         for (const env of envs) {
           if (env.isActive !== (env.id === id)) {
-            await fetch(`/api/environments/${env.id}`, {
+            await studioFetch(`/api/environments/${env.id}`, {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ isActive: env.id === id }),

@@ -1,3 +1,4 @@
+import { launchToken, studioFetch } from "../lib/studio-access";
 import type { StudioTransport, ServerMessage, ConnectionConfig, ClientMessage } from "@mcp-studio/types";
 
 const WS_URL = import.meta.env["VITE_WS_URL"] ?? (import.meta.env.DEV ? "ws://localhost:3000/ws" : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}/ws`);
@@ -65,16 +66,31 @@ export class WebSocketTransport implements StudioTransport {
       return;
     }
 
+    // Browser WS errors do not expose the handshake's HTTP status. Check REST on each new
+    // connection and after handshake failure so a rotated token locks the app, even on reconnect.
+    const health = await studioFetch("/api/health");
+    if (health.status === 401) throw new Error("Launch token rejected");
+    // Another caller may have opened a socket while the health check was in flight.
+    const current = this.ws as WebSocket | null;
+    if (current?.readyState === WebSocket.OPEN) return;
+    if (current?.readyState === WebSocket.CONNECTING) return this.waitForOpen();
+
     return new Promise((resolve, reject) => {
       this.intentionalClose = false;
-      this.ws = new WebSocket(WS_URL);
+      const token = launchToken();
+      this.ws = new WebSocket(WS_URL, ["mcp-studio", ...(token ? [`token.${token}`] : [])]);
 
       const ws = this.ws;
       let opened = false;
       this.ws.onopen = () => { opened = true; resolve(); };
-      this.ws.onerror = () => reject(new Error("WebSocket connection failed"));
+      this.ws.onerror = () => {
+        void studioFetch("/api/health").catch(() => {});
+        reject(new Error("WebSocket connection failed"));
+      };
       this.ws.onclose = () => {
-        if (!opened || ws !== this.ws) return;
+        if (ws !== this.ws) return;
+        if (!this.intentionalClose) void studioFetch("/api/health").catch(() => {});
+        if (!opened) { reject(new Error("WebSocket closed before opening")); return; }
         this.dispatch({ type: "disconnected", ...(this.intentionalClose ? {} : { reason: "Studio Server connection closed unexpectedly" }) });
       };
       this.ws.onmessage = (e) => {

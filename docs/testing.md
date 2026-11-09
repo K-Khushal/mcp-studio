@@ -31,7 +31,7 @@ WebSocket on `http://localhost:47831`; a test-only lifecycle controller uses
 terminates the CLI and fixture transports and deletes its temporary database
 on exit. It never uses `~/.mcp-studio`. No dev server or mocked Studio APIs.
 The CLI runs with a fixed `STUDIO_TOKEN` (`E2E_TOKEN` overrides) and the Playwright
-context starts with its Launch token cookie; the `launch token` test uses a fresh
+context starts with its origin-scoped Launch token in localStorage; the `launch token` test uses a fresh
 context to cover the help page, the printed link, reload and the CSP (ADR-0007).
 
 The local Chromium project covers Collection/Connection create, rename and

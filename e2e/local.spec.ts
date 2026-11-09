@@ -204,25 +204,39 @@ test('public everything STDIO package returns tools and image content', async ({
 });
 
 test('launch token: printed link, reload, tokenless tab and CSP', async ({ browser }) => {
-  // A fresh context has no session cookie, like a browser that never opened the printed link.
+  // A fresh context has no origin credential, like a browser that never opened the printed link.
   const context = await browser.newContext({ baseURL: studioURL, viewport: { width: 1440, height: 1000 }, storageState: { cookies: [], origins: [] } });
   try {
     const violations: string[] = [];
     context.on('console', message => { if (/Content Security Policy|Refused to/i.test(message.text())) violations.push(message.text()); });
     const stranger = await context.newPage();
     const denied = await stranger.goto('/');
-    expect(denied?.status()).toBe(401);
+    expect(denied?.status()).toBe(200);
     await expect(stranger.getByRole('heading', { name: 'Open MCP Studio from your terminal' })).toBeVisible();
-    await expect(stranger.locator('script')).toHaveCount(0);
     const cookieName = `mcp_studio_${new URL(studioURL).port}`;
     expect((await context.cookies()).some(cookie => cookie.name === cookieName)).toBe(false);
 
+    await context.addCookies([{ name: cookieName, value: studioToken, domain: 'localhost', path: '/', httpOnly: true, sameSite: 'Strict' }]);
     const page = await context.newPage();
     const opened = await page.goto(`/?token=${studioToken}`);
     expect(opened?.headers()['content-security-policy']).toContain("frame-ancestors 'none'");
-    expect(page.url()).toBe(`${studioURL}/`);
+    await expect(page).toHaveURL(`${studioURL}/`);
     await expect(page.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
     expect(await page.evaluate(() => document.cookie)).not.toContain(studioToken);
+    expect(await page.evaluate(() => localStorage.getItem('mcp-studio.launch-token'))).toBe(studioToken);
+    expect((await context.cookies()).some(cookie => cookie.name === cookieName)).toBe(false);
+    const foreignApp = await context.newPage();
+    await foreignApp.goto(`${fixtureURL}/info`);
+    expect(await foreignApp.evaluate(() => localStorage.getItem('mcp-studio.launch-token'))).toBeNull();
+    expect(await foreignApp.evaluate(() => document.cookie)).not.toContain(studioToken);
+    // Reading another window's storage also hits the browser's same-origin boundary.
+    const popupReady = context.waitForEvent('page');
+    const foreignWindow = await foreignApp.evaluateHandle(url => window.open(url), `${studioURL}/`);
+    await (await popupReady).waitForLoadState();
+    expect(await foreignApp.evaluate(win => {
+      try { return win!.localStorage.getItem('mcp-studio.launch-token'); } catch { return 'blocked'; }
+    }, foreignWindow)).toBe('blocked');
+    expect((await context.request.get(`${studioURL}/collections`, { headers: { Cookie: `${cookieName}=${studioToken}` } })).status()).toBe(401);
     await page.reload();
     await expect(page.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
     const sameBrowserTab = await context.newPage();
@@ -238,5 +252,25 @@ test('launch token: printed link, reload, tokenless tab and CSP', async ({ brows
     expect(violations).toEqual([]);
   } finally {
     await context.close();
+  }
+});
+
+
+test('rotated Launch token locks an open tab and the new printed link restores access', async ({ page, request }) => {
+  await fixtureConnection(page, 'Rotated token');
+  const rotated = `${studioToken}-rotated`;
+  try {
+    expect((await request.post(`${fixtureURL}/restart?token=${rotated}`)).ok()).toBeTruthy();
+    // The old socket closes during restart. Reconnecting must recheck its credential.
+    // The help page may already be visible if the close-triggered check reached the new launch.
+    const help = page.getByRole('heading', { name: 'Open MCP Studio from your terminal' });
+    if (!await help.isVisible()) await page.getByRole('button', { name: 'Connect', exact: true }).click();
+    await expect(help).toBeVisible();
+    await expect(page.getByRole('button', { name: 'New collection', exact: true })).toHaveCount(0);
+    await page.goto(`/?token=${rotated}`);
+    await expect(page).toHaveURL(`${studioURL}/`);
+    await expect(page.getByRole('button', { name: 'New collection', exact: true })).toBeVisible();
+  } finally {
+    expect((await request.post(`${fixtureURL}/restart`)).ok()).toBeTruthy();
   }
 });

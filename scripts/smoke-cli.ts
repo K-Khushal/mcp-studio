@@ -55,14 +55,13 @@ try {
   const auth = { Authorization: `Bearer ${token}` };
   assert.equal((await fetch(`${base}/health`)).status, 401, "health requires the token");
   assert.equal((await fetch(`${base}/health`, { headers: auth })).status, 200);
-  const help = await fetch(base);
-  assert.equal(help.status, 401);
-  assert.match(await help.text(), /link printed in the terminal/);
   const opened = await fetch(link, { redirect: "manual" });
-  assert.equal(opened.status, 303);
-  assert.equal(opened.headers.get("Location"), "/");
-  const cookie = opened.headers.get("Set-Cookie")!.split(";")[0]!;
-  const page = await fetch(base, { headers: { Cookie: cookie } });
+  assert.equal(opened.status, 200, "launch page is public; its script consumes the query token");
+  assert.doesNotMatch(opened.headers.get("Set-Cookie") ?? "", new RegExp(token));
+  const page = await fetch(base);
+  assert.equal(page.status, 200);
+  const cookie = `mcp_studio_${port}=${token}`;
+  assert.equal((await fetch(`${base}/collections`, { headers: { Cookie: cookie } })).status, 401, "old cookie never authorizes REST");
   for (const [name, value] of [["X-Frame-Options", "DENY"], ["X-Content-Type-Options", "nosniff"], ["Referrer-Policy", "no-referrer"]]) {
     assert.equal(page.headers.get(name), value, `${name} on HTML`);
   }
@@ -73,10 +72,10 @@ try {
   assert.doesNotMatch(html, /fonts\.googleapis/, "no Google Fonts");
   const asset = html.match(/src="(\/assets\/[^\"]+\.js)"/)?.[1];
   assert(asset, "built script linked");
-  assert.equal((await fetch(`${base}${asset}`, { headers: { Cookie: cookie } })).status, 200);
-  assert.equal((await fetch(`${base}/theme-init.js`, { headers: { Cookie: cookie } })).status, 200);
+  assert.equal((await fetch(`${base}${asset}`)).status, 200);
+  assert.equal((await fetch(`${base}/theme-init.js`)).status, 200);
   assert.deepEqual(await (await fetch(`${base}/collections`, { headers: auth })).json(), []);
-  assert.deepEqual(await (await fetch(`${base}/api/collections`, { headers: { Cookie: cookie } })).json(), []);
+  assert.deepEqual(await (await fetch(`${base}/api/collections`, { headers: auth })).json(), []);
   assert.equal((await fetch(`${base}/collections`)).status, 401, "REST requires the token");
   assert.equal((await fetch(`${base}/assets/missing.js`, { headers: auth })).status, 404);
   assert.equal((await fetch(`${base}/collections`, { headers: { ...auth, Origin: "https://evil.example" } })).status, 403);
@@ -104,13 +103,13 @@ try {
     headers: { Connection: "Upgrade", Upgrade: "websocket", "Sec-WebSocket-Version": "13", "Sec-WebSocket-Key": "dGhlIHNhbXBsZSBub25jZQ==" },
   })).status, 401, "WebSocket requires the token");
   await new Promise<void>((resolve, reject) => {
-    const ws = new WebSocket(`ws://localhost:${port}/ws`, { headers: { Cookie: cookie } } as unknown as string[]);
+    const ws = new WebSocket(`ws://localhost:${port}/ws`, ["mcp-studio", `token.${token}`]);
     const timer = setTimeout(() => { ws.close(); reject(new Error("WS timeout")); }, 3000);
-    ws.onopen = () => { clearTimeout(timer); ws.close(); resolve(); };
+    ws.onopen = () => { assert.equal(ws.protocol, "mcp-studio"); clearTimeout(timer); ws.close(); resolve(); };
     ws.onerror = () => { clearTimeout(timer); reject(new Error("WS failed")); };
   });
   assert.equal(await Bun.file(marker).exists(), false, "--no-open suppresses browser");
-  console.log("PASS: --help, --version, unknown flags, --port, --no-open, launch-token link + help page, security headers, HTML + asset, REST + /api, WebSocket, Host + origin rejection, traversal rejection, arbitrary cwd");
+  console.log("PASS: --help, --version, unknown flags, --port, --no-open, origin-scoped launch token + cookie rejection, security headers, HTML + asset, REST + /api, WebSocket, Host + origin rejection, traversal rejection, arbitrary cwd");
 } finally {
   child.kill();
   await child.exited;

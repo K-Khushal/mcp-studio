@@ -10,8 +10,8 @@ export default defineConfig({
   reporter: [['./live-reporter.ts'], ['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
   use: {
     actionTimeout: 15_000, baseURL: studioURL, viewport: { width: 1440, height: 1000 }, trace: 'retain-on-failure', screenshot: 'only-on-failure',
-    // The session cookie the printed link sets (ADR-0007); local.spec covers the link itself.
-    storageState: { cookies: [{ name: `mcp_studio_${new URL(studioURL).port}`, value: studioToken, domain: 'localhost', path: '/', expires: -1, httpOnly: true, secure: false, sameSite: 'Strict' }], origins: [] },
+    // Launch credentials are scoped to the browser origin, including its port (ADR-0007).
+    storageState: { cookies: [], origins: [{ origin: studioURL, localStorage: [{ name: 'mcp-studio.launch-token', value: studioToken }] }] },
   },
   webServer: {
     command: 'bun runtime.ts',

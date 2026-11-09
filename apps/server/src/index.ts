@@ -9,7 +9,7 @@ import { createConnection, deleteConnection, updateConnection } from "./db/queri
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
 import { clearOAuthCredentials, oauthStorage } from "./db/queries/oauth-credentials.js";
 import { oauthCallbackResponse, OAuthRedirects } from "./oauth/redirects.js";
-import { denied, exchangeToken, isAuthorized, resolveToken } from "./http/access.js";
+import { clearLegacyCookie, hasWebSocketToken, isAuthorized, resolveToken, unauthorized } from "./http/access.js";
 import { BadRequest, parseExtraOrigin, readJsonObject, withSecurityHeaders } from "./http/security.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
@@ -55,15 +55,30 @@ async function route(req: Request, server: Server<SocketData>): Promise<Response
     return new Response(null, { status: 204, headers: corsHeaders() });
   }
 
-  // OAuth redirect from the authorization server: a cross-site navigation, so the SameSite
-  // cookie is absent; the single-use state authenticates it instead (ADR-0007).
+  // OAuth redirects authenticate with single-use state (ADR-0007).
   if (req.method === "GET" && url.pathname === "/oauth/callback") {
     return oauthCallbackResponse(url, oauthRedirects);
   }
 
-  const exchanged = exchangeToken(req, url, token, port, devAppOrigin);
-  if (exchanged) return exchanged;
-  if (!isAuthorized(req, token, port)) return denied(req, url.pathname);
+  // Development hands the launch URL to Vite; the page consumes the token at its own origin.
+  if (devAppOrigin && req.method === "GET" && url.pathname === "/" && url.searchParams.has("token")) {
+    return new Response(null, { status: 303, headers: { Location: `${devAppOrigin}/${url.search}`, "Cache-Control": "no-store" } });
+  }
+
+  if (production && (req.method === "GET" || req.method === "HEAD")) {
+    let pathname: string;
+    try { pathname = decodeURIComponent(url.pathname); }
+    catch { return new Response("Bad path", { status: 400 }); }
+    if (pathname.includes("\0")) return new Response("Bad path", { status: 400 });
+    const path = resolve(webRoot, pathname === "/" ? "index.html" : `.${pathname}`);
+    if (path.startsWith(resolve(webRoot) + sep)) {
+      const file = Bun.file(path);
+      if (await file.exists()) return new Response(req.method === "HEAD" ? null : file, {
+        headers: { "Content-Type": file.type },
+      });
+    }
+  }
+  if (!isAuthorized(req, token) && !(url.pathname === "/ws" && hasWebSocketToken(req, token))) return unauthorized();
 
   // ---------------------------------------------------------------------------
   // Health
@@ -159,24 +174,14 @@ async function route(req: Request, server: Server<SocketData>): Promise<Response
   // WebSocket upgrade
   // ---------------------------------------------------------------------------
   if (url.pathname === "/ws") {
-    const upgraded = server.upgrade(req, { data: { session: null } });
+    const upgraded = server.upgrade(req, {
+      data: { session: null },
+      ...(hasWebSocketToken(req, token) ? { headers: { "Sec-WebSocket-Protocol": "mcp-studio" } } : {}),
+    });
     if (!upgraded) return new Response("WebSocket upgrade failed", { status: 426 });
     return undefined;
   }
 
-  if (production && (req.method === "GET" || req.method === "HEAD")) {
-    let pathname: string;
-    try { pathname = decodeURIComponent(url.pathname); }
-    catch { return new Response("Bad path", { status: 400 }); }
-    if (pathname.includes("\0")) return new Response("Bad path", { status: 400 });
-    const path = resolve(webRoot, pathname === "/" ? "index.html" : `.${pathname}`);
-    if (path.startsWith(resolve(webRoot) + sep)) {
-      const file = Bun.file(path);
-      if (await file.exists()) return new Response(req.method === "HEAD" ? null : file, {
-        headers: { "Content-Type": file.type },
-      });
-    }
-  }
   return new Response("Not found", { status: 404 });
 }
 
@@ -195,12 +200,12 @@ const websocket: Bun.WebSocketHandler<SocketData> = {
 
   async message(ws, raw) {
     if (!ws.data.session) return;
-    const parsed = parseClientMessage(String(raw));
-    if ("error" in parsed) {
-      ws.send(JSON.stringify(parsed.error));
-      return;
-    }
     try {
+      const parsed = parseClientMessage(typeof raw === "string" ? raw : raw.toString("utf8"));
+      if ("error" in parsed) {
+        ws.send(JSON.stringify(parsed.error));
+        return;
+      }
       const activeEnv = await getActiveEnvironment();
       ws.data.session.setActiveEnv(activeEnv?.variables ?? {});
       await ws.data.session.handle(parsed.message);
@@ -225,7 +230,7 @@ function serve(hostname: string, requestedPort: number): Server<SocketData> {
     async fetch(req, server) {
       try {
         const response = await route(req, server);
-        return response && withSecurityHeaders(response);
+        return response && withSecurityHeaders(clearLegacyCookie(response, port));
       } catch (error) {
         if (error instanceof BadRequest) return withSecurityHeaders(new Response(error.message, { status: 400 }));
         throw error;

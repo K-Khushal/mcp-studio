@@ -15,7 +15,6 @@ describe("requests without the Launch token are rejected", () => {
     ["POST", "/collections/x/connections"], ["PATCH", "/collections/x/connections/y"], ["DELETE", "/collections/x/connections/y"],
     ["DELETE", "/collections/x/connections/y/oauth"],
     ["GET", "/environments"], ["GET", "/api/environments"], ["POST", "/environments"], ["PATCH", "/environments/x"], ["DELETE", "/environments/x"],
-    ["GET", "/assets/app.js"], ["GET", "/index.html"],
   ] as const) {
     test(`${method} ${path} → 401`, async () => {
       const response = await studio.request(path, { method, auth: false, ...(method === "GET" ? {} : { body: "{}" }) });
@@ -59,20 +58,26 @@ describe("requests without the Launch token are rejected", () => {
 });
 
 describe("requests with the Launch token are served", () => {
-  test("bearer token and cookie both unlock REST, including the /api alias", async () => {
+  test("only bearer tokens unlock REST, including the /api alias", async () => {
     expect((await studio.request("/collections")).status).toBe(200);
     expect((await studio.request("/api/collections")).status).toBe(200);
-    expect((await studio.request("/collections", { auth: false, headers: { Cookie: `other=1; ${cookie()}` } })).status).toBe(200);
+    expect((await studio.request("/collections", { auth: false, headers: { Cookie: `other=1; ${cookie()}` } })).status).toBe(401);
   });
 
-  test("the /ws upgrade opens with a bearer token or the cookie", async () => {
-    for (const headers of [{ Authorization: `Bearer ${TEST_TOKEN}` }, { Cookie: cookie() }]) {
+  test("the /ws upgrade authenticates Bearer scripts and browser subprotocols, never cookies", async () => {
+    for (const [credential, allowed] of [
+      [{ headers: { Authorization: `Bearer ${TEST_TOKEN}` } }, true],
+      [["mcp-studio", `token.${TEST_TOKEN}`], true],
+      [["mcp-studio", "token.wrong"], false],
+      [[`token.${TEST_TOKEN}`], false],
+      [{ headers: { Cookie: cookie() } }, false],
+    ] as const) {
       const opened = await new Promise<boolean>(resolve => {
-        const ws = new WebSocket(`ws://localhost:${studio.port}/ws`, { headers } as unknown as string[]);
-        ws.onopen = () => { ws.close(); resolve(true); };
+        const ws = new WebSocket(`ws://localhost:${studio.port}/ws`, credential as unknown as string[]);
+        ws.onopen = () => { expect(ws.protocol).toBe(Array.isArray(credential) ? "mcp-studio" : ""); ws.close(); resolve(true); };
         ws.onerror = () => resolve(false);
       });
-      expect(opened).toBe(true);
+      expect(opened).toBe(allowed);
     }
   });
 
@@ -84,35 +89,23 @@ describe("requests with the Launch token are served", () => {
 });
 
 describe("the printed link", () => {
-  test("?token= sets an HttpOnly SameSite=Strict cookie and redirects to strip the token", async () => {
-    const response = await studio.request(`/?token=${TEST_TOKEN}`, { auth: false });
-    expect(response.status).toBe(303);
-    expect(response.headers.get("Location")).toBe("/");
-    const setCookie = response.headers.get("Set-Cookie") ?? "";
-    expect(setCookie).toStartWith(`${cookie()};`);
-    for (const attribute of ["HttpOnly", "SameSite=Strict", "Path=/"]) expect(setCookie).toContain(attribute);
-    const app = await studio.request("/", { auth: false, headers: { Cookie: cookie() } });
-    expect(app.status).toBe(200);
-    expect(await app.text()).toContain("STUDIO_APP_SHELL");
-  });
-
-  test("other query parameters survive the redirect", async () => {
-    const response = await studio.request(`/?a=1&token=${TEST_TOKEN}&b=2`, { auth: false });
-    expect(response.headers.get("Location")).toBe("/?a=1&b=2");
-  });
-
-  for (const path of ["/", "/?token=wrong"]) {
-    test(`${path} without a valid token shows the help page`, async () => {
+  test("HTML and assets are public, never exchange a query token for a cookie", async () => {
+    for (const path of ["/", "/index.html", `/?token=${TEST_TOKEN}`, "/?token=wrong", "/assets/app.js"]) {
       const response = await studio.request(path, { auth: false });
-      expect(response.status).toBe(401);
-      expect(response.headers.get("Content-Type")).toContain("text/html");
-      expect(response.headers.get("Set-Cookie")).toBeNull();
-      const text = await response.text();
-      expect(text).toContain("terminal");
-      expect(text).not.toContain("STUDIO_APP_SHELL");
-      expect(text).not.toContain("<script");
-    });
-  }
+      expect(response.status).toBe(200);
+      expect(response.headers.get("Location")).toBeNull();
+      expect(response.headers.get("Set-Cookie")).not.toContain(TEST_TOKEN);
+    }
+  });
+
+  test("old launch cookies are expired on page load", async () => {
+    const response = await studio.request("/", { auth: false, headers: { Cookie: cookie() } });
+    expect(response.headers.get("Set-Cookie")).toBe(`mcp_studio_${studio.port}=; Max-Age=0; HttpOnly; SameSite=Strict; Path=/`);
+  });
+
+  test("a token in the query never authorizes a REST call", async () => {
+    expect((await studio.request(`/collections?token=${TEST_TOKEN}`, { auth: false })).status).toBe(401);
+  });
 
   test("the OAuth callback is authenticated by its state, not the cookie", async () => {
     const response = await studio.request("/oauth/callback?state=unknown&code=x", { auth: false });

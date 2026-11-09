@@ -23,13 +23,13 @@ const { startHTTPFixture } = await import('./fixture-transports');
 const streamable = await startHTTPFixture();
 const sse = await startHTTPFixture('sse');
 const root = new URL('../', import.meta.url).pathname;
-async function start() {
+async function start(token = studioToken) {
   child = Bun.spawn([process.execPath, join(root, 'dist/cli.js'), '--port', new URL(studioURL).port, '--no-open'], {
-    cwd: root, env: { ...process.env, STUDIO_DB_PATH: join(directory, 'studio.db'), STUDIO_TOKEN: studioToken }, stdout: 'inherit', stderr: 'inherit',
+    cwd: root, env: { ...process.env, STUDIO_DB_PATH: join(directory, 'studio.db'), STUDIO_TOKEN: token }, stdout: 'inherit', stderr: 'inherit',
   });
   for (let attempt = 0; attempt < 100; attempt++) {
     if (child.exitCode !== null) throw new Error(`Packaged CLI exited: ${child.exitCode}`);
-    if (await fetch(`${studioURL}/health`, { headers: { Authorization: `Bearer ${studioToken}` } }).then(r => r.ok).catch(() => false)) return;
+    if (await fetch(`${studioURL}/health`, { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok).catch(() => false)) return;
     await Bun.sleep(100);
   }
   throw new Error('Packaged CLI did not become healthy');
@@ -37,7 +37,7 @@ async function start() {
 await start();
 Bun.serve({ hostname: 'localhost', port: Number(new URL(fixtureURL).port), async fetch(request) {
   if (new URL(request.url).pathname === '/restart' && request.method === 'POST') {
-    child!.kill(); await child!.exited; await start();
+    child!.kill(); await child!.exited; await start(new URL(request.url).searchParams.get('token') ?? studioToken);
     return Response.json({ restarted: true });
   }
   return Response.json({

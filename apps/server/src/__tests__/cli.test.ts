@@ -42,15 +42,15 @@ test("CLI prints a link with a fresh Launch token that unlocks the Studio Server
   const first = await launch();
   try {
     expect((await fetch(`http://localhost:${first.port}/collections`)).status).toBe(401);
-    const opened = await fetch(first.link, { redirect: "manual" });
-    expect(opened.status).toBe(303);
-    const cookie = opened.headers.get("Set-Cookie")!.split(";")[0]!;
-    expect((await fetch(`http://localhost:${first.port}/collections`, { headers: { Cookie: cookie } })).status).toBe(200);
+    const token = new URL(first.link).searchParams.get("token")!;
+    expect((await fetch(`http://localhost:${first.port}/collections`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(200);
+    expect((await fetch(`http://localhost:${first.port}/collections`, { headers: { Cookie: `mcp_studio_${first.port}=${token}` } })).status).toBe(401);
     first.child.kill();
     await first.child.exited;
     const second = await launch();
     try {
       expect(second.link.split("token=")[1]).not.toBe(first.link.split("token=")[1]);
+      expect((await fetch(`http://localhost:${second.port}/collections`, { headers: { Authorization: `Bearer ${token}` } })).status).toBe(401);
     } finally { second.child.kill(); await second.child.exited; }
   } finally { first.child.kill(); await first.child.exited; }
 }, 15000);
