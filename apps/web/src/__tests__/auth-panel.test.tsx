@@ -50,7 +50,7 @@ describe("AuthPanel", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }));
 
-    await waitFor(() => expect(error).toHaveBeenCalledWith("Failed to sign out"));
+    await waitFor(() => expect(error).toHaveBeenCalledWith("Failed to sign out", { duration: 10_000 }));
     expect(success).not.toHaveBeenCalled();
   });
 });

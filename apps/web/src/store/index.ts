@@ -551,7 +551,7 @@ export const useStore = create<AppState & AppActions>()(
           if (!response.ok) throw new Error("Sign-out failed");
           return true;
         } catch {
-          toast.error("Failed to sign out");
+          toast.error("Failed to sign out", { duration: 10_000 });
           return false;
         }
       },
@@ -633,7 +633,7 @@ export const useStore = create<AppState & AppActions>()(
         const state = get();
         if (state.response.isRunning) return;
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
-          toast.error("Not connected", { description: "Connect the selected Connection first." });
+          toast.error("Not connected", { duration: 10_000, description: "Connect the selected Connection first." });
           return;
         }
 
@@ -673,7 +673,7 @@ export const useStore = create<AppState & AppActions>()(
         const state = get();
         if (state.response.isRunning) return;
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
-          toast.error("Not connected", { description: "Connect the selected Connection first." });
+          toast.error("Not connected", { duration: 10_000, description: "Connect the selected Connection first." });
           return;
         }
 
@@ -1176,7 +1176,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
     case "disconnected":
       if (msg.reason) {
-        toast.error("Session disconnected", { description: msg.reason });
+        toast.error("Session disconnected", { duration: 10_000, description: msg.reason });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       }
       useStore.setState((s) => ({

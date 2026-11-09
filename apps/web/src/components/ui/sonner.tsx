@@ -10,6 +10,8 @@ const Toaster = ({ ...props }: ToasterProps) => {
       theme={theme as ToasterProps["theme"]}
       className="toaster group"
       closeButton
+      offset={{ bottom: 72 }}
+      mobileOffset={{ bottom: 72 }}
       icons={{
         success: (
           <CircleCheckIcon className="size-4" />
@@ -36,7 +38,7 @@ const Toaster = ({ ...props }: ToasterProps) => {
         } as React.CSSProperties
       }
       toastOptions={{
-        duration: 10_000,
+        duration: 4_000,
         classNames: {
           toast: "cn-toast",
         },

@@ -1,7 +1,8 @@
 import { useLayoutEffect, useRef, useState } from "react";
 import { useStore } from '@/store';
-import { ChevronUp, ChevronDown, ChevronRight, Search, Copy } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronRight, Search } from "lucide-react";
 import type { LogLevel, LogSource } from "@mcp-studio/types";
+import { CopyButton } from "../response/copy-button";
 import { cn } from "@/lib/utils";
 import type { LogEntry } from "@/store";
 import { LOG_LEVELS, LOG_SOURCES, filterLogs, formatLogLine } from "./filter-logs";
@@ -147,13 +148,15 @@ export function LogsPanel() {
       )}
       <button
         onClick={toggleLogs}
+        aria-expanded={logsOpen}
+        aria-controls="logs-body"
         className="w-full flex items-center justify-between px-4 h-8 text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground transition-colors"
       >
         <span>Console ({logs.length})</span>
         {logsOpen ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
       </button>
       {logsOpen && (
-        <div className="flex flex-col h-[calc(100%-2rem)]">
+        <div id="logs-body" className="flex flex-col h-[calc(100%-2rem)]">
           <div className="flex flex-wrap items-center gap-2 px-3 py-1 border-b border-border">
             <div role="group" aria-label="Filter by level" className="flex items-center gap-1">
               {LOG_LEVELS.map((l) => (
@@ -196,24 +199,16 @@ export function LogsPanel() {
                 placeholder="Filter logs..."
                 className={cn(
                   "bg-muted rounded w-36 text-xs text-foreground transition-colors duration-150",
-                  "pl-7 pr-2 py-0.5",
+                  "pl-7 pr-2 py-1",
                   "placeholder:text-muted-foreground",
                   "focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 )}
               />
             </div>
-            <button
-              onClick={() =>
-                navigator.clipboard.writeText(
-                  filtered.map((l) => formatLogLine(l, formatTimestamp(l.timestamp))).join("\n"),
-                )
-              }
-              title="Copy logs"
-              aria-label="Copy logs"
-              className="text-muted-foreground hover:text-foreground transition-colors cursor-pointer"
-            >
-              <Copy size={12} />
-            </button>
+            <CopyButton
+              label="Copy logs"
+              text={filtered.map((l) => formatLogLine(l, formatTimestamp(l.timestamp))).join("\n")}
+            />
           </div>
           <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-1 font-mono text-xs leading-5">
             {filtered.map((log) => (

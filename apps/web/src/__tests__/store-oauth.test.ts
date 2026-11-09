@@ -81,5 +81,5 @@ it("reports a failed sign-out instead of silently retaining credentials", async 
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("private diagnostic", { status: 500 })));
   const error = vi.spyOn(toast, "error").mockReturnValue("sign-out-error");
   await useStore.getState().signOut("col-1", "conn-1");
-  expect(error).toHaveBeenCalledWith("Failed to sign out");
+  expect(error).toHaveBeenCalledWith("Failed to sign out", { duration: 10_000 });
 });
