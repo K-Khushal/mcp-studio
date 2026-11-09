@@ -1,3 +1,4 @@
+import { isCallToolResult } from "@mcp-studio/types";
 import type { ElicitationResult } from "@mcp-studio/types";
 import { boundedText, StdioMCPClient, StreamableHTTPClient, redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
@@ -171,8 +172,10 @@ export class SessionManager {
     this.connectionTemplate = this.connectionConfig = null;
     this.referencedVariables.clear();
   }
-  private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) =>
-    this.send({ type: "log", level, source, message: boundedText(message), timestamp: Date.now(), ...(payload ? { payload: { ...payload, body: new TextEncoder().encode(JSON.stringify(payload.body) ?? "").length > 16 * 1024 ? boundedText(JSON.stringify(payload.body) ?? "") : payload.body } } : {}) });
+  private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) => {
+    const serialized = payload ? JSON.stringify(payload.body) ?? "" : "";
+    this.send({ type: "log", level, source, message: boundedText(message), timestamp: Date.now(), ...(payload ? { payload: { ...payload, body: new TextEncoder().encode(serialized).length > 16 * 1024 ? boundedText(serialized) : payload.body } } : {}) });
+  };
 
   private setStatus(status: ConnectionStatus): void {
     this.status = status;
@@ -314,14 +317,7 @@ export class SessionManager {
       // Studio owns the pausable deadline; keep the SDK fallback from expiring behind a form.
       const result = await execute(this.client, requestId, { signal: controller.signal, timeout: 2_147_483_647 });
       if (controller.signal.aborted) throw controller.signal.reason;
-      const serialized = JSON.stringify(result);
-      const bytes = new TextEncoder().encode(serialized).length;
-      if (bytes > 1024 * 1024) {
-        const text = `Response truncated, ${bytes} bytes (limit 1048576 bytes). Preview: ${boundedText(serialized, 16 * 1024)}`;
-        this.send(result.type === "result"
-          ? { type: "result", requestId, data: { content: [{ type: "text", text }] } }
-          : { type: "prompt_result", requestId, messages: [{ role: "assistant", content: { type: "text", text } }] });
-      } else this.send(result);
+      this.send(boundResult(result));
     } catch (err) {
       if (controller.signal.reason === "cancelled") {
         this.send({ type: "cancelled", requestId });
@@ -430,4 +426,41 @@ export class SessionManager {
     return result;
   }
 
+}
+
+/** Preserve result metadata and unaffected blocks; never turn a whole Call into a preview. */
+function boundResult(result: ServerMessage): ServerMessage {
+  const encoder = new TextEncoder();
+  const size = (value: unknown) => encoder.encode(JSON.stringify(value)).length;
+  const overallLimit = 16 * 1024 * 1024;
+  const blockLimit = 8 * 1024 * 1024;
+  const candidates: { bytes: number; replace(): void }[] = [];
+  const block = <T,>(value: T): T => {
+    if (!value || typeof value !== "object" || !("type" in value) || (value.type !== "text" && value.type !== "image")) return value;
+    const bytes = size(value);
+    return bytes > blockLimit ? notice(bytes) as T : value;
+  };
+  const notice = (bytes: number) => ({ type: "text" as const, text: `Response block truncated, ${bytes} bytes (block limit ${blockLimit}; response limit ${overallLimit} bytes).` });
+  let bounded = result;
+  if (result.type === "result" && isCallToolResult(result.data)) {
+    const content = result.data.content.map(block);
+    bounded = { ...result, data: { ...result.data, content } };
+    content.forEach((value, i) => {
+      if (value.type === "text" || value.type === "image") candidates.push({ bytes: size(value), replace: () => { content[i] = notice(size(value)); } });
+    });
+  } else if (result.type === "prompt_result") {
+    const messages = result.messages.map(message => ({ ...message, content: block(message.content) }));
+    bounded = { ...result, messages };
+    messages.forEach(message => {
+      if (message.content.type === "text" || message.content.type === "image") candidates.push({ bytes: size(message.content), replace: () => { message.content = notice(size(message.content)); } });
+    });
+  }
+  let bytes = size(bounded);
+  for (const candidate of candidates.sort((a, b) => b.bytes - a.bytes)) {
+    if (bytes <= overallLimit) break;
+    candidate.replace();
+    bytes = size(bounded);
+  }
+  if (bytes > overallLimit) throw new Error(`Response exceeds ${overallLimit} bytes in structured content or non-text/image blocks`);
+  return bounded;
 }

@@ -1,3 +1,4 @@
+import { isCallToolResult } from "@mcp-studio/types";
 import { expect, test } from "bun:test";
 import { SessionHarness, startHTTPFixture, stdioFixture } from "./fixtures/session-harness";
 
@@ -181,18 +182,31 @@ test("STDIO connects with tools and a Studio WARN when prompts/list fails", asyn
   }
 });
 
-test('huge tool and prompt responses forward bounded previews with byte notices', async () => {
+test('ordinary multi-megabyte tool and prompt results remain intact', async () => {
+  const session = new SessionHarness();
+  const text = 'x'.repeat(2 * 1024 * 1024);
+  try {
+    await session.send(stdioFixture);
+    await session.send({ type: 'invoke', tool: 'echo', params: { text } });
+    expect(await session.waitFor('result')).toMatchObject({ data: { content: [{ type: 'text', text }] } });
+    await session.send({ type: 'invoke_prompt', prompt: 'greet', args: { name: text } });
+    expect(await session.waitFor('prompt_result')).toMatchObject({ messages: [{ content: { text: `Hello, ${text}!` } }] });
+  } finally { await session.close(); }
+});
+
+for (const kind of ['text', 'image']) test(`oversize ${kind} blocks are replaced independently while structured content and other blocks survive`, async () => {
   const session = new SessionHarness();
   try {
     await session.send(stdioFixture);
-    await session.waitFor('connected');
-    await session.send({ type: 'invoke', tool: 'echo', params: { text: 'x'.repeat(2 * 1024 * 1024) } });
+    await session.send({ type: 'invoke', tool: 'large-blocks', params: { text: kind } });
     const result = await session.waitFor('result');
-    expect(JSON.stringify(result)).toContain('Response truncated,');
-    expect(JSON.stringify(result).length).toBeLessThan(20000);
-    await session.send({ type: 'invoke_prompt', prompt: 'greet', args: { name: 'x'.repeat(2 * 1024 * 1024) } });
-    const prompt = await session.waitFor('prompt_result');
-    expect(JSON.stringify(prompt)).toContain('Response truncated,');
-    expect(JSON.stringify(prompt).length).toBeLessThan(20000);
+    if (!isCallToolResult(result.data)) throw new Error("Expected tool result");
+    expect(result.data.structuredContent).toEqual({ answer: 42 });
+    expect(result.data.content).toMatchObject([
+      { type: 'text', text: expect.stringContaining('Response block truncated,') },
+      { type: 'text', text: 'keep me' },
+      { type: 'image', mimeType: 'image/png', data: 'a'.repeat(256 * 1024) },
+    ]);
+    expect(JSON.stringify(result).length).toBeLessThan(3 * 1024 * 1024);
   } finally { await session.close(); }
 });

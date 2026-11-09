@@ -85,8 +85,10 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
           const result = Object.hasOwn(results, entry.name) ? results[entry.name] : undefined;
           return <li key={entry.name} className="flex items-start justify-between gap-4 py-3">
             <div className="min-w-0"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}{config?.transport === 'stdio' && <div className="break-all text-muted-foreground">
-              <p>Args: {JSON.stringify(config.config.args)}</p>
-              <p>Env: {JSON.stringify(config.config.env)}</p>
+              <p>Args:</p>
+              <ul aria-label={`${entry.name} arguments`} className="list-inside list-disc">{config.config.args.map((arg, index) => <li key={index}>{arg}</li>)}</ul>
+              <p>Env:</p>
+              <ul aria-label={`${entry.name} environment`} className="list-inside list-disc">{Object.entries(config.config.env).map(([name, value]) => <li key={name}>{name}: {/secret|token|password|passwd|credential|key/i.test(name) ? '•••••••• (masked)' : value}</li>)}</ul>
               <p>Inherit system environment: {config.config.inheritSystemEnv ? 'Yes — all Studio process variables' : 'No'}</p>
             </div>}</div>
             <p className={`max-w-[55%] ${entry.error || (result && result !== 'Imported') ? 'text-destructive-text' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>

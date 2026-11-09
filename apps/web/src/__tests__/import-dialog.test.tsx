@@ -37,8 +37,21 @@ it('previews args, env and inheritance for a Connection named __proto__', () => 
   useStore.setState({ collections: [] });
   render(<ImportConnectionsDialog onClose={() => {}} />);
   fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: '{"mcpServers":{"__proto__":{"command":"bun","args":["server.ts"],"env":{"MODE":"test"}}}}' } });
-  expect(screen.getByText(/Args:.*server.ts/)).toBeInTheDocument();
-  expect(screen.getByText(/Env:.*MODE.*test/)).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: '__proto__ arguments' })).toHaveTextContent('server.ts');
+  expect(screen.getByRole('list', { name: '__proto__ environment' })).toHaveTextContent('MODE: test');
   expect(screen.getByText(/Inherit system environment: Yes/)).toBeInTheDocument();
   expect(screen.getByRole('button', { name: 'Import 1 Connection' })).toBeDisabled();
+});
+
+it('masks sensitive environment values in the preview while keeping imported values', async () => {
+  useStore.setState({ collections: [{ id: 'c', name: 'Target', connections: [], createdAt: 0, updatedAt: 0 }] });
+  const fetch = vi.fn(async (_url, init) => new Response(JSON.stringify({ id: 'new', ...JSON.parse(init.body), createdAt: 0, updatedAt: 0 })));
+  vi.stubGlobal('fetch', fetch);
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: JSON.stringify({ mcpServers: { local: { command: 'bun', args: ['one', 'two'], env: { API_TOKEN: 'private-value', MODE: 'test' } } } }) } });
+  expect(screen.getByRole('list', { name: 'local environment' })).toHaveTextContent('API_TOKEN: •••••••• (masked)');
+  expect(screen.getByRole('list', { name: 'local environment' })).not.toHaveTextContent('private-value');
+  expect(screen.getByRole('list', { name: 'local arguments' }).children).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
+  expect(useStore.getState().collections[0]?.connections[0]?.connectionConfig).toMatchObject({ config: { env: { API_TOKEN: 'private-value' } } });
 });

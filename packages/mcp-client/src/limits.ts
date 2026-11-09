@@ -24,20 +24,34 @@ export class BoundedLines {
   }
 }
 
-/** Bound bytes consumed by SDK JSON and SSE parsers; cancel on overflow. */
+/** Bound JSON bodies cumulatively and SSE events individually before SDK parsing. */
 export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024): Response {
   if (!response.body) return response;
   const reader = response.body.getReader();
+  const sse = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase() === 'text/event-stream';
   let bytes = 0;
+  let lineBytes = 0;
+  let afterCR = false;
   const body = new ReadableStream<Uint8Array>({
     async pull(controller) {
       try {
         const next = await reader.read();
         if (next.done) { controller.close(); return; }
-        bytes += next.value.byteLength;
+        if (sse) {
+          for (const byte of next.value) {
+            if (afterCR && byte === 10) { afterCR = false; continue; }
+            afterCR = byte === 13;
+            bytes++;
+            if (bytes > maxBytes) break;
+            if (byte === 10 || byte === 13) {
+              if (lineBytes === 0) bytes = 0;
+              lineBytes = 0;
+            } else lineBytes++;
+          }
+        } else bytes += next.value.byteLength;
         if (bytes > maxBytes) {
           await reader.cancel();
-          controller.error(new Error(`HTTP body exceeds ${maxBytes} bytes (truncated)`));
+          controller.error(new Error(`HTTP ${sse ? "SSE event" : "body"} exceeds ${maxBytes} bytes (truncated)`));
           return;
         }
         controller.enqueue(next.value);

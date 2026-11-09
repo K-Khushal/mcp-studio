@@ -18,3 +18,9 @@ it('cancels oversized HTTP bodies while allowing bounded responses', async () =>
   await expect(response.text()).rejects.toThrow(/exceeds 16 bytes/);
   expect(await limitResponseBody(new Response('ok'), 16).text()).toBe('ok');
 });
+it.each(['\n', '\r', '\r\n'])('bounds individual SSE events across chunks (%j)', async newline => {
+  const chunks = [...`data: ok${newline}${newline}data: ok${newline}${newline}`].map(c => new TextEncoder().encode(c));
+  const response = new Response(new ReadableStream({ pull(c) { const next = chunks.shift(); if (next) c.enqueue(next); else c.close(); } }), { headers: { 'content-type': 'Text/Event-Stream; charset=utf-8' } });
+  expect(await limitResponseBody(response, 16).text()).toContain('data: ok');
+  await expect(limitResponseBody(new Response(`data: ${'x'.repeat(32)}\n\n`, { headers: { 'content-type': 'text/event-stream' } }), 16).text()).rejects.toThrow(/SSE event exceeds/);
+});
