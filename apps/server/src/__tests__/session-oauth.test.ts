@@ -303,3 +303,20 @@ test("SDK scope discovery and token response metadata stays private", async () =
   const responses = session.messages.filter(message => message.type === "http_response");
   expect(responses.every(message => !("x-fixture-oauth" in message.headers))).toBe(true);
 });
+
+test("refresh rejection fails the Call and leaves browser re-authorization to reconnect", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  fixture.revokeTokens();
+  const outcome = Promise.race([
+    session.waitFor("error").then(() => "failed"),
+    session.waitFor("oauth_authorize").then(() => "reauthorize"),
+  ]);
+  const calling = session.send({ type: "invoke", tool: "echo", params: { text: "revoked" } });
+  try {
+    expect(await outcome).toBe("failed");
+  } finally {
+    await session.send({ type: "disconnect" });
+    await calling;
+  }
+});

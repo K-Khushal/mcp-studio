@@ -121,7 +121,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
       if (authProvider && needsAuthorization(response)) {
         const headers = new Headers(init?.headers);
         await response.body?.cancel();
-        await authProvider.authenticate(url, headers.get("authorization"), response, authFetch);
+        await authProvider.authenticate(url, headers.get("authorization"), response, authFetch, !this.isConnected);
         this.signal.throwIfAborted();
         const tokens = await authProvider.tokens();
         if (!tokens) throw new Error("OAuth authentication failed");

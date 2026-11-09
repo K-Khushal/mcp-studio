@@ -71,7 +71,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   /** Coalesce the SDK's entire auth flow, including registration and browser approval. */
-  async authenticate(serverUrl: URL, rejectedAuthorization: string | null, response: Response, fetchFn: FetchLike): Promise<void> {
+  async authenticate(serverUrl: URL, rejectedAuthorization: string | null, response: Response, fetchFn: FetchLike, allowBrowserSignIn: boolean): Promise<void> {
     const key = this.signIn.storage.coordination ?? this.signIn.storage;
     let pending = authorizations.get(key);
     if (!pending) {
@@ -82,6 +82,11 @@ export class StudioOAuthProvider implements OAuthClientProvider {
         const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
         const options = { serverUrl, resourceMetadataUrl, scope, fetchFn };
         if (await auth(this, options) === "REDIRECT") {
+          // Re-authorization mid-Call is a follow-up; reconnect may open the browser.
+          if (!allowBrowserSignIn) {
+            this.pending = undefined;
+            throw new Error("OAuth authentication failed");
+          }
           const code = await this.authorizePending();
           this.signIn.signal?.throwIfAborted();
           if (!code || await auth(this, { ...options, authorizationCode: code }) !== "AUTHORIZED") {
