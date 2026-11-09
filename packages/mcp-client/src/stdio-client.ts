@@ -1,3 +1,4 @@
+import { rememberConnectionSecrets } from "./diagnostics.js";
 import { inspectionValidator } from "./inspection-validator.js";
 import { StringDecoder } from "node:string_decoder";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -23,6 +24,7 @@ export class StdioMCPClient extends BaseMCPClient {
     options: MCPClientOptions = {}
   ) {
     super(options);
+    rememberConnectionSecrets({ transport: "stdio", config }, this.diagnosticSecrets);
   }
 
   protected async setupTransport(): Promise<Client> {

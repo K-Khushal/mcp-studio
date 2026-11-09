@@ -24,7 +24,6 @@ import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
 import {
   DEFAULT_STDIO_DRAFT,
-  stdioDraftFromCommandLine,
   stdioDraftFromConfig,
   type StdioDraft,
 } from "./connection-form";
@@ -329,27 +328,10 @@ function connectionDraftFromConfig(config?: ConnectionConfig | null): Connection
 }
 
 function readPersistedConnectionDraft(): ConnectionDraft {
-  try {
-    const raw = localStorage.getItem("mcp-studio-connection");
-    if (!raw) return { ...DEFAULT_CONNECTION_DRAFT };
-    const parsed = JSON.parse(raw) as Partial<ConnectionDraft>;
-    const transport = parsed.transport === "http" ? "http" : "stdio";
-    return {
-      transport,
-      connectionUrl: transport === "http" ? parsed.connectionUrl ?? "" : "",
-      stdio: parsed.stdio ?? (transport === "stdio" ? stdioDraftFromCommandLine(parsed.connectionUrl ?? "") : DEFAULT_STDIO_DRAFT),
-      httpAuth: parsed.httpAuth ?? DEFAULT_HTTP_AUTH,
-      httpHeaders: parsed.httpHeaders ?? DEFAULT_HTTP_HEADERS,
-    };
-  } catch {
-    return { ...DEFAULT_CONNECTION_DRAFT };
-  }
-}
-
-function persistConnectionDraft(draft: ConnectionDraft): void {
-  try {
-    localStorage.setItem("mcp-studio-connection", JSON.stringify(draft));
-  } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
+  // Older versions stored complete credentials here. Discard them rather than
+  // hydrating them into another app sharing this browser origin.
+  try { localStorage.removeItem("mcp-studio-connection"); } catch { /* Storage may be disabled. */ }
+  return { ...DEFAULT_CONNECTION_DRAFT };
 }
 
 function connectionWorkspacePatch(workspace: ConnectionWorkspaceState): Pick<
@@ -738,8 +720,6 @@ export const useStore = create<AppState & AppActions>()(
           connectionDraftFromConfig(connection.connectionConfig) ??
           { ...DEFAULT_CONNECTION_DRAFT };
 
-        persistConnectionDraft(draft);
-
         set({
           ...blankWorkspacePatch(),
           selectedConnectionId: connection.id,
@@ -1010,7 +990,6 @@ export const useStore = create<AppState & AppActions>()(
             httpAuth: s.httpAuth,
             httpHeaders: s.httpHeaders,
           };
-          persistConnectionDraft(draft);
           return {
             transport: t,
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
@@ -1026,7 +1005,6 @@ export const useStore = create<AppState & AppActions>()(
             httpAuth: s.httpAuth,
             httpHeaders: s.httpHeaders,
           };
-          persistConnectionDraft(draft);
           return {
             stdio,
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
@@ -1041,7 +1019,6 @@ export const useStore = create<AppState & AppActions>()(
             httpAuth: s.httpAuth,
             httpHeaders: s.httpHeaders,
           };
-          persistConnectionDraft(draft);
           return {
             connectionUrl: url,
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
@@ -1056,7 +1033,6 @@ export const useStore = create<AppState & AppActions>()(
             httpAuth: auth,
             httpHeaders: s.httpHeaders,
           };
-          persistConnectionDraft(draft);
           return {
             httpAuth: auth,
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),
@@ -1071,7 +1047,6 @@ export const useStore = create<AppState & AppActions>()(
             httpAuth: s.httpAuth,
             httpHeaders: headers,
           };
-          persistConnectionDraft(draft);
           return {
             httpHeaders: headers,
             ...buildConnectionDraftsPatch(s.selectedConnectionId, s.connectionDrafts, draft),

@@ -46,14 +46,14 @@ export function createProtocolServer() {
         if (args.text === "slow-after-answer") await new Promise(resolve => setTimeout(resolve, 500));
         return text(JSON.stringify(result));
       }
-      case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Fixture log" }); return text("Logged");
+      case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: String(args.text ?? "Fixture log") }); return text("Logged");
       case "stderr": {
         if (args.text === "chunks") {
           for (const chunk of [Buffer.from("boo"), Buffer.from("ting\n"), Buffer.from([0xe2]), Buffer.from([0x82, 0xac, 0x0a]), Buffer.from("tail")]) {
             process.stderr.write(chunk);
             await new Promise(resolve => setTimeout(resolve, 30));
           }
-        } else process.stderr.write("Fixture stderr\n");
+        } else process.stderr.write(String(args.text ?? "Fixture stderr") + "\n");
         return text("Written to stderr");
       }
       case "crash": return process.exit(23);

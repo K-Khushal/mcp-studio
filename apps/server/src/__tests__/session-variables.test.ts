@@ -17,11 +17,11 @@ test("Session substitutes URL and tool arguments; unresolved Variables never rea
   const http = await startHTTPFixture();
   const session = new SessionHarness();
   try {
-    session.setActiveEnv({ URL: http.connection.config.url, TEXT: "resolved" });
+    session.setActiveEnv({ URL: http.connection.config.url, TEXT: "synthetic-resolved-call-value" });
     await session.send({ ...http.connection, config: { ...http.connection.config, url: "{{URL}}" } });
     await session.waitFor("connected");
     await session.send({ type: "invoke", tool: "echo", params: { text: "{{TEXT}}" } });
-    expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ text: "resolved" }] } });
+    expect(await session.waitFor("result")).toMatchObject({ data: { content: [{ text: "synthetic-resolved-call-value" }] } });
     for (const message of [
       { type: "invoke", tool: "echo", params: { text: "{{FIRST}} {{SECOND}} {{FIRST}}" } },
       { type: "invoke_prompt", prompt: "greet", args: { name: "{{FIRST}} {{SECOND}}" } },

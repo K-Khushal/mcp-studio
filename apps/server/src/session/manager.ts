@@ -1,5 +1,5 @@
 import type { ElicitationResult } from "@mcp-studio/types";
-import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
+import { StdioMCPClient, StreamableHTTPClient, redactDiagnosticValue, rememberConnectionSecrets } from "@mcp-studio/mcp-client";
 import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
@@ -72,10 +72,17 @@ export class SessionManager {
   private signInAbort: AbortController | null = null;
   private sessionOAuthStorage: OAuthStorage | null = null;
 
-  constructor(private readonly send: Send, private readonly options: SessionOptions = {}) {}
+  private readonly diagnosticSecrets = new Set<string>();
+  private readonly send: Send;
+
+  constructor(send: Send, private readonly options: SessionOptions = {}) {
+    this.send = message => send(["log", "error", "http_response", "progress"].includes(message.type)
+      ? redactDiagnosticValue(message, this.diagnosticSecrets) : message);
+  }
 
   setActiveEnv(env: Record<string, string>): void {
     this.activeEnv = env;
+    for (const value of Object.values(env)) if (value) this.diagnosticSecrets.add(value);
   }
 
   async handle(msg: ClientMessage): Promise<void> {
@@ -135,7 +142,9 @@ export class SessionManager {
     this.verbose = msg.verbose ?? this.verbose;
     let config: ReturnType<SessionManager["interpolateConfig"]>;
     try {
+      rememberConnectionSecrets({ transport: msg.transport, config: msg.config } as ConnectionConfig, this.diagnosticSecrets);
       config = this.interpolateConfig(msg);
+      rememberConnectionSecrets(config, this.diagnosticSecrets);
     } catch (err) {
       if (!this.client?.isConnected) this.setStatus("error");
       const message = err instanceof Error ? err.message : String(err);
@@ -156,6 +165,7 @@ export class SessionManager {
       const client: MCPClientInterface =
         config.transport === "stdio"
           ? new StdioMCPClient(config.config, {
+              diagnosticSecrets: this.diagnosticSecrets,
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,
@@ -164,6 +174,7 @@ export class SessionManager {
               onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
             })
           : new StreamableHTTPClient(config.config, {
+              diagnosticSecrets: this.diagnosticSecrets,
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,

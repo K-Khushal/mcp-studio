@@ -1,3 +1,4 @@
+import { rememberConnectionSecrets, isCredentialKey } from "./diagnostics.js";
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { UnauthorizedError, extractWWWAuthenticateParams } from "@modelcontextprotocol/sdk/client/auth.js";
@@ -22,11 +23,9 @@ export class StreamableHTTPClient extends BaseMCPClient {
     private readonly config: HttpConfig,
     options: MCPClientOptions = {}
   ) {
-    const secrets = new Set<string>();
-    super({ ...options, onLog: (level, source, text, payload) =>
-      options.onLog?.(level, source, redactOAuthValue(text, secrets), redactOAuthValue(payload, secrets)),
-    });
-    this.oauthSecrets = secrets;
+    super(options);
+    this.oauthSecrets = this.diagnosticSecrets;
+    rememberConnectionSecrets({ transport: "http", config }, this.diagnosticSecrets);
   }
 
   override async listTools() {
@@ -88,7 +87,6 @@ export class StreamableHTTPClient extends BaseMCPClient {
   // SDK OAuth errors can contain raw endpoint bodies, codes, verifiers and tokens.
   // Do not retain their message, cause or response on any public exception.
   private safeError(error: unknown): unknown {
-    if (this.config.auth?.type !== "oauth") return error;
     if (error instanceof OAuthFlowError || error instanceof UnauthorizedError) return new OAuthFlowError();
     return redactOAuthValue(error, this.oauthSecrets);
   }
@@ -156,6 +154,12 @@ export class StreamableHTTPClient extends BaseMCPClient {
           throw new OAuthFlowError();
         }
       }
+      response.headers.forEach((value, key) => {
+        if (isCredentialKey(key)) {
+          this.diagnosticSecrets.add(value);
+          if (/^Bearer /i.test(value)) this.diagnosticSecrets.add(value.slice(7));
+        }
+      });
       const reqId = this.activeRequestId;
       if (reqId && this.options.onHttpResponse) {
         const respHeaders: Record<string, string> = {};

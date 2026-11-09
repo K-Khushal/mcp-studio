@@ -25,3 +25,14 @@ test("redacts cyclic Error causes without recursion or exposing secrets", () => 
   expect(redacted.cause).toMatchObject({ message: "[REDACTED] cause", cause: "[Circular]" });
   expect(first.cause).toBe(second);
 });
+
+test("diagnostics redact JSON-escaped and URL-encoded credential values, including malformed Unicode", () => {
+  const secret = 'private\n"credential';
+  const unusual = "private-\uD800";
+  const original = { text: JSON.stringify({ data: secret }), url: `https://example.test/?key=${encodeURIComponent(secret)}`, unusual };
+  const redacted = redactOAuthValue(original, new Set([secret, unusual]));
+  expect(redacted.text).not.toContain("credential");
+  expect(redacted.url).toBe("https://example.test/?key=[REDACTED]");
+  expect(redacted.unusual).toBe("[REDACTED]");
+  expect(original.unusual).toBe(unusual);
+});

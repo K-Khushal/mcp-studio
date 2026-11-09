@@ -1,5 +1,6 @@
 import { ElicitRequestSchema, CallToolResultSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
 import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { redactDiagnosticValue } from "./diagnostics.js";
 import { OAuthFlowError } from "./oauth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -24,8 +25,17 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   /** Methods awaiting responses, indexed by request direction and typed id. */
   private pendingMethods = new Map<string, string>();
 
-  constructor(protected readonly options: MCPClientOptions = {}) {
+  protected readonly options: MCPClientOptions;
+  protected readonly diagnosticSecrets: Set<string>;
+
+  constructor(options: MCPClientOptions = {}) {
     this.verbose = options.verbose ?? false;
+    this.diagnosticSecrets = options.diagnosticSecrets ?? new Set<string>();
+    this.options = { ...options,
+      onLog: (level, source, text, payload) => options.onLog?.(level, source,
+        redactDiagnosticValue(text, this.diagnosticSecrets), redactDiagnosticValue(payload, this.diagnosticSecrets)),
+      onHttpResponse: (id, status, headers) => options.onHttpResponse?.(id, status, redactDiagnosticValue(headers, this.diagnosticSecrets)),
+    };
   }
 
   setVerbose(verbose: boolean): void {
