@@ -69,7 +69,7 @@ export default function ToolPanel() {
     if (!isRunShortcut(e) || response.isRunning) return;
     e.preventDefault();
     if (missing.length === 0 && argsValid) handleInvoke();
-    else if (missing.length > 0) setAttempts((n) => n + 1);
+    else setAttempts((n) => n + 1);
   };
 
   if (!isSelectedConnectionConnected) {

@@ -41,7 +41,7 @@ for (const theme of ['dark', 'light'] as const) {
   test(`axe and screenshots: tools, prompts, elicitation (${theme}, ${width})`, async ({ page }) => {
     await page.setViewportSize({ width, height: 768 });
     await page.addInitScript((t) => localStorage.setItem('mcp-studio-config', JSON.stringify({ theme: t })), theme);
-    await fixtureConnection(page, `Axe ${theme}`);
+    await fixtureConnection(page, `Axe ${theme} ${width}`);
 
     await selectTool(page, 'echo');
     await page.getByPlaceholder('Filter tools...').fill('');
@@ -157,4 +157,23 @@ test('keyboard-only: pick a tool, run it, keep args across tabs, answer an elici
   await tabTo(page, (el) => el?.textContent?.trim() === 'Accept');
   await page.keyboard.press('Enter');
   await expect(page.getByText(/"action":"accept"/).last()).toBeVisible();
+});
+
+test('blocked shortcuts focus malformed fallback JSON with all required arguments present', async ({ page }) => {
+  await fixtureConnection(page, 'Invalid fallback');
+  await selectTool(page, 'form-controls');
+  await page.getByRole('button', { name: 'JSON', exact: true }).click();
+  await page.getByRole('textbox', { name: 'Arguments JSON' }).fill(JSON.stringify({
+    labels: ['sample'], options: { city: 'Paris' }, payload: 'valid',
+  }));
+  await page.getByRole('button', { name: 'Form', exact: true }).click();
+  const payload = page.getByRole('textbox', { name: 'payload', exact: true });
+  const city = page.getByRole('textbox', { name: 'city', exact: true });
+  await payload.fill('{');
+  await expect(payload).toHaveAttribute('aria-invalid', 'true');
+  await expect(page.getByRole('button', { name: 'Run Tool' })).toBeDisabled();
+  for (const shortcut of ['Control+Enter', 'Meta+Enter']) {
+    await city.press(shortcut);
+    await expect(payload).toBeFocused();
+  }
 });
