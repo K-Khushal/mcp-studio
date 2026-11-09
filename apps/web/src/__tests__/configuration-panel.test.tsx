@@ -16,7 +16,7 @@ describe("ConfigurationPanel request timeout", () => {
       </TooltipProvider>,
     );
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
-    const input = screen.getByLabelText("Request timeout in seconds");
+    const input = screen.getByLabelText("Call timeout in seconds");
 
     fireEvent.change(input, { target: { value: "1.5" } });
     expect(useStore.getState().config.requestTimeout).toBe(30);

@@ -52,13 +52,13 @@ export function ConfigurationPanel() {
         </DialogHeader>
 
         <div className="mt-4 divide-y divide-border">
-          <Row label="Request timeout" hint="Seconds to wait for a Call before giving up.">
+          <Row label="Call timeout" hint="Seconds to wait for a Call before giving up.">
             <Input
               type="number"
               inputMode="numeric"
               min={1}
               step={1}
-              aria-label="Request timeout in seconds"
+              aria-label="Call timeout in seconds"
               value={timeoutDraft ?? String(config.requestTimeout)}
               onChange={(e) => {
                 setTimeoutDraft(e.target.value);

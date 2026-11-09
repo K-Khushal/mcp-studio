@@ -14,12 +14,12 @@ type WorkspaceTab = 'auth' | 'headers' | 'prompts' | 'tools';
 
 export function StudioView() {
   const transport = useStore((s) => s.transport);
-  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('prompts');
+  const [workspaceTab, setWorkspaceTab] = useState<WorkspaceTab>('tools');
 
-  // Reset to prompts when switching away from HTTP
+  // Reset to tools when switching away from HTTP
   useEffect(() => {
     if (transport !== 'http' && (workspaceTab === 'auth' || workspaceTab === 'headers')) {
-      setWorkspaceTab('prompts');
+      setWorkspaceTab('tools');
     }
   }, [transport, workspaceTab]);
 
@@ -60,7 +60,7 @@ export function StudioView() {
         ))}
       </div>
 
-      {/* Resizable request/response split */}
+      {/* Resizable Call/response split */}
       <ResizablePanelGroup orientation="vertical" className="flex-1 min-h-0">
         <ResizablePanel defaultSize={45} minSize={15}>
           <div className="h-full overflow-y-auto">

@@ -135,7 +135,7 @@ export function HeadersTab({
           <HeaderTable entries={Object.entries(httpResponseHeaders)} />
         ) : (
           <p className="text-xs text-muted-foreground italic">
-            {!hasResult ? 'Send a request to see response headers' : 'No response headers received'}
+            {!hasResult ? 'Run a tool or prompt to see response headers' : 'No response headers received'}
           </p>
         )}
       </div>
