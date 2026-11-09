@@ -66,7 +66,7 @@ describe("selecting and connecting Connections from the sidebar", () => {
   it("double click loads and connects with the saved cwd, args, env and inherit flag", async () => {
     renderSidebar();
     fireEvent.doubleClick(screen.getByText("First"));
-    await waitFor(() => expect(transport.connect).toHaveBeenCalledWith(stdio("first-cmd")));
+    await waitFor(() => expect(transport.connect).toHaveBeenCalledWith(stdio("first-cmd"), false));
     expect(useStore.getState().selectedConnectionId).toBe("conn-1");
   });
 
@@ -106,7 +106,7 @@ describe("selecting and connecting Connections from the sidebar", () => {
     fireEvent.click(screen.getByText("Second"));
     fireEvent.doubleClick(screen.getByText("Second"));
     fireEvent.click(await screen.findByRole("button", { name: "Switch" }));
-    await waitFor(() => expect(transport.connect).toHaveBeenCalledWith(stdio("second-cmd")));
+    await waitFor(() => expect(transport.connect).toHaveBeenCalledWith(stdio("second-cmd"), false));
     expect(useStore.getState().selectedConnectionId).toBe("conn-2");
     expect(screen.queryAllByRole("alertdialog")).toHaveLength(0);
   });
