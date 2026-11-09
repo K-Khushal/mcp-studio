@@ -16,3 +16,9 @@ it("renders the validated HTTPS fallback for popup blockers", () => {
   render(<OAuthSignInNotice />);
   expect(screen.getByRole("link").getAttribute("href")).toBe("https://auth.example.com/authorize");
 });
+
+it("renders HTTP approval on a localhost subdomain", () => {
+  useStore.setState({ oauthAuthorizationUrl: "http://auth.localhost/authorize" });
+  render(<OAuthSignInNotice />);
+  expect(screen.getByRole("link").getAttribute("href")).toBe("http://auth.localhost/authorize");
+});

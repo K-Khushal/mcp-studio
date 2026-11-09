@@ -24,7 +24,7 @@ test.each(["https://auth.example/token", "https://mcp.example/.well-known/oauth-
   expect(await (await createOAuthFetch(new URL("https://mcp.example/mcp"), fetch)(url)).text()).toBe("ok");
 });
 
-test.each(["http://127.0.0.1/mcp", "https://internal.example/mcp", "http://[::1]/mcp"])("private MCP Server %s can use private OAuth endpoints", async (url) => {
+test.each(["http://127.0.0.1/mcp", "http://dev.localhost/mcp", "http://[::1]/mcp"])("private MCP Server %s can use private OAuth endpoints", async (url) => {
   const fetch = vi.fn().mockResolvedValue(new Response("ok"));
   expect(await (await createOAuthFetch(new URL(url), fetch)("http://localhost/token")).text()).toBe("ok");
 });
@@ -80,4 +80,72 @@ test.each(["discovery", "registration", "token"])("HTTP Session refuses private 
     await client.disconnect();
     vi.unstubAllGlobals();
   }
+});
+
+test("DNS rebinding after the first MCP request cannot unlock private auth endpoints", async () => {
+  let rebound = false;
+  vi.mocked(lookup).mockImplementation(async () => [{ address: rebound ? "127.0.0.1" : "93.184.216.34", family: 4 }] as never);
+  const network = vi.fn().mockResolvedValue(new Response("ok"));
+  const guarded = createOAuthFetch(new URL("https://mcp.example/mcp"), network);
+  await guarded("https://mcp.example/mcp");
+  rebound = true;
+  await expect(guarded("http://127.0.0.1/token")).rejects.toThrow("OAuth endpoint refused");
+});
+
+test.each(["192.0.1.8", "192.2.4.8"])("public IPv4 %s remains usable", async (host) => {
+  const guarded = createOAuthFetch(new URL("https://mcp.example"), async () => new Response("ok"));
+  expect((await guarded(`https://${host}/token`)).status).toBe(200);
+});
+test("deprecated 192.88.99.0/24 relay addresses are refused", async () => {
+  const guarded = createOAuthFetch(new URL("https://mcp.example"), vi.fn());
+  await expect(guarded("https://192.88.99.8/token")).rejects.toThrow("OAuth endpoint refused");
+});
+
+test.each(["http://mcp.example/token", "https://mcp.example:6379/token"])("same hostname at another origin has no exemption: %s", async (destination) => {
+  vi.mocked(lookup).mockResolvedValue([{ address: "127.0.0.1", family: 4 }] as never);
+  const guarded = createOAuthFetch(new URL("https://mcp.example/mcp"), vi.fn());
+  await expect(guarded(destination)).rejects.toThrow("OAuth endpoint refused");
+});
+
+test.each(["2001:db80::1", "64:ff9b::5db8:d822"])("public IPv6 %s remains usable", async (host) => {
+  const guarded = createOAuthFetch(new URL("https://mcp.example"), async () => new Response("ok"));
+  expect((await guarded(`https://[${host}]/token`)).status).toBe(200);
+});
+test.each(["2001:db8::1", "64:ff9b::7f00:1", "64:ff9b::a00:1", "3fff::1", "3fff:fff::1", "2001:10::1", "2001:1f::1"])("non-public IPv6 %s is refused", async (host) => {
+  const guarded = createOAuthFetch(new URL("https://mcp.example"), vi.fn());
+  await expect(guarded(`https://[${host}]/token`)).rejects.toThrow("OAuth endpoint refused");
+});
+
+test.each(["/token-final", "http://127.0.0.1/token"])("SDK token exchange handles 307 to %s safely", async (location) => {
+  const { exchangeAuthorization } = await import("@modelcontextprotocol/sdk/client/auth.js");
+  const contacted: string[] = [];
+  const network = vi.fn(async (input: string | Request | URL, init?: RequestInit) => {
+    const url = String(input);
+    contacted.push(url);
+    expect(init?.redirect).toBe("manual");
+    expect(init?.method).toBe("POST");
+    expect(String(init?.body)).toContain("code=approval-code");
+    return url.endsWith("/token")
+      ? new Response(null, { status: 307, headers: { location } })
+      : Response.json({ access_token: "access", token_type: "Bearer" });
+  });
+  const exchange = exchangeAuthorization("https://auth.example", {
+    clientInformation: { client_id: "client" }, authorizationCode: "approval-code",
+    codeVerifier: "verifier", redirectUri: "http://localhost/callback",
+    fetchFn: createOAuthFetch(new URL("https://mcp.example/mcp"), network),
+  });
+  if (location === "/token-final") {
+    await expect(exchange).resolves.toMatchObject({ access_token: "access" });
+    expect(contacted).toEqual(["https://auth.example/token", "https://auth.example/token-final"]);
+  } else {
+    await expect(exchange).rejects.toThrow();
+    expect(contacted).toEqual(["https://auth.example/token"]);
+  }
+});
+
+test("a transient DNS failure does not poison later endpoint validation", async () => {
+  vi.mocked(lookup).mockRejectedValueOnce(new Error("temporary DNS failure"));
+  const guarded = createOAuthFetch(new URL("https://mcp.example"), async () => new Response("ok"));
+  await expect(guarded("https://auth.example/token")).rejects.toThrow("OAuth endpoint refused");
+  expect((await guarded("https://auth.example/token")).status).toBe(200);
 });

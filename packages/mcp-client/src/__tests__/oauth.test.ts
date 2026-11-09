@@ -42,3 +42,9 @@ test.each(["ms-settings:privacy", "ftp://example.com/authorize", "http://auth.ex
   provider.state();
   expect(() => provider.redirectToAuthorization(new URL(url))).toThrow("OAuth sign-in requires HTTPS");
 });
+
+test("permits HTTP approval on a localhost subdomain", () => {
+  const provider = new StudioOAuthProvider({ redirectUrl: "http://localhost/callback", storage: { load: async () => ({}), save: async () => {} }, authorize: async () => "code" });
+  provider.state();
+  expect(() => provider.redirectToAuthorization(new URL("http://auth.localhost/authorize"))).not.toThrow();
+});
