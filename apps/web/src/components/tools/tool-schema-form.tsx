@@ -5,6 +5,7 @@ import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
 import { JsonTextarea } from './json-textarea';
 import {
+  containsVariableSyntax,
   fieldKind,
   getProperties,
   getRequired,
@@ -82,6 +83,11 @@ interface FieldProps {
 function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps) {
   const id = useId();
   const kind = fieldKind(prop, depth);
+  const defaultHint = containsVariableSyntax(prop.default) ? (
+    <p className="text-[10px] text-muted-foreground">
+      Server default (not applied): {JSON.stringify(prop.default)}
+    </p>
+  ) : null;
 
   if (kind === 'object') {
     const current = isPlainObject(value) ? value : {};
@@ -92,6 +98,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
           {required && <RequiredMark />}
         </legend>
         {prop.description && <p className="text-[10px] text-muted-foreground">{prop.description}</p>}
+        {defaultHint}
         <FieldList
           schema={prop}
           value={current}
@@ -111,6 +118,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
         {required && <RequiredMark />}
       </label>
       {prop.description && <p className="text-[10px] text-muted-foreground">{prop.description}</p>}
+      {defaultHint}
       {kind === 'json' ? (
         <JsonField id={id} label={name} value={value} onChange={onChange} />
       ) : kind === 'primitive-array' ? (
@@ -158,7 +166,7 @@ function emptyItem(items: SchemaProperty): unknown {
   const kind = fieldKind(items, 1);
   if (kind === 'number') return 0;
   if (kind === 'boolean') return false;
-  if (kind === 'enum') return items.enum![0];
+  if (kind === 'enum') return items.enum!.find((option) => !containsVariableSyntax(option)) ?? '';
   return '';
 }
 
@@ -317,7 +325,7 @@ function PrimitiveControl({
       >
         <option value="">—</option>
         {options.map((option, i) => (
-          <option key={i} value={i}>
+          <option key={i} value={i} disabled={containsVariableSyntax(option)}>
             {typeof option === 'string' ? option : JSON.stringify(option)}
           </option>
         ))}

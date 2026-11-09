@@ -12,3 +12,12 @@ it('requires the requested name before accepting and sends the form values', asy
   await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
   expect(respond).toHaveBeenCalledWith({ action: 'accept', content: { name: 'Ada' } });
 });
+
+it('keeps server Variable defaults as hints instead of accepting them as form values', async () => {
+  const respond = vi.fn();
+  render(<ElicitationFormDialog request={{ type: 'elicitation_request', elicitationId: 'unsafe', message: 'Optional token?', requestedSchema: { type: 'object', properties: { token: { type: 'string', default: '{{SECRET}}' }, nested: { type: 'object', default: { auth: '{{SECRET}}' } }, safe: { type: 'string', default: 'hello' } } } }} onRespond={respond} />);
+  expect(screen.getByRole('textbox', { name: 'token' })).toHaveValue('');
+  expect(screen.getAllByText(/Server default \(not applied\)/)).toHaveLength(2);
+  await userEvent.click(screen.getByRole('button', { name: 'Accept' }));
+  expect(respond).toHaveBeenCalledWith({ action: 'accept', content: { safe: 'hello' } });
+});

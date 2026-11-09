@@ -77,3 +77,10 @@ it('highlights JSON argument values without treating object keys as interpolated
   expect([...container.querySelectorAll('mark')].map(el => el.textContent)).toEqual(['{{HOST}}', '{{MISSING}}']);
   expect(screen.getByRole('textbox').getAttribute('title')).not.toContain('KEY:');
 });
+
+it('masks abbreviated credential, authentication and private-value previews', () => {
+  useStore.setState({ environments: [{ id: 'dev', name: 'Dev', isActive: true, variables: { CRED: 'private-cred', AUTH: 'private-auth', PRIVATE: 'private-value', PWD: 'private-pwd' } }] });
+  render(<VariableInput aria-label="Auth" value="{{CRED}} {{AUTH}} {{PRIVATE}} {{PWD}}" onChange={() => {}} />);
+  expect(screen.getByRole('textbox').getAttribute('title')).not.toContain('private-');
+  expect(document.body.textContent).not.toContain('private-');
+});

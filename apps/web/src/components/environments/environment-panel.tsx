@@ -19,7 +19,7 @@ export default function EnvironmentPanel() {
   } = useStore();
 
   const [open, setOpen] = useState(false);
-  const [hiddenKeys, setHiddenKeys] = useState<Set<string>>(new Set());
+  const [revealedKeys, setRevealedKeys] = useState<Set<string>>(new Set());
   const [newKey, setNewKey] = useState('');
   const [newValue, setNewValue] = useState('');
   const [newEnvName, setNewEnvName] = useState('');
@@ -36,6 +36,7 @@ export default function EnvironmentPanel() {
 
   useEffect(() => {
     if (activeEnv) setLocalVars(activeEnv.variables);
+    setRevealedKeys(new Set());
   }, [activeEnv?.id]);
 
   const flushVars = (vars: Record<string, string>) => {
@@ -58,6 +59,7 @@ export default function EnvironmentPanel() {
   };
 
   const handleRemove = (key: string) => {
+    setRevealedKeys((prev) => { const next = new Set(prev); next.delete(key); return next; });
     const { [key]: _, ...rest } = localVars;
     setLocalVars(rest);
     flushVars(rest);
@@ -78,7 +80,7 @@ export default function EnvironmentPanel() {
   };
 
   const toggleVisibility = (key: string) => {
-    setHiddenKeys((prev) => {
+    setRevealedKeys((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -91,7 +93,7 @@ export default function EnvironmentPanel() {
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); setRevealedKeys(new Set()); }}>
       <DialogTrigger asChild>
         <button className="text-xs text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1.5">
           <Globe size={13} />
@@ -161,12 +163,13 @@ export default function EnvironmentPanel() {
                   value={value}
                   onChange={(e) => setLocalVars((prev) => ({ ...prev, [key]: e.target.value }))}
                   onBlur={handleBlur}
-                  type={hiddenKeys.has(key) ? 'password' : 'text'}
+                  aria-label={`${key} value`}
+                  type={revealedKeys.has(key) ? 'text' : 'password'}
                   className="h-7 text-xs font-mono bg-muted border-border"
                 />
                 <div className="flex items-center gap-1 w-20 justify-end">
-                  <button onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
-                    {hiddenKeys.has(key) ? <Eye size={12} /> : <EyeOff size={12} />}
+                  <button aria-label={`${revealedKeys.has(key) ? 'Hide' : 'Reveal'} ${key}`} aria-pressed={revealedKeys.has(key)} onClick={() => toggleVisibility(key)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
+                    {revealedKeys.has(key) ? <EyeOff size={12} /> : <Eye size={12} />}
                   </button>
                   <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     <Copy size={12} />
@@ -193,6 +196,7 @@ export default function EnvironmentPanel() {
           />
           <Input
             placeholder="VALUE"
+            type="password"
             value={newValue}
             onChange={(e) => setNewValue(e.target.value)}
             onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
