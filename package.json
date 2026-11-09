@@ -40,5 +40,8 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/K-Khushal/mcp-studio.git"
+  },
+  "overrides": {
+    "ip-address": "^10.7.6"
   }
 }
