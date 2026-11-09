@@ -63,15 +63,35 @@ export function prepareLog(message: string, payload?: LogPayload): { message: st
   return { message, ...(storedPayload ? { payload: storedPayload } : {}), searchText };
 }
 
-/** Count serialized retained data, including search indexes, against a 4 MiB budget. */
-export function retainLogs(logs: LogEntry[]): LogEntry[] {
-  let bytes = 0;
-  let start = logs.length;
-  while (start > 0 && logs.length - start < 500) {
-    const size = new TextEncoder().encode(JSON.stringify(logs[start - 1])).length;
-    if (bytes + size > 4 * 1024 * 1024) break;
-    bytes += size;
-    start--;
+const MAX_LOGS = 500;
+const MAX_LOG_BYTES = 4 * 1024 * 1024;
+const encoder = new TextEncoder();
+const entryBytes = new WeakMap<LogEntry, number>();
+const retainedBytes = new WeakMap<LogEntry[], number>();
+
+function logBytes(entry: LogEntry): number {
+  let bytes = entryBytes.get(entry);
+  if (bytes === undefined) {
+    bytes = encoder.encode(JSON.stringify(entry)).length;
+    entryBytes.set(entry, bytes);
   }
-  return logs.slice(start);
+  return bytes;
+}
+
+/** Append with incremental byte accounting. Each entry is measured once and evicted once.
+ * Immutable snapshots copy at most 500 references for Zustand subscribers.
+ * Weak maps let cleared workspaces and their accounting be garbage collected together.
+ */
+export function appendLog(logs: LogEntry[], entry: LogEntry): LogEntry[] {
+  const bytes = retainedBytes.get(logs) ?? logs.reduce((total, log) => total + logBytes(log), 0);
+  let total = bytes + logBytes(entry);
+  let start = 0;
+  while (start < logs.length && (logs.length + 1 - start > MAX_LOGS || total > MAX_LOG_BYTES)) {
+    total -= logBytes(logs[start++]!);
+  }
+  const next = logs.slice(start);
+  if (total <= MAX_LOG_BYTES) next.push(entry);
+  else total = 0; // An individually oversized entry cannot fit the budget.
+  retainedBytes.set(next, total);
+  return next;
 }
