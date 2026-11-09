@@ -62,7 +62,7 @@ export function StudioView() {
 
       {/* Resizable Call/response split */}
       <ResizablePanelGroup orientation="vertical" className="flex-1 min-h-0">
-        <ResizablePanel defaultSize={45} minSize={15}>
+        <ResizablePanel defaultSize={60} minSize={15}>
           <div className="h-full overflow-y-auto">
             {workspaceTab === 'auth' && <AuthPanel />}
             {workspaceTab === 'headers' && <HeadersPanel />}
@@ -71,7 +71,7 @@ export function StudioView() {
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
-        <ResizablePanel defaultSize={55} minSize={40}>
+        <ResizablePanel defaultSize={40} minSize={40}>
           <ResponsePanel />
         </ResizablePanel>
       </ResizablePanelGroup>

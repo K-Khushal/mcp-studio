@@ -1,10 +1,11 @@
 import { useEffect, useRef } from 'react';
-import { Plus, X } from 'lucide-react';
+import { ChevronRight, Plus, X } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
 import { Switch } from '@/components/ui/switch';
+import { cn } from '@/lib/utils';
 
 const fieldClass = 'h-7 font-mono text-xs';
 
@@ -47,7 +48,33 @@ function useFocusNewRow(count: number) {
   return container;
 }
 
-export function StdioForm() {
+const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+
+export function StdioForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+  const stdio = useStore((s) => s.stdio);
+  const envCount = stdio.env.filter((row) => row.key.trim()).length;
+  const summary = [stdio.command.trim() || 'no command', plural(stdio.args.filter((arg) => arg !== '').length, 'arg'), `${envCount} env`].join(' · ');
+
+  return (
+    <div className="border-t border-border">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls="stdio-settings"
+        aria-label={`STDIO settings: ${summary}`}
+        onClick={() => onOpenChange(!open)}
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary"
+      >
+        <ChevronRight size={12} className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
+        <span className="font-medium">STDIO settings</span>
+        {!open && <span className="min-w-0 truncate font-mono">{summary}</span>}
+      </button>
+      {open && <StdioFields />}
+    </div>
+  );
+}
+
+function StdioFields() {
   const stdio = useStore((s) => s.stdio);
   const setStdio = useStore((s) => s.setStdio);
   const argsRef = useFocusNewRow(stdio.args.length);
@@ -59,7 +86,7 @@ export function StdioForm() {
     setStdio({ env: stdio.env.map((row, i) => (i === index ? { ...row, ...patch } : row)) });
 
   return (
-    <div className="max-h-[40vh] space-y-3 overflow-y-auto border-t border-border px-3 py-3">
+    <div id="stdio-settings" className="max-h-[40vh] space-y-3 overflow-y-auto px-3 pb-3 pt-1">
       <Section label="Arguments">
         <div ref={argsRef} className="space-y-1.5">
           {stdio.args.map((arg, index) => (

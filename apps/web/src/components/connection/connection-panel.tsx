@@ -48,12 +48,19 @@ export function ConnectionPanel() {
   // Unmount: send the pending edit only if its Connection still exists
   useEffect(() => () => flushPendingSave(), []);
 
+  // Per-Connection override of the default (collapsed when connected, expanded otherwise); stale once the Session flips
+  const [stdioOpenOverrides, setStdioOpenOverrides] = useState<Record<string, { whileConnected: boolean; open: boolean }>>({});
+
   const isConnected = connectionStatus === 'connected';
   const isSelectedConnectionConnected =
     selectedConnectionId !== null && selectedConnectionId === connectedConnectionId && isConnected;
   const isConnecting = connectionStatus === 'connecting';
   const isSelectedConnectionConnecting =
     selectedConnectionId !== null && selectedConnectionId === connectingConnectionId && isConnecting;
+
+  const stdioOverride = selectedConnectionId ? stdioOpenOverrides[selectedConnectionId] : undefined;
+  const stdioOpen =
+    stdioOverride && stdioOverride.whileConnected === isSelectedConnectionConnected ? stdioOverride.open : !isSelectedConnectionConnected;
 
   const selectedConnection = selectedConnectionId
     ? collections.flatMap((c) => c.connections).find((r) => r.id === selectedConnectionId)
@@ -240,7 +247,15 @@ export function ConnectionPanel() {
           <span className="min-w-0 whitespace-pre-wrap break-words">{lastConnectionError.message}</span>
         </p>
       )}
-      {transport === 'stdio' && <StdioForm />}
+      {transport === 'stdio' && (
+        <StdioForm
+          open={stdioOpen}
+          onOpenChange={(open) =>
+            selectedConnectionId &&
+            setStdioOpenOverrides((prev) => ({ ...prev, [selectedConnectionId]: { whileConnected: isSelectedConnectionConnected, open } }))
+          }
+        />
+      )}
       <OAuthSignInNotice />
     </div>
   );

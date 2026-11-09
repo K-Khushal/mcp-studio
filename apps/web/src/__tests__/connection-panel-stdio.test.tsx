@@ -174,3 +174,51 @@ it("keeps the connection failure inline until the next Connect attempt", async (
   expect(screen.queryByRole("alert")).toBeNull();
   await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 });
+
+describe("STDIO settings collapse", () => {
+  const connectSelected = () => act(() => useStore.setState({ connectionStatus: "connected", connectedConnectionId: "conn-1" }));
+  const summary = () => screen.getByRole("button", { name: /STDIO settings/ });
+
+  it("is collapsed with a summary once the selected Connection is connected", () => {
+    connectSelected();
+    render(<ConnectionPanel />);
+    expect(screen.queryByLabelText("Working directory")).toBeNull();
+    expect(summary().getAttribute("aria-expanded")).toBe("false");
+    expect(summary().textContent).toContain("node");
+    expect(summary().textContent).toContain("3 args");
+    expect(summary().textContent).toContain("2 env");
+  });
+
+  it("stays fully expanded while disconnected", () => {
+    render(<ConnectionPanel />);
+    expect(screen.getByLabelText("Working directory")).toBeTruthy();
+    expect(summary().getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("expands from the keyboard and still autosaves edits", async () => {
+    connectSelected();
+    render(<ConnectionPanel />);
+    summary().focus();
+    expect(document.activeElement).toBe(summary());
+    fireEvent.click(summary());
+    expect(summary().getAttribute("aria-expanded")).toBe("true");
+    fireEvent.change(screen.getByLabelText("Working directory"), { target: { value: "/tmp/x" } });
+    await act(async () => { await vi.advanceTimersByTimeAsync(300); });
+    const saved = lastPatchedConfig();
+    expect(saved.transport === "stdio" && saved.config.cwd).toBe("/tmp/x");
+    fireEvent.click(summary());
+    expect(screen.queryByLabelText("Working directory")).toBeNull();
+  });
+
+  it("remembers the open state per Connection", () => {
+    const second = { id: "conn-2", collectionId: "col-1", name: "Other", connectionConfig: savedConfig, createdAt: 1, updatedAt: 1 };
+    useStore.setState({ collections: [{ ...makeCollection(), connections: [...makeCollection().connections, second] }] });
+    connectSelected();
+    render(<ConnectionPanel />);
+    fireEvent.click(summary());
+    act(() => useStore.getState().loadConnection(second));
+    expect(summary().getAttribute("aria-expanded")).toBe("true"); // conn-2 not connected: expanded by default
+    act(() => useStore.getState().loadConnection(makeCollection().connections[0]!));
+    expect(summary().getAttribute("aria-expanded")).toBe("true"); // conn-1 override kept
+  });
+});
