@@ -134,7 +134,7 @@ test("bad command reports a connection error and error status", async () => {
     await session.send({ type: "connect", transport: "stdio", config: { command: "/missing-mcp-command", args: [], env: {}, inheritSystemEnv: false } });
     expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
     expect(session.messages).toContainEqual({ type: "status", status: "error" });
-    expect(session.messages.some(m => m.type === "log" && m.level === "ERROR")).toBe(true);
+    expect(session.messages.some(m => m.type === "log" && m.level === "ERROR" && m.source === "studio")).toBe(true);
   } finally { await session.close(); }
 });
 
@@ -145,6 +145,7 @@ test("crash mid-Session reports disconnected with a reason", async () => {
     await session.send({ type: "invoke", tool: "crash", params: {} });
     expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
     expect(session.messages).toContainEqual({ type: "status", status: "disconnected" });
+    expect(await session.waitFor("log", l => l.level === "ERROR")).toMatchObject({ source: "studio" });
   } finally { await session.close(); }
 });
 
@@ -154,6 +155,7 @@ test("a rejected replacement Connection preserves live Session crash detection",
     await session.send(stdioFixture);
     await session.send({ type: "connect", transport: "http", config: { url: "{{MISSING_URL}}", headers: {} } });
     expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    expect(await session.waitFor("log", l => l.level === "ERROR")).toMatchObject({ source: "studio" });
     await session.send({ type: "invoke", tool: "crash", params: {} });
     expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
   } finally { await session.close(); }

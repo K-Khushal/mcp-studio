@@ -10,7 +10,7 @@ it("counts connection failures, Calls and tool errors, retaining last latency", 
   vi.spyOn(transport, "invoke").mockResolvedValue();
   useStore.setState({ selectedConnectionId: "metrics" });
   await useStore.getState().connect({ transport: "http", config: { url: "http://localhost:1", headers: {} } });
-  receive({ type: "log", level: "ERROR", source: "protocol", message: "Connection refused", timestamp: 1 });
+  receive({ type: "log", level: "ERROR", source: "studio", message: "Connection refused", timestamp: 1 });
   receive({ type: "error", code: "CONNECTION_FAILED", message: "Connection refused" });
   expect(useStore.getState().errorCount).toBe(1);
   expect(useStore.getState().connectionStatus).toBe("error");
@@ -29,7 +29,7 @@ it("counts connection failures, Calls and tool errors, retaining last latency", 
   receive({ type: "error", requestId: "3", code: "TOOL_ERROR", message: "Unknown tool" });
   expect(useStore.getState().requestCount).toBe(3);
   expect(useStore.getState().errorCount).toBe(2);
-  receive({ type: "log", level: "ERROR", source: "protocol", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
+  receive({ type: "log", level: "ERROR", source: "studio", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
   receive({ type: "disconnected", reason: "MCP Server connection closed unexpectedly" });
   expect(useStore.getState().connectionStatus).toBe("disconnected");
   expect(useStore.getState().errorCount).toBe(3);
@@ -48,7 +48,7 @@ it("a crash counts once and retains the pending Call error after cache cleanup",
   receive({ type: "connected", tools: [], prompts: [] });
   await useStore.getState().invokeTool("crash", {});
   receive({ type: "status", status: "disconnected" });
-  receive({ type: "log", level: "ERROR", source: "protocol", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
+  receive({ type: "log", level: "ERROR", source: "studio", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
   receive({ type: "disconnected", reason: "MCP Server connection closed unexpectedly" });
   receive({ type: "error", requestId: "pending", code: "TOOL_ERROR", message: "Connection closed" });
   expect(useStore.getState().errorCount).toBe(1);

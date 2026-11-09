@@ -1,5 +1,4 @@
-import type { ElicitationResult } from "@mcp-studio/types";
-import type { MCPTool, MCPPrompt, MCPPromptMessage, LogLevel } from "@mcp-studio/types";
+import type { ElicitationResult, MCPTool, MCPPrompt, MCPPromptMessage, LogLevel, LogSource, LogPayload } from "@mcp-studio/types";
 
 // ---------------------------------------------------------------------------
 // MCPClient public interface
@@ -8,8 +7,10 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, LogLevel } from "@mcp-studio
 export interface MCPClientOptions {
   onClose?: () => void;
   onElicitation?: (request: { message: string; requestedSchema: Record<string, unknown> }) => Promise<ElicitationResult>;
+  /** Capture JSON-RPC frames as Protocol log entries. Toggle live with `setVerbose`. */
+  verbose?: boolean;
   onChunk?: (requestId: string, data: unknown) => void;
-  onLog?: (level: LogLevel, source: "protocol" | "subprocess", text: string) => void;
+  onLog?: (level: LogLevel, source: LogSource, text: string, payload?: LogPayload) => void;
   onHttpResponse?: (requestId: string, status: number, headers: Record<string, string>) => void;
 }
 
@@ -28,6 +29,7 @@ export interface MCPClientInterface {
     requestId: string
   ): Promise<MCPPromptMessage[]>;
   disconnect(): Promise<void>;
+  setVerbose(verbose: boolean): void;
   readonly isConnected: boolean;
 }
 

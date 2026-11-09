@@ -85,8 +85,12 @@ export class StreamableHTTPClient extends BaseMCPClient {
       fetch: wrappedFetch,
     });
 
+    const logUrl = new URL(url);
+    if (auth?.type === "apikey" && auth.in === "query" && auth.key) {
+      logUrl.searchParams.set(auth.key, "[REDACTED]");
+    }
     let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
-    this.options.onLog?.("INFO", "protocol", `Connecting via Streamable HTTP to ${url.toString()}`);
+    this.options.onLog?.("INFO", "studio", `Connecting via Streamable HTTP to ${logUrl.toString()}`);
     this.variant = "streamable";
     try {
       await this.connectTransport(client, this.transport);
@@ -95,7 +99,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
       // Only protocol/endpoint rejection implies a legacy server. Auth, network,
       // and server failures must retain their original error.
       if (!(error instanceof StreamableHTTPError) || ![400, 404, 405].includes(error.code ?? 0)) throw error;
-      this.options.onLog?.("INFO", "protocol", "Streamable HTTP rejected; trying legacy SSE");
+      this.options.onLog?.("INFO", "studio", "Streamable HTTP rejected; trying legacy SSE");
       this.transport = new SSEClientTransport(url, {
         requestInit: { headers },
         eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
@@ -113,7 +117,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         );
       }
     }
-    this.options.onLog?.("INFO", "protocol", "MCP initialize handshake complete");
+    this.options.onLog?.("INFO", "studio", "MCP initialize handshake complete");
     return client;
   }
 

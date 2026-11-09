@@ -15,9 +15,13 @@ export class WebSocketTransport implements StudioTransport {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  async connect(config: ConnectionConfig): Promise<void> {
+  async connect(config: ConnectionConfig, verbose = false): Promise<void> {
     await this.ensureSocket();
-    this.send({ type: "connect", ...config });
+    this.send({ type: "connect", verbose, ...config });
+  }
+
+  setVerbose(verbose: boolean): void {
+    this.send({ type: "set_verbose", verbose });
   }
 
   async invoke(tool: string, params: Record<string, unknown>): Promise<void> {
