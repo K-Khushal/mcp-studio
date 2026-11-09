@@ -43,6 +43,7 @@ a real CLI restart. It uses the repository protocol fixture and
 `npx -y @modelcontextprotocol/server-everything@2.2.1` (also installed and locked
 as a dev dependency so CI does not depend on an unpinned registry version).
 Browser locators use roles, labels, text and placeholders, never styling classes.
+`tools-prompts.spec.ts` adds scoped axe counts (`@axe-core/playwright`, zero violations) for the tools/prompts panels and elicitation dialog in dark and light at 1366×768, plus a keyboard-only walkthrough. `AXE_LABEL=before` records counts without asserting; `SHOTS_DIR` saves screenshots.
 
 The live project tries DeepWiki, remote fetch, GitMCP's TypeScript SDK endpoint
 and Cloudflare docs without credentials, plus the public memory, filesystem
