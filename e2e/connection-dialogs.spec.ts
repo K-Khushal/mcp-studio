@@ -16,7 +16,7 @@ async function activate(page: Page, target: Locator) {
 }
 
 async function workspaceTo(page: Page, name: 'Auth' | 'Headers') {
-  await tabTo(page, page.getByRole('tab', { selected: true }));
+  await tabTo(page, page.getByRole('tablist', { name: 'Workspace', exact: true }).getByRole('tab', { selected: true }));
   await page.keyboard.down('Home');
   try { await expect(page.getByRole('tab', { name: 'Auth', exact: true })).toBeFocused(); }
   finally { await page.keyboard.up('Home'); }
