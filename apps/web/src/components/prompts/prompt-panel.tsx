@@ -1,9 +1,9 @@
-import { useCallback } from 'react';
-import { Play, ChevronRight, Search } from 'lucide-react';
+import { useCallback, useEffect, useId, useState } from 'react';
+import { ChevronRight, Search } from 'lucide-react';
 import { useStore } from '@/store';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
+import { RequiredNotice, RunButton, isRunShortcut } from '@/components/shared/run-button';
 import { cn } from '@/lib/utils';
 import type { MCPPrompt } from '@mcp-studio/types';
 
@@ -20,6 +20,7 @@ interface PromptListItemProps {
 const PromptListItem = ({ prompt, isSelected, onSelect }: PromptListItemProps) => (
   <button
     onClick={() => onSelect(prompt)}
+    aria-current={isSelected ? 'true' : undefined}
     className={cn(
       'w-full text-left px-3 py-2 text-xs transition-colors border-l-2',
       isSelected
@@ -50,7 +51,7 @@ function PromptList({ prompts, selectedPromptName, search, onSearch, onSelect }:
   );
 
   return (
-    <div className="w-48 shrink-0 border-r border-border flex flex-col">
+    <div className="w-56 shrink-0 border-r border-border flex flex-col">
       <div className="p-2 border-b border-border">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -98,14 +99,29 @@ export function PromptPanel() {
     setPromptArgValues,
     invokePrompt,
   } = useStore();
+  const baseId = useId();
+  const [attempted, setAttempted] = useState(false);
+  const missing = (selectedPrompt?.arguments ?? [])
+    .filter((arg) => arg.required && !promptArgValues[arg.name])
+    .map((arg) => arg.name);
+  useEffect(() => setAttempted(false), [selectedPrompt?.name]);
   const handleArgChange = useCallback((name: string, value: string) => {
     setPromptArgValues({ ...promptArgValues, [name]: value });
   }, [promptArgValues, setPromptArgValues]);
 
   const handleRun = useCallback(() => {
-    if (!selectedPrompt) return;
+    if (!selectedPrompt || missing.length > 0) return;
     invokePrompt(selectedPrompt.name, promptArgValues).catch(console.error);
-  }, [selectedPrompt, promptArgValues, invokePrompt]);
+  }, [selectedPrompt, promptArgValues, invokePrompt, missing.length]);
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!isRunShortcut(e) || response.isRunning) return;
+    e.preventDefault();
+    if (missing.length === 0) return handleRun();
+    setAttempted(true);
+    const index = selectedPrompt?.arguments?.findIndex((arg) => arg.name === missing[0]) ?? -1;
+    document.getElementById(`${baseId}-arg-${index}`)?.focus();
+  };
 
   const isSelectedConnectionConnected =
     connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
@@ -145,45 +161,44 @@ export function PromptPanel() {
         ) : (
           <>
             <div>
-              <h3 className="text-sm font-semibold text-foreground">{selectedPrompt.name}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="truncate text-sm font-semibold text-foreground">{selectedPrompt.name}</h3>
+                <RunButton label="Run Prompt" running={response.isRunning} disabled={missing.length > 0} describedBy={missing.length > 0 ? `${baseId}-required` : undefined} onClick={handleRun} />
+              </div>
               {selectedPrompt.description && (
                 <p className="text-xs text-muted-foreground mt-0.5">{selectedPrompt.description}</p>
               )}
+              <div className="mt-1"><RequiredNotice id={`${baseId}-required`} missing={missing} /></div>
             </div>
 
             {selectedPrompt.arguments && selectedPrompt.arguments.length > 0 && (
-              <div className="flex flex-col gap-3">
-                {selectedPrompt.arguments.map((arg) => (
-                  <div key={arg.name} className="flex flex-col gap-1">
-                    <label className="text-xs font-medium text-foreground">
-                      {arg.name}
-                      {arg.required && <span className="text-destructive-text ml-0.5">*</span>}
-                      {arg.description && (
-                        <span className="text-muted-foreground font-normal ml-1">— {arg.description}</span>
-                      )}
-                    </label>
-                    <VariableInput
-                      value={promptArgValues[arg.name] ?? ''}
-                      onChange={(e) => handleArgChange(arg.name, e.target.value)}
-                      placeholder={arg.description?.includes('{{') ? arg.name : arg.description ?? arg.name}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                ))}
+              <div className="flex flex-col gap-3" onKeyDown={handleKeyDown}>
+                {selectedPrompt.arguments.map((arg, index) => {
+                  const id = `${baseId}-arg-${index}`;
+                  const invalid = attempted && missing.includes(arg.name);
+                  const describedBy = [arg.description && `${id}-desc`, invalid && `${id}-error`].filter(Boolean).join(' ') || undefined;
+                  return (
+                    <div key={arg.name} className="flex flex-col gap-1">
+                      <label htmlFor={id} className="flex items-center gap-1 text-xs font-medium text-foreground">
+                        {arg.name}
+                        {arg.required && <span aria-hidden="true" className="text-destructive-text">*</span>}
+                      </label>
+                      {arg.description && <p id={`${id}-desc`} className="text-xs text-muted-foreground">{arg.description}</p>}
+                      <VariableInput
+                        id={id}
+                        value={promptArgValues[arg.name] ?? ''}
+                        onChange={(e) => handleArgChange(arg.name, e.target.value)}
+                        aria-required={arg.required || undefined}
+                        aria-invalid={invalid || undefined}
+                        aria-describedby={describedBy}
+                        className="h-8 text-xs"
+                      />
+                      {invalid && <p id={`${id}-error`} className="text-xs text-destructive-text">Required</p>}
+                    </div>
+                  );
+                })}
               </div>
             )}
-
-            <div className="flex justify-end pt-2 border-t border-border mt-auto">
-              <Button
-                size="sm"
-                onClick={handleRun}
-                disabled={response.isRunning}
-                className="gap-1.5 text-xs"
-              >
-                <Play size={12} />
-                {response.isRunning ? 'Running…' : 'Run Prompt'}
-              </Button>
-            </div>
           </>
         )}
       </div>

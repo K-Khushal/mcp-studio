@@ -1,11 +1,11 @@
-import { useEffect, useCallback, useState } from 'react';
-import { Play, ChevronRight } from 'lucide-react';
+import { useEffect, useCallback, useId, useRef, useState, type KeyboardEvent } from 'react';
+import { ChevronRight } from 'lucide-react';
 import { useStore } from '@/store';
-import { Button } from '@/components/ui/button';
+import { RequiredNotice, RunButton, isRunShortcut } from '@/components/shared/run-button';
 import { ToolIcon, ToolBadges, toolTitle } from './tool-metadata';
 import { ToolList } from './tool-list';
 import { ToolArgsEditor } from './tool-args-editor';
-import { initialArgs } from './tool-schema-helpers';
+import { initialArgs, missingRequired } from './tool-schema-helpers';
 
 export default function ToolPanel() {
   const {
@@ -25,6 +25,10 @@ export default function ToolPanel() {
     clearPendingParams,
   } = useStore();
   const [argsValid, setArgsValid] = useState(true);
+  const [attempts, setAttempts] = useState(0);
+  const argsRef = useRef<HTMLDivElement>(null);
+  const requiredId = useId();
+  const missing = selectedTool ? missingRequired(selectedTool.inputSchema, toolFormValues) : [];
   const isSelectedConnectionConnected =
     connectionStatus === 'connected' && selectedConnectionId === connectedConnectionId;
 
@@ -44,10 +48,23 @@ export default function ToolPanel() {
     clearPendingParams();
   }, [pendingParams, selectedTool?.name, setToolFormValues, clearPendingParams]);
 
+  useEffect(() => {
+    if (attempts > 0) argsRef.current?.querySelector<HTMLElement>('[aria-invalid="true"]')?.focus();
+  }, [attempts]);
+
+  useEffect(() => setAttempts(0), [selectedTool?.name]);
+
   const handleInvoke = useCallback(() => {
-    if (!selectedTool) return;
+    if (!selectedTool || missing.length > 0) return;
     invokeTool(selectedTool.name, toolFormValues).catch(console.error);
-  }, [selectedTool, toolFormValues, invokeTool]);
+  }, [selectedTool, toolFormValues, invokeTool, missing.length]);
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (!isRunShortcut(e) || response.isRunning) return;
+    e.preventDefault();
+    if (missing.length === 0 && argsValid) handleInvoke();
+    else if (missing.length > 0) setAttempts((n) => n + 1);
+  };
 
   if (!isSelectedConnectionConnected) {
     return (
@@ -76,12 +93,16 @@ export default function ToolPanel() {
         ) : (
           <>
             <div>
-              <h3 className="flex items-center gap-2 text-sm font-semibold text-foreground"><span aria-hidden="true"><ToolIcon tool={selectedTool} /></span>{toolTitle(selectedTool)}</h3>
+              <div className="flex items-center justify-between gap-3">
+                <h3 className="flex min-w-0 items-center gap-2 text-sm font-semibold text-foreground"><span aria-hidden="true"><ToolIcon tool={selectedTool} /></span><span className="truncate">{toolTitle(selectedTool)}</span></h3>
+                <RunButton label="Run Tool" running={response.isRunning} disabled={!argsValid || missing.length > 0} describedBy={missing.length > 0 ? requiredId : undefined} onClick={handleInvoke} />
+              </div>
               {toolTitle(selectedTool) !== selectedTool.name && <p className="mt-1 font-mono text-xs text-muted-foreground">{selectedTool.name}</p>}
               <ToolBadges tool={selectedTool} />
               {selectedTool.description && (
                 <p className="text-xs text-muted-foreground mt-0.5">{selectedTool.description}</p>
               )}
+              <div className="mt-1"><RequiredNotice id={requiredId} missing={missing} /></div>
             </div>
 
             {selectedTool.outputSchema && (
@@ -91,24 +112,15 @@ export default function ToolPanel() {
               </details>
             )}
 
-            <ToolArgsEditor
-              key={selectedTool.name}
-              schema={selectedTool.inputSchema}
-              args={toolFormValues}
-              onChange={setToolFormValues}
-              onValidChange={setArgsValid}
-            />
-
-            <div className="flex justify-end pt-2 border-t border-border mt-auto">
-              <Button
-                size="sm"
-                onClick={handleInvoke}
-                disabled={response.isRunning || !argsValid}
-                className="gap-1.5 text-xs"
-              >
-                <Play size={12} />
-                {response.isRunning ? 'Running…' : 'Run Tool'}
-              </Button>
+            <div ref={argsRef} onKeyDown={handleKeyDown}>
+              <ToolArgsEditor
+                key={selectedTool.name}
+                schema={selectedTool.inputSchema}
+                args={toolFormValues}
+                onChange={setToolFormValues}
+                onValidChange={setArgsValid}
+                showRequired={attempts > 0}
+              />
             </div>
           </>
         )}

@@ -171,6 +171,8 @@ describe("loadConnection", () => {
         pendingParams: { id: 1 },
         toolFormValues: { query: "abc" },
         promptArgValues: {},
+        toolArgsByName: {},
+        promptArgsByName: {},
         response: {
           requestId: null, progress: null, outcome: null,
           result: { ok: true },
@@ -240,6 +242,8 @@ describe("delete connected Connection state", () => {
         pendingParams: null,
         toolFormValues: {},
         promptArgValues: {},
+        toolArgsByName: {},
+        promptArgsByName: {},
         response: {
           requestId: null, progress: null, outcome: null,
           result: null,

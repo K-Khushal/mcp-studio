@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { JsonTextarea } from './json-textarea';
-import { FieldValidityContext, SchemaForm, type Args } from './tool-schema-form';
+import { FieldValidityContext, SchemaForm, ShowRequiredContext, type Args } from './tool-schema-form';
 
 type Mode = 'form' | 'json';
 
@@ -13,11 +13,13 @@ interface ToolArgsEditorProps {
   onChange: (args: Args) => void;
   /** false while the arguments can't be sent (invalid JSON). */
   onValidChange?: (valid: boolean) => void;
+  /** Show inline "Required" errors on empty required fields. */
+  showRequired?: boolean;
 }
 
 const JSON_FIELD = 'arguments-json';
 
-export function ToolArgsEditor({ schema, args, onChange, onValidChange, label = 'Arguments' }: ToolArgsEditorProps) {
+export function ToolArgsEditor({ schema, args, onChange, onValidChange, showRequired = false, label = 'Arguments' }: ToolArgsEditorProps) {
   const [mode, setMode] = useState<Mode>('form');
   const [invalid, setInvalid] = useState<ReadonlySet<string>>(new Set());
   const reportField = useCallback((id: string, valid: boolean) => {
@@ -45,7 +47,9 @@ export function ToolArgsEditor({ schema, args, onChange, onValidChange, label = 
       </div>
       {mode === 'form' ? (
         <FieldValidityContext.Provider value={reportField}>
-          <SchemaForm schema={schema} args={args} onChange={onChange} />
+          <ShowRequiredContext.Provider value={showRequired}>
+            <SchemaForm schema={schema} args={args} onChange={onChange} />
+          </ShowRequiredContext.Provider>
         </FieldValidityContext.Provider>
       ) : (
         <JsonTextarea

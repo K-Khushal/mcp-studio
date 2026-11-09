@@ -138,11 +138,13 @@ describe("required markers", () => {
   it("marks required fields at the top level and inside a group", () => {
     renderEditor(schema);
 
-    expect(screen.getByText("query").querySelector('[aria-label="required"]')).not.toBeNull();
-    expect(screen.getByText("limit").querySelector('[aria-label="required"]')).toBeNull();
+    expect(screen.getByRole("textbox", { name: "query" })).toBeRequired();
+    expect(screen.getByRole("spinbutton", { name: "limit" })).not.toBeRequired();
     const group = screen.getByRole("group", { name: /options/i });
-    expect(within(group).getByText("retries").querySelector('[aria-label="required"]')).not.toBeNull();
-    expect(within(group).getByText("mode").querySelector('[aria-label="required"]')).toBeNull();
+    expect(within(group).getByRole("spinbutton", { name: "retries" })).toBeRequired();
+    expect(within(group).getByRole("textbox", { name: "mode" })).not.toBeRequired();
+    // The asterisk is decoration; the control carries the required state.
+    expect(screen.getByText("query").querySelector("[aria-hidden='true']")).not.toBeNull();
   });
 });
 
@@ -425,4 +427,27 @@ it("leaves blocked server defaults visually empty for string and number fields",
     expect(input).toHaveAccessibleDescription('Server default (not applied): "{{SECRET}}"');
   }
   expect(screen.getAllByText(/Server default \(not applied\)/)).toHaveLength(2);
+});
+
+describe("titled enums", () => {
+  it("shows oneOf titles, sends the const and keeps legacy enumNames working", async () => {
+    const { args } = renderEditor({
+      type: "object",
+      properties: {
+        size: { type: "string", oneOf: [{ const: "s", title: "Small (S)" }, { const: "l", title: "Large (L)" }] },
+        color: { type: "string", enum: ["r", "g"], enumNames: ["Red", "Green"] },
+      },
+    });
+    expect(screen.getAllByRole("option").map((o) => o.textContent)).toEqual(
+      expect.arrayContaining(["Small (S)", "Large (L)", "Red", "Green"]),
+    );
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "size" }), "Large (L)");
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "color" }), "Green");
+    expect(args()).toEqual({ size: "l", color: "g" });
+  });
+
+  it("falls back to the JSON editor when oneOf entries have no const", () => {
+    renderEditor({ type: "object", properties: { v: { oneOf: [{ type: "string" }, { type: "number" }] } } });
+    expect(screen.getByRole("textbox", { name: "v" })).toBeInTheDocument();
+  });
 });

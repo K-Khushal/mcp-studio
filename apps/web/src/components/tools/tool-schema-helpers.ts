@@ -40,6 +40,34 @@ export function resolveType(prop: SchemaProperty): string {
 
 const COMPOSITE_KEYWORDS = ['oneOf', 'anyOf', 'allOf', '$ref'];
 
+export interface EnumOption {
+  value: unknown;
+  label: string;
+}
+
+const isConstEntry = (entry: unknown): entry is { const: unknown; title?: unknown } =>
+  typeof entry === 'object' && entry !== null && 'const' in entry;
+
+/**
+ * Choices for a single-select field, with display titles: `oneOf`/`anyOf` lists of
+ * `{ const, title }`, or a plain `enum` optionally paired with legacy `enumNames`.
+ * null when the property isn't a choice list.
+ */
+export function enumOptions(prop: SchemaProperty): EnumOption[] | null {
+  const titled = [prop.oneOf, prop.anyOf].find((list): list is unknown[] => Array.isArray(list) && list.length > 0 && list.every(isConstEntry));
+  if (titled) {
+    return titled.map((entry) => {
+      const { const: value, title } = entry as { const: unknown; title?: unknown };
+      return { value, label: typeof title === 'string' && title ? title : typeof value === 'string' ? value : JSON.stringify(value) };
+    });
+  }
+  if (Array.isArray(prop.enum) && prop.enum.length > 0) {
+    const names = Array.isArray(prop.enumNames) && prop.enumNames.length === prop.enum.length ? prop.enumNames : [];
+    return prop.enum.map((value, i) => ({ value, label: typeof names[i] === 'string' && names[i] ? names[i] : typeof value === 'string' ? value : JSON.stringify(value) }));
+  }
+  return null;
+}
+
 function isPrimitiveKind(kind: FieldKind): boolean {
   return kind === 'enum' || kind === 'boolean' || kind === 'number' || kind === 'string';
 }
@@ -50,8 +78,8 @@ function isPrimitiveKind(kind: FieldKind): boolean {
  * Anything deeper or not expressible as plain fields falls back to 'json'.
  */
 export function fieldKind(prop: SchemaProperty, depth = 0): FieldKind {
+  if (enumOptions(prop) && !('$ref' in prop) && prop.allOf === undefined) return 'enum';
   if (COMPOSITE_KEYWORDS.some((k) => prop[k] !== undefined)) return 'json';
-  if (Array.isArray(prop.enum) && prop.enum.length > 0) return 'enum';
   const type = resolveType(prop);
   if (type === 'boolean') return 'boolean';
   if (type === 'number' || type === 'integer') return 'number';
@@ -85,4 +113,9 @@ export function initialArgs(schema: Record<string, unknown>): Record<string, unk
     else if (resolveType(prop) === 'boolean') args[key] = false;
   }
   return args;
+}
+
+/** Top-level required arguments that are still unset or empty. */
+export function missingRequired(schema: Record<string, unknown>, args: Record<string, unknown>): string[] {
+  return getRequired(schema).filter((key) => args[key] === undefined || args[key] === '');
 }
