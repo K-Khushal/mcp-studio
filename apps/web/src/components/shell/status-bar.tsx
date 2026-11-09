@@ -102,16 +102,16 @@ export function StatusBar() {
       {/* Uptime — isolated component, never re-renders StatusBar */}
       {connectionStatus === 'connected' && connectedAt && <UptimeTimer connectedAt={connectedAt} />}
 
-      {/* Last request latency */}
+      {/* Last Call latency */}
       <div className="flex items-center gap-1">
         <Clock size={11} />
         <span className="tabular-nums">{latency}ms</span>
       </div>
 
-      {/* Total requests */}
+      {/* Total Calls */}
       <div className="flex items-center gap-1">
         <Activity size={11} />
-        <span className="tabular-nums">{requestCount} calls</span>
+        <span className="tabular-nums">{requestCount} {requestCount === 1 ? 'call' : 'calls'}</span>
       </div>
 
       {/* Error count — only shown when non-zero */}
@@ -123,7 +123,7 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
-      <span className="font-mono">MCP Studio v1.0</span>
+      <span className="font-mono">MCP Studio v{__APP_VERSION__}</span>
     </div>
   );
 }

@@ -14,6 +14,16 @@ for (const name of ["xdg-open", "open"]) {
   await chmod(file, 0o755);
 }
 const command = process.argv[2] ? [resolve(process.argv[2])] : [process.execPath, resolve("dist/cli.js")];
+for (const flag of ["--help", "--version", "--unknown"]) {
+  const result = Bun.spawnSync([...command, flag], { cwd: dir, env: { ...process.env, STUDIO_DB_PATH: join(dir, "flags.db") } });
+  const output = result.stdout.toString() + result.stderr.toString();
+  assert.equal(result.exitCode, flag === "--unknown" ? 1 : 0);
+  if (flag === "--version") {
+    const { version } = await import("../package.json");
+    assert.equal(output.trim(), version);
+  } else assert.match(output, /Usage:/);
+}
+assert.equal(await Bun.file(join(dir, "flags.db")).exists(), false, "informational flags do not initialize persistence");
 const child = Bun.spawn([...command, "--port", String(port), "--no-open"], {
   cwd: dir,
   env: { ...process.env, PATH: `${dir}:${process.env["PATH"]}`, STUDIO_DB_PATH: process.env["STUDIO_DB_PATH"] ?? join(dir, "studio.db") },
@@ -65,7 +75,7 @@ try {
     ws.onerror = () => { clearTimeout(timer); reject(new Error("WS failed")); };
   });
   assert.equal(await Bun.file(marker).exists(), false, "--no-open suppresses browser");
-  console.log("PASS: --port, --no-open, HTML + asset, REST + /api, WebSocket, Host + origin rejection, traversal rejection, arbitrary cwd");
+  console.log("PASS: --help, --version, unknown flags, --port, --no-open, HTML + asset, REST + /api, WebSocket, Host + origin rejection, traversal rejection, arbitrary cwd");
 } finally {
   child.kill();
   await child.exited;

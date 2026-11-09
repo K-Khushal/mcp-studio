@@ -50,7 +50,7 @@ export function AddConnectionDialog({ collection, open, onClose }: AddConnection
             <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. Search users"
+              placeholder="Connection name"
               className="h-8 text-xs"
               autoFocus
             />
