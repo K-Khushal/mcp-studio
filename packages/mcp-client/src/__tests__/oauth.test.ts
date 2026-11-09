@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { redactOAuthValue } from "../oauth.js";
+import { redactOAuthValue, StudioOAuthProvider } from "../oauth.js";
 
 describe("OAuth error redaction", () => {
   for (const name of ["AbortError", "TimeoutError"]) {
@@ -35,4 +35,10 @@ test("diagnostics redact JSON-escaped and URL-encoded credential values, includi
   expect(redacted.url).toBe("https://example.test/?key=[REDACTED]");
   expect(redacted.unusual).toBe("[REDACTED]");
   expect(original.unusual).toBe(unusual);
+});
+
+test.each(["ms-settings:privacy", "ftp://example.com/authorize", "http://auth.example.com/authorize", "http://127.evil.test/authorize"])("refuses unsafe authorization URL %s before browser approval", (url) => {
+  const provider = new StudioOAuthProvider({ redirectUrl: "http://localhost/callback", storage: { load: async () => ({}), save: async () => {} }, authorize: async () => "code" });
+  provider.state();
+  expect(() => provider.redirectToAuthorization(new URL(url))).toThrow("OAuth sign-in requires HTTPS");
 });

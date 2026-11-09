@@ -1,4 +1,5 @@
 import { studioFetch } from "@/lib/studio-access";
+import { isSafeOAuthUrl } from "@/lib/oauth-url";
 import { toast } from "sonner";
 import type { ElicitationResult } from "@mcp-studio/types";
 import { create } from "zustand";
@@ -1375,6 +1376,12 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
 
     case "oauth_authorize":
+      if (!isSafeOAuthUrl(msg.url)) {
+        useStore.setState({ oauthAuthorizationUrl: null });
+        toast.error("OAuth sign-in requires HTTPS (HTTP is allowed only for loopback hosts)");
+        addLog("ERROR", "studio", "Unsafe OAuth sign-in URL refused");
+        break;
+      }
       // Not a user gesture, so popup blockers may stop this; the connection panel keeps the link.
       window.open(msg.url, "_blank", "noopener");
       useStore.setState({ oauthAuthorizationUrl: msg.url });

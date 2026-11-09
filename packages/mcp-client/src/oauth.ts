@@ -1,3 +1,5 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
@@ -5,7 +7,79 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 /** Only errors originating in OAuth discovery, approval or token exchange. */
 export class OAuthFlowError extends Error {
-  constructor() { super("OAuth authentication failed"); }
+  constructor(message = "OAuth authentication failed") { super(message); }
+}
+
+/** Fixed messages only: never expose an untrusted endpoint or SDK error. */
+export class OAuthPolicyError extends OAuthFlowError {
+  constructor(reason: "authorization" | "endpoint") {
+    super(reason === "authorization"
+      ? "OAuth sign-in requires HTTPS (HTTP is allowed only for loopback hosts)"
+      : "OAuth endpoint refused: private or invalid destination for a public MCP Server");
+  }
+}
+
+function isLoopback(host: string): boolean {
+  return host === "localhost" || host === "[::1]" || /^127\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(host);
+}
+
+/** Applied before any browser approval callback. */
+function validateAuthorizationUrl(url: URL): void {
+  if (url.username || url.password || (url.protocol !== "https:" && !(url.protocol === "http:" && isLoopback(url.hostname)))) {
+    throw new OAuthPolicyError("authorization");
+  }
+}
+
+// Only globally routable unicast addresses are public. URL parsing has already
+// normalized abbreviated/hex IPv4 and IPv4-mapped IPv6 spellings.
+function isPublicAddress(address: string): boolean {
+  if (isIP(address) === 4) {
+    const [a = 0, b = 0, c = 0] = address.split(".").map(Number);
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 168 || b === 0 || (b === 2))) ||
+      (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+      (a === 203 && b === 0 && c === 113));
+  }
+  if (isIP(address) !== 6) return false;
+  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  // Mapped addresses, ULA, link-local, multicast and unspecified are outside 2000::/3.
+  return /^[23][0-9a-f]{3}:/.test(normalized) &&
+    !normalized.startsWith("2002:") && !/^2001:(?:db8|0|:)/.test(normalized);
+}
+
+async function addresses(hostname: string): Promise<string[]> {
+  const host = hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host)) return [host];
+  if (host === "localhost" || host.endsWith(".localhost")) return ["127.0.0.1"];
+  return (await lookup(host, { all: true, verbatim: true })).map(result => result.address);
+}
+
+/** Guard every auth request, including each redirect hop made by the SDK. */
+export function createOAuthFetch(serverUrl: URL, fetchFn: FetchLike = fetch): FetchLike {
+  let privateServer: Promise<boolean> | undefined;
+  return async (input, init) => {
+    let destination: URL;
+    try {
+      destination = new URL(input instanceof Request ? input.url : String(input));
+      if (!["http:", "https:"].includes(destination.protocol) || destination.username || destination.password) {
+        throw new OAuthPolicyError("endpoint");
+      }
+      if (destination.hostname !== serverUrl.hostname) {
+        const resolved = await addresses(destination.hostname);
+        if (!resolved.length || !resolved.every(isPublicAddress)) {
+          privateServer ??= addresses(serverUrl.hostname).then(results => results.length > 0 && results.every(address => !isPublicAddress(address)));
+          if (!await privateServer) throw new OAuthPolicyError("endpoint");
+        }
+      }
+    } catch {
+      throw new OAuthPolicyError("endpoint");
+    }
+    // Never let runtime automatic redirects bypass destination validation. The
+    // SDK follows permitted same-origin redirects through this guarded fetch.
+    return fetchFn(input, { ...init, redirect: "manual" });
+  };
 }
 
 type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean; rejectBrowserSignIn(): void };
@@ -117,7 +191,8 @@ export class StudioOAuthProvider implements OAuthClientProvider {
             throw new OAuthFlowError();
           }
         }
-      }).catch(() => {
+      }).catch((error: unknown) => {
+        if (error instanceof OAuthPolicyError) throw error;
         // OAuth errors may carry raw response bodies and submitted secrets.
         throw new OAuthFlowError();
       }).finally(() => {
@@ -198,6 +273,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(url: URL) {
+    validateAuthorizationUrl(url);
     if (!this.lastState) throw new Error("OAuth authorization requested without state");
     this.pending = { url, state: this.lastState };
   }

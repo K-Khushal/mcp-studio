@@ -83,3 +83,23 @@ it("reports a failed sign-out instead of silently retaining credentials", async 
   await useStore.getState().signOut("col-1", "conn-1");
   expect(error).toHaveBeenCalledWith("Failed to sign out");
 });
+
+it.each(["ms-settings:privacy", "javascript:alert(1)", "data:text/html,test", "ftp://auth.example.com", "http://auth.example.com/authorize", "http://localhost.evil.test/authorize", "http://127.evil.test/authorize", "not a URL"])("refuses unsafe sign-in URL %s", async (url) => {
+  const open = vi.fn();
+  vi.stubGlobal("open", open);
+  const error = vi.spyOn(toast, "error");
+  await useStore.getState().connect(oauth);
+  deliver({ type: "oauth_authorize", url });
+  expect(open).not.toHaveBeenCalled();
+  expect(useStore.getState().oauthAuthorizationUrl).toBeNull();
+  expect(error).toHaveBeenCalledWith("OAuth sign-in requires HTTPS (HTTP is allowed only for loopback hosts)");
+});
+
+it.each(["http://localhost/authorize", "http://127.0.0.2/authorize", "http://[::1]/authorize"])("permits loopback sign-in %s", async (url) => {
+  const open = vi.fn();
+  vi.stubGlobal("open", open);
+  await useStore.getState().connect(oauth);
+  deliver({ type: "oauth_authorize", url });
+  expect(open).toHaveBeenCalledWith(url, "_blank", "noopener");
+  expect(useStore.getState().oauthAuthorizationUrl).toBe(url);
+});

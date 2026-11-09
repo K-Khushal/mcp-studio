@@ -588,3 +588,16 @@ test("OAuth ID tokens and resource response credentials are redacted from header
   expect(headers.headers["set-cookie"]).toBe("[REDACTED]");
   expect(headers.headers["x-id-reflection"]).toBe("[REDACTED]");
 });
+
+for (const url of ["ms-settings:privacy", "http://auth.example.com/authorize"]) {
+  test(`unsafe authorization URL ${url} fails before sending browser approval`, async () => {
+    fixture.faults.authorizationUrl = url;
+    const session = openSession();
+    await session.send(fixture.connection(connectionId));
+    expect(await session.waitFor("error")).toMatchObject({
+      code: "CONNECTION_FAILED",
+      message: "OAuth sign-in requires HTTPS (HTTP is allowed only for loopback hosts)",
+    });
+    expect(session.messages.some(message => message.type === "oauth_authorize")).toBe(false);
+  });
+}
