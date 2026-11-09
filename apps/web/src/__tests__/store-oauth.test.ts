@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { toast } from "sonner";
 import type { ConnectionConfig, ServerMessage } from "@mcp-studio/types";
 
 let deliver: (msg: ServerMessage) => void = () => {};
@@ -33,7 +34,7 @@ beforeEach(() => {
   });
 });
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe("OAuth sign-in", () => {
   it("connects with the selected Connection so the Studio Server can use its stored sign-in", async () => {
@@ -74,4 +75,11 @@ describe("OAuth sign-in", () => {
     expect(fetch).toHaveBeenCalledWith("/api/collections/col-1/connections/conn-1/oauth", { method: "DELETE" });
     expect(useStore.getState().connectionStatus).toBe("disconnected");
   });
+});
+
+it("reports a failed sign-out instead of silently retaining credentials", async () => {
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("private diagnostic", { status: 500 })));
+  const error = vi.spyOn(toast, "error").mockReturnValue("sign-out-error");
+  await useStore.getState().signOut("col-1", "conn-1");
+  expect(error).toHaveBeenCalledWith("Failed to sign out");
 });

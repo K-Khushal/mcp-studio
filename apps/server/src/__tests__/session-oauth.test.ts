@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
 import { createCollection } from "../db/queries/collections";
-import { createConnection } from "../db/queries/connections";
+import { createConnection, updateConnection } from "../db/queries/connections";
 import { clearOAuthCredentials, oauthStorage } from "../db/queries/oauth-credentials";
 import { approveInBrowser, startOAuthCallback, startOAuthFixture } from "./fixtures/oauth-fixture";
 import { SessionHarness } from "./fixtures/session-harness";
@@ -111,12 +111,12 @@ test("no token value reaches the browser or the logs", async () => {
 test("disconnecting while the browser sign-in is pending cancels the connect", async () => {
   const session = openSession();
   const authorize = session.waitFor("oauth_authorize");
-  const failed = session.waitFor("error");
   const connecting = session.send(fixture.connection(connectionId));
   await authorize;
   await session.send({ type: "disconnect" });
   await connecting;
-  expect(await failed).toMatchObject({ code: "CONNECTION_FAILED", message: "OAuth sign-in cancelled" });
+  expect(session.messages.filter(message => message.type === "error")).toEqual([]);
+  expect(session.messages.at(-1)).toMatchObject({ type: "disconnected" });
   expect(fixture.counts.authorizations).toBe(0);
 });
 
@@ -144,4 +144,141 @@ test("signing in again after the Studio Server's redirect URL changed registers 
   callback = startOAuthCallback();
   await signInAndConnect(openSession());
   expect(fixture.counts).toEqual({ registrations: 2, authorizations: 2, refreshes: 0 });
+});
+
+for (const failure of ["refresh", "exchange", "registration"] as const) {
+  test(`${failure} failure never exposes OAuth response bodies or credentials`, async () => {
+    const session = openSession();
+    if (failure === "refresh") {
+      await signInAndConnect(session);
+      await session.send({ type: "disconnect" });
+      fixture.expireAccessTokens();
+    }
+    fixture.faults[failure] = true;
+    const connecting = session.send(fixture.connection(connectionId));
+    if (failure === "exchange") await approveInBrowser((await session.waitFor("oauth_authorize")).url);
+    await connecting;
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    const emitted = JSON.stringify(session.messages);
+    expect(emitted).not.toContain("diagnostic");
+    for (const secret of fixture.issued) expect(emitted).not.toContain(secret);
+  });
+}
+
+for (const grant of ["refresh_token", "authorization_code"] as const) {
+  test(`${grant} completing after sign-out cannot restore credentials`, async () => {
+    const session = openSession();
+    if (grant === "refresh_token") {
+      await signInAndConnect(session);
+      await session.send({ type: "disconnect" });
+      fixture.expireAccessTokens();
+    }
+    const gate = fixture.pauseTokens(grant);
+    const connecting = session.send(fixture.connection(connectionId));
+    if (grant === "authorization_code") await approveInBrowser((await session.waitFor("oauth_authorize")).url);
+    await gate.started;
+    await clearOAuthCredentials(connectionId);
+    gate.resume();
+    await connecting;
+    expect(await oauthStorage(connectionId, fixture.connection().config.url).load()).toEqual({});
+  });
+}
+
+test("editing the Connection URL retires credentials even when edited back", async () => {
+  await signInAndConnect(openSession());
+  const oldStorage = oauthStorage(connectionId, fixture.connection().config.url);
+  await updateConnection(connectionId, { connectionConfig: { transport: "http", config: { ...fixture.connection().config, url: "http://127.0.0.1:1/mcp" } } });
+  await updateConnection(connectionId, { connectionConfig: { transport: "http", config: fixture.connection().config } });
+  await expect(oldStorage.save({})).rejects.toThrow();
+  expect(await oauthStorage(connectionId, fixture.connection().config.url).load()).toEqual({});
+});
+
+test("disconnect during code exchange cancels persistence and post-auth reconnect", async () => {
+  const session = openSession();
+  const gate = fixture.pauseTokens("authorization_code");
+  const connecting = session.send(fixture.connection(connectionId));
+  await approveInBrowser((await session.waitFor("oauth_authorize")).url);
+  await gate.started;
+  await session.send({ type: "disconnect" });
+  gate.resume();
+  await connecting;
+  expect(session.messages.some(message => message.type === "connected")).toBe(false);
+  expect(session.messages.filter(message => message.type === "error")).toEqual([]);
+  expect((await oauthStorage(connectionId, fixture.connection().config.url).load()).tokens).toBeUndefined();
+});
+
+test("SSE-only OAuth MCP Servers complete sign-in and Calls", async () => {
+  await fixture.close();
+  fixture = await startOAuthFixture("sse");
+  const session = openSession();
+  expect(await signInAndConnect(session)).toMatchObject({ httpVariant: "sse" });
+  expect(await echo(session, "legacy signed in")).toMatchObject({ data: { content: [{ text: "legacy signed in" }] } });
+  expect(fixture.counts).toEqual({ registrations: 1, authorizations: 1, refreshes: 0 });
+});
+
+test("concurrent Calls share one rotating-token refresh across Sessions", async () => {
+  const first = openSession();
+  const second = openSession();
+  await signInAndConnect(first);
+  await second.send(fixture.connection(connectionId));
+  fixture.expireAccessTokens();
+  const gate = fixture.pauseTokens("refresh_token");
+  const calls = Promise.all([
+    first.send({ type: "invoke", tool: "echo", params: { text: "first" } }),
+    second.send({ type: "invoke", tool: "echo", params: { text: "second" } }),
+  ]);
+  await gate.started;
+  gate.resume();
+  await calls;
+  const messages = [...first.messages, ...second.messages];
+  expect(messages.filter(message => message.type === "error")).toEqual([]);
+  expect(messages.filter(message => message.type === "result")).toHaveLength(2);
+  expect(fixture.counts.refreshes).toBe(1);
+});
+
+test("concurrent Sessions share registration and browser authorization", async () => {
+  const first = openSession();
+  const second = openSession();
+  const connecting = Promise.all([first.send(fixture.connection(connectionId)), second.send(fixture.connection(connectionId))]);
+  await approveInBrowser((await first.waitFor("oauth_authorize")).url);
+  await connecting;
+  await first.waitFor("connected");
+  await second.waitFor("connected");
+  expect(fixture.counts).toEqual({ registrations: 1, authorizations: 1, refreshes: 0 });
+  expect(second.messages.some(message => message.type === "oauth_authorize")).toBe(false);
+});
+
+test("unsaved sign-ins belong to one Session and are forgotten on disconnect", async () => {
+  const first = openSession();
+  const second = openSession();
+  const connectUnsaved = async (session: SessionHarness) => {
+    const connecting = session.send(fixture.connection());
+    await approveInBrowser((await session.waitFor("oauth_authorize")).url);
+    await connecting;
+    await session.waitFor("connected");
+  };
+  await connectUnsaved(first);
+  await connectUnsaved(second);
+  await first.send({ type: "disconnect" });
+  await connectUnsaved(first);
+  expect(fixture.counts.registrations).toBe(3);
+  expect(await oauthStorage(connectionId, fixture.connection().config.url).load()).toEqual({});
+});
+
+test("unknown Connection IDs fail before OAuth can register or write credentials", async () => {
+  const session = openSession();
+  await session.send(fixture.connection("missing-connection"));
+  expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+  expect(fixture.counts.registrations).toBe(0);
+  expect(session.messages.some(message => message.type === "oauth_authorize")).toBe(false);
+});
+
+test("refresh and discovery response metadata never reaches http_response messages", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  fixture.expireAccessTokens();
+  await echo(session, "refresh metadata stays private");
+  const responses = session.messages.filter(message => message.type === "http_response");
+  expect(responses.length).toBeGreaterThan(0);
+  expect(responses.every(message => !("x-fixture-oauth" in message.headers))).toBe(true);
 });

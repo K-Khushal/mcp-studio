@@ -68,8 +68,9 @@ export class SessionManager {
   private verbose = false;
   private calls = new Map<string, AbortController>();
   private callClocks = new Map<string, { pause(): void; resume(): void }>();
-  /** Aborts a sign-in still waiting on the browser when the Session is disconnected. */
+  /** Owns the whole Session authentication lifecycle, including exchange and refresh. */
   private signInAbort: AbortController | null = null;
+  private sessionOAuthStorage: OAuthStorage | null = null;
 
   constructor(private readonly send: Send, private readonly options: SessionOptions = {}) {}
 
@@ -147,6 +148,8 @@ export class SessionManager {
     }
 
     this.setStatus("connecting");
+    const lifecycle = new AbortController();
+    this.signInAbort = lifecycle;
 
     try {
       const client: MCPClientInterface =
@@ -168,11 +171,17 @@ export class SessionManager {
               onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
-              oauth: this.oauthSignIn(msg.connectionId, config.config.url),
+              oauth: config.config.auth?.type === "oauth"
+                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal)
+                : undefined,
             });
 
       this.client = client;
       const info = await client.connect();
+      if (lifecycle.signal.aborted || this.client !== client) {
+        await client.disconnect();
+        return;
+      }
       this.setStatus("connected");
 
       this.send({
@@ -184,6 +193,7 @@ export class SessionManager {
         serverInfo: { name: info.serverName, version: info.serverVersion },
       });
     } catch (err) {
+      if (lifecycle.signal.aborted || this.signInAbort !== lifecycle) return;
       this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
@@ -295,28 +305,27 @@ export class SessionManager {
     this.send({ type: "prompts_listed", prompts });
   }
 
-  private oauthSignIn(connectionId: string | undefined, serverUrl: string): OAuthSignIn | undefined {
+  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal): OAuthSignIn | undefined {
     const oauth = this.options.oauth;
     if (!oauth) return undefined;
     return {
       redirectUrl: oauth.redirectUrl,
-      storage: connectionId ? oauth.storage(connectionId, serverUrl) : sessionStorage(),
+      signal,
+      storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
       authorize: async (authorizationUrl, state) => {
-        this.signInAbort = new AbortController();
-        const code = oauth.redirects.wait(state, this.signInAbort.signal);
+        signal.throwIfAborted();
+        const code = oauth.redirects.wait(state, signal);
         this.send({ type: "log", level: "INFO", source: "protocol", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
-        try {
-          return await code;
-        } finally {
-          this.signInAbort = null;
-        }
+        return code;
       },
     };
   }
 
   async disconnect(): Promise<void> {
     this.signInAbort?.abort();
+    this.signInAbort = null;
+    this.sessionOAuthStorage = null;
     if (this.status === "disconnected") return;
     this.clearElicitations();
     for (const call of this.calls.values()) call.abort("cancelled");

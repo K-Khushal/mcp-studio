@@ -561,7 +561,12 @@ export const useStore = create<AppState & AppActions>()(
         if (connectedConnectionId === connId || connectingConnectionId === connId) {
           await get().disconnect();
         }
-        await fetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
+        try {
+          const response = await fetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
+          if (!response.ok) throw new Error("Sign-out failed");
+        } catch {
+          toast.error("Failed to sign out");
+        }
       },
 
       // ---------- tools ----------

@@ -1,5 +1,9 @@
-import type { OAuthClientProvider, OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
+import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+
+import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
+
+const authorizations = new WeakMap<object, Promise<void>>();
 
 /** What Studio keeps between Sessions for one Connection's OAuth sign-in. */
 export interface OAuthCredentials {
@@ -9,11 +13,14 @@ export interface OAuthCredentials {
 
 /** Durable home for one Connection's credentials. */
 export interface OAuthStorage {
+  /** Shared identity for adapters for the same credential generation. */
+  coordination?: object;
   load(): Promise<OAuthCredentials>;
   save(credentials: OAuthCredentials): Promise<void>;
 }
 
 export interface OAuthSignIn {
+  signal?: AbortSignal;
   /** Where the authorization server sends the browser back to the Studio Server. */
   redirectUrl: string;
   storage: OAuthStorage;
@@ -36,6 +43,47 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   private pending: { url: URL; state: string } | undefined;
 
   constructor(private readonly signIn: OAuthSignIn) {}
+
+  /** Coalesce the SDK's entire auth flow, including registration and browser approval. */
+  async authenticate(serverUrl: URL, rejectedAuthorization: string | null, response: Response, fetchFn: FetchLike): Promise<void> {
+    const key = this.signIn.storage.coordination ?? this.signIn.storage;
+    let pending = authorizations.get(key);
+    if (!pending) {
+      pending = Promise.resolve().then(async () => {
+        const current = await this.tokens();
+        // Another request may already have refreshed the token rejected by this response.
+        if (current && `Bearer ${current.access_token}` !== rejectedAuthorization) return;
+        const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
+        const options = { serverUrl, resourceMetadataUrl, scope, fetchFn };
+        if (await auth(this, options) === "REDIRECT") {
+          const code = await this.authorizePending();
+          this.signIn.signal?.throwIfAborted();
+          if (!code || await auth(this, { ...options, authorizationCode: code }) !== "AUTHORIZED") {
+            throw new Error("OAuth authentication failed");
+          }
+        }
+      }).catch(() => {
+        // OAuth errors may carry raw response bodies and submitted secrets.
+        throw new Error("OAuth authentication failed");
+      }).finally(() => {
+        if (authorizations.get(key) === pending) authorizations.delete(key);
+      });
+      authorizations.set(key, pending);
+    }
+    const signal = this.signIn.signal;
+    signal?.throwIfAborted();
+    let abort: (() => void) | undefined;
+    try {
+      await Promise.race([pending, new Promise<never>((_, reject) => {
+        abort = () => reject(new Error("OAuth sign-in cancelled"));
+        signal?.addEventListener("abort", abort, { once: true });
+      })]);
+      signal?.throwIfAborted();
+      await this.signIn.storage.load();
+    } finally {
+      if (abort) signal?.removeEventListener("abort", abort);
+    }
+  }
 
   get redirectUrl(): string {
     return this.signIn.redirectUrl;
@@ -92,7 +140,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   async invalidateCredentials(scope: "all" | "client" | "tokens" | "verifier" | "discovery") {
     if (scope === "all" || scope === "verifier") this.verifier = undefined;
     if (scope === "all" || scope === "discovery") this.discovery = undefined;
-    if (scope === "all") await this.signIn.storage.save({});
+    if (scope === "all") await this.update({ tokens: undefined, clientInformation: undefined });
     if (scope === "client") await this.update({ clientInformation: undefined });
     if (scope === "tokens") await this.update({ tokens: undefined });
   }
@@ -107,12 +155,18 @@ export class StudioOAuthProvider implements OAuthClientProvider {
 
   /** Lets the user approve the authorization the SDK requested; resolves with its code. */
   async authorizePending(): Promise<string | undefined> {
+    this.signIn.signal?.throwIfAborted();
+    await this.signIn.storage.load();
+    this.signIn.signal?.throwIfAborted();
     const pending = this.pending;
     this.pending = undefined;
     return pending && this.signIn.authorize(pending.url, pending.state);
   }
 
   private async update(patch: OAuthCredentials) {
-    await this.signIn.storage.save({ ...(await this.signIn.storage.load()), ...patch });
+    this.signIn.signal?.throwIfAborted();
+    const credentials = await this.signIn.storage.load();
+    this.signIn.signal?.throwIfAborted();
+    await this.signIn.storage.save({ ...credentials, ...patch });
   }
 }

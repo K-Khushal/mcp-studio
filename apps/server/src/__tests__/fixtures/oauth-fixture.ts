@@ -1,18 +1,30 @@
 import type { ClientMessage } from "@mcp-studio/types";
 import { createHash } from "node:crypto";
 import { oauthCallbackResponse, OAuthRedirects } from "../../oauth/redirects";
-import { createStreamableEndpoint } from "./session-harness";
+import { createStreamableEndpoint, startHTTPFixture } from "./session-harness";
 
 const random = () => crypto.randomUUID().replaceAll("-", "");
-const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store" } });
+const json = (body: unknown, status = 200) => Response.json(body, { status, headers: { "cache-control": "no-store", "x-fixture-oauth": "private" } });
 
 /**
  * OAuth-protected MCP Server on a loopback port: RFC 9728 protected-resource metadata,
  * RFC 8414 authorization-server metadata, dynamic client registration, PKCE (S256)
  * authorization code grant and refresh tokens. /authorize approves immediately.
  */
-export async function startOAuthFixture() {
-  const endpoint = createStreamableEndpoint();
+export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable") {
+  let tokenGate: { grant: string; started: () => void; resume: Promise<void> } | undefined;
+  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean } = {};
+  const legacy = mode === "sse" ? await startHTTPFixture("sse") : undefined;
+  const endpoint = legacy ? {
+    handle(request: Request) {
+      const target = new URL(request.url);
+      const upstream = new URL(legacy.connection.config.url);
+      target.host = upstream.host;
+      if (target.pathname === "/mcp") target.pathname = "/sse";
+      return fetch(new Request(target.toString(), request));
+    },
+    close: () => legacy.close(),
+  } : createStreamableEndpoint();
   const clients = new Map<string, string[]>();
   const codes = new Map<string, { clientId: string; redirectUri: string; challenge: string }>();
   const accessTokens = new Map<string, { expired: boolean }>();
@@ -49,6 +61,7 @@ export async function startOAuthFixture() {
           token_endpoint_auth_methods_supported: ["none"],
         });
       case "/register": {
+        if (faults.registration) return new Response("DCR diagnostic body with private server data", { status: 500 });
         const metadata = await request.json() as { redirect_uris: string[] };
         const clientId = `client_${random()}`;
         clients.set(clientId, metadata.redirect_uris);
@@ -73,6 +86,18 @@ export async function startOAuthFixture() {
       }
       case "/token": {
         const form = new URLSearchParams(await request.text());
+        if (tokenGate?.grant === form.get("grant_type")) {
+          const gate = tokenGate;
+          tokenGate = undefined;
+          gate.started();
+          await gate.resume;
+        }
+        if (faults.refresh && form.get("grant_type") === "refresh_token") {
+          return json({ error: "invalid_request", error_description: `refresh diagnostic: ${form.get("refresh_token")}` }, 400);
+        }
+        if (faults.exchange && form.get("grant_type") === "authorization_code") {
+          return new Response(`exchange diagnostic: ${form.get("code")} ${form.get("code_verifier")}`, { status: 500 });
+        }
         if (form.get("grant_type") === "authorization_code") {
           const grant = codes.get(form.get("code") ?? "");
           codes.delete(form.get("code") ?? "");
@@ -89,7 +114,9 @@ export async function startOAuthFixture() {
         }
         return json({ error: "unsupported_grant_type" }, 400);
       }
+      case "/messages":
       case "/mcp": {
+        if (legacy && url.pathname === "/mcp" && request.method === "POST") return new Response("Use legacy SSE", { status: 405 });
         const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (token) presented.add(token);
         const state = token ? accessTokens.get(token) : undefined;
@@ -109,6 +136,13 @@ export async function startOAuthFixture() {
       config: { url: new URL("/mcp", server.url).toString(), headers: {}, auth: { type: "oauth" } },
     }) satisfies ClientMessage,
     counts,
+    faults,
+    pauseTokens(grant: "refresh_token" | "authorization_code") {
+      const started = Promise.withResolvers<void>();
+      const resume = Promise.withResolvers<void>();
+      tokenGate = { grant, started: () => started.resolve(), resume: resume.promise };
+      return { started: started.promise, resume: () => resume.resolve() };
+    },
     /** Every access and refresh token the authorization server issued. */
     issued,
     /** Every bearer token the MCP endpoint received. */

@@ -1,3 +1,4 @@
+import { clearOAuthCredentials } from "./oauth-credentials.js";
 import { eq } from "drizzle-orm";
 import { db } from "../index.js";
 import { connections } from "../schema.js";
@@ -38,6 +39,7 @@ export async function createConnection(
 }
 
 export async function deleteConnection(id: string): Promise<void> {
+  await clearOAuthCredentials(id);
   await db.delete(connections).where(eq(connections.id, id));
 }
 
@@ -55,6 +57,10 @@ export async function updateConnection(id: string, data: UpdateConnectionData): 
   }
 
   if (data.connectionConfig !== undefined) {
+    const previous = db.select().from(connections).where(eq(connections.id, id)).get()?.connectionConfig;
+    const oldUrl = previous?.transport === "http" ? previous.config.url : undefined;
+    const newUrl = data.connectionConfig?.transport === "http" ? data.connectionConfig.config.url : undefined;
+    if (oldUrl !== newUrl) await clearOAuthCredentials(id);
     update.connectionConfig = data.connectionConfig;
   }
 
