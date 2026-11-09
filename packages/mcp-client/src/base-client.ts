@@ -1,4 +1,6 @@
 import { ElicitRequestSchema, CallToolResultSchema, McpError, ErrorCode } from "@modelcontextprotocol/sdk/types.js";
+import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { OAuthFlowError } from "./oauth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
@@ -153,7 +155,15 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   async connect(): Promise<ConnectedServerInfo> {
     this.client = await this.setupTransport();
 
-    const [tools, prompts] = await Promise.all([this.listTools(), this.listPrompts()]);
+    const [tools, prompts] = await Promise.all([
+      this.listTools(),
+      this.listPrompts().catch(error => {
+        if (error instanceof OAuthFlowError || error instanceof UnauthorizedError ||
+          this.options.oauth?.signal?.aborted || (error instanceof Error && error.name === "AbortError")) throw error;
+        this.options.onLog?.("WARN", "studio", "prompts/list failed; continuing with no prompts");
+        return [];
+      }),
+    ]);
     if (!this.protocolVersion) throw new Error("MCP initialize did not negotiate a protocol version");
     this._isConnected = true;
     const serverInfo = this.client.getServerVersion();

@@ -14,7 +14,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-first" = "streamable") {
   let discoveryGate: { started(): void; resume: Promise<void> } | undefined;
   let tokenGate: { grant: string; phase: "request" | "response"; started: () => void; resume: Promise<void> } | undefined;
-  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean } = {};
+  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean; expireOnPrompts?: boolean } = {};
   const legacy = mode !== "streamable" ? await startHTTPFixture("sse") : undefined;
   const endpoint = legacy ? {
     handle(request: Request) {
@@ -140,6 +140,8 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
         const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (token) presented.add(token);
         const state = token ? accessTokens.get(token) : undefined;
+        if (state && faults.expireOnPrompts && request.method === "POST" &&
+          ((await request.clone().json().catch(() => null)) as { method?: string } | null)?.method === "prompts/list") state.expired = true;
         if (state?.expired && faults.scope) {
           return new Response("More scope required", { status: 403, headers: { "www-authenticate": `Bearer error="insufficient_scope", scope="echo", resource_metadata="${resourceMetadata}"` } });
         }

@@ -81,4 +81,10 @@ export function createProtocolServer() {
   return server;
 }
 
-if (import.meta.main) await createProtocolServer().connect(new StdioServerTransport());
+if (import.meta.main) {
+  const server = createProtocolServer();
+  if (process.argv.includes("--fail-prompts")) {
+    server.setRequestHandler(ListPromptsRequestSchema, async () => { throw new Error("Fixture prompts unavailable"); });
+  }
+  await server.connect(new StdioServerTransport());
+}

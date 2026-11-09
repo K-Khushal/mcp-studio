@@ -558,3 +558,19 @@ for (const outcome of ["cancel", "timeout"] as const) {
     expect(session.messages.some(message => message.type === "prompt_result" && message.requestId === requestId)).toBe(false);
   });
 }
+
+test("OAuth refresh failure during connect prompts/list still fails sanitized", async () => {
+  await signInAndConnect(openSession());
+  fixture.faults.expireOnPrompts = true;
+  fixture.faults.refresh = true;
+  const session = openSession();
+  await session.send(fixture.connection(connectionId));
+  expect(await session.waitFor("error")).toMatchObject({
+    code: "CONNECTION_FAILED", message: "OAuth authentication failed",
+  });
+  expect(session.messages.some(message => message.type === "connected")).toBe(false);
+  expect(session.messages.some(message => message.type === "log" && message.level === "WARN")).toBe(false);
+  const messages = JSON.stringify(session.messages);
+  expect(messages).not.toContain("diagnostic");
+  for (const secret of fixture.issued) expect(messages).not.toContain(secret);
+});
