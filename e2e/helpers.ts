@@ -1,3 +1,4 @@
+import { fixtureURL } from './ports';
 import { expect, type Page } from '@playwright/test';
 
 export async function createConnection(page: Page, name: string, collection = name) {
@@ -46,7 +47,7 @@ export async function runTool(page: Page) {
 }
 
 export async function fixtureInfo(page: Page): Promise<{ command: string; fixture: string; streamable: string; sse: string; directory: string }> {
-  return (await page.request.get('http://localhost:47832/info')).json();
+  return (await page.request.get(`${fixtureURL}/info`)).json();
 }
 
 export async function fixtureConnection(page: Page, name: string) {

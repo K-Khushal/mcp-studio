@@ -12,6 +12,11 @@ const candidates = [
   { name: 'Sequential thinking', package: '@modelcontextprotocol/server-sequential-thinking', tool: 'sequentialthinking', args: { thought: 'Confirm that 2 + 2 equals 4.', nextThoughtNeeded: false, thoughtNumber: 1, totalThoughts: 1 } },
 ];
 
+let httpConnections = 0;
+test.afterAll(() => {
+  expect(httpConnections, 'At least one HTTP candidate must connect').toBeGreaterThan(0);
+});
+
 for (const candidate of candidates) {
   test(candidate.name, async ({ page }, testInfo) => {
     const row = { server: candidate.url ?? candidate.package!, transport: candidate.url ? 'HTTP' : 'STDIO', tools: 0, call: candidate.tool, result: 'FAIL', reason: '' };
@@ -39,11 +44,15 @@ for (const candidate of candidates) {
       try {
         await expect(page.getByRole('button', { name: 'Disconnect', exact: true })).toBeVisible({ timeout: 60_000 });
       } catch (error) {
-        if (!candidate.url) throw error;
+        // Classify only the surfaced connection error, never Playwright's
+        // visibility timeout: a missing Disconnect can be a Studio regression.
+        const remoteUnavailable = /\b(?:ENOTFOUND|ECONNREFUSED|ETIMEDOUT)\b|timed?\s*out|timeout|(?:HTTP|status|code|response|error)[^\n]*\b[45]\d{2}\b/i.test(lastError);
+        if (!candidate.url || !remoteUnavailable) throw error;
         row.result = 'SKIPPED';
-        row.reason = lastError || 'No unauthenticated Session established within 60s';
+        row.reason = lastError;
         test.skip(true, row.reason);
       }
+      if (candidate.url) httpConnections++;
       expect(connected).toBeDefined();
       row.tools = connected!.tools.length;
       expect(row.tools).toBeGreaterThan(0);

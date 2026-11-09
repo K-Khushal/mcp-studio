@@ -26,7 +26,8 @@ bun run e2e:live  # optional: public internet; never runs in CI
 Both commands build the distributable and launch `bun dist/cli.js --no-open`
 with a fresh temporary `STUDIO_DB_PATH`. They serve the built UI, REST and
 WebSocket on `http://localhost:47831`; a test-only lifecycle controller uses
-`47832`. Keep these ports free and run one suite at a time. The controller
+`47832`. Override them with `E2E_PORT` and `E2E_FIXTURE_PORT` (for example,
+`E2E_PORT=48831 E2E_FIXTURE_PORT=48832 bun run e2e`). Keep these ports free and run one suite at a time. The controller
 terminates the CLI and fixture transports and deletes its temporary database
 on exit. It never uses `~/.mcp-studio`. No dev server or mocked Studio APIs.
 
@@ -46,9 +47,10 @@ and sequential-thinking STDIO packages. Each successful Session must discover
 tools and complete a representative Call without an MCP error and with nonempty
 content. Filesystem reads only its temporary directory; memory reads an empty
 graph; sequential thinking performs one transient reasoning step. No remote
-write tools run. HTTP candidates that cannot establish an unauthenticated
-Session within 60 seconds are skipped with the concrete connection error (or
-deadline reason); tool discovery/Call/UI failures after connect remain failures.
+write tools run. HTTP candidates are skipped only when the surfaced connection error identifies
+remote/network unavailability (ENOTFOUND, ECONNREFUSED, ETIMEDOUT/timeout, or
+remote HTTP 4xx/5xx). An unexplained 60-second connection deadline fails. At least
+one HTTP candidate must connect; tool discovery/Call/UI failures remain failures.
 STDIO failures always fail. Endpoints and package catalogues can change, so this
 suite stays opt-in. Results include tool counts, actual Call names and per-server
 PASS/FAIL/SKIPPED reasons in `e2e/test-results/live-results.md` and JSON attachments.

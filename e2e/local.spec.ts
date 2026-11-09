@@ -1,3 +1,4 @@
+import { fixtureURL } from './ports';
 import { test, expect } from '@playwright/test';
 import { fixtureConnection, selectTool, runTool, jsonArgs, createConnection, configureStdio, connect, fixtureInfo } from './helpers';
 
@@ -52,7 +53,7 @@ test('progress, Cancel and timeout end Calls visibly', async ({ page }) => {
   await page.getByLabel('Call timeout in seconds').fill('1');
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
   await page.getByRole('button', { name: 'Run Tool', exact: true }).click();
-  await expect(page.getByText(/timed out|timeout/i).first()).toBeVisible();
+  await expect(page.getByText('Call timed out after 1 seconds', { exact: true }).first()).toBeVisible();
   await expect(page.getByRole('button', { name: 'Cancel Call' })).toHaveCount(0);
 });
 
@@ -145,7 +146,7 @@ test('config import, theme and saved entities survive a packaged CLI restart', a
   await page.getByPlaceholder('VALUE', { exact: true }).fill('saved variable');
   await page.getByRole('button', { name: 'Add', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  expect((await request.post('http://localhost:47832/restart')).ok()).toBeTruthy();
+  expect((await request.post(`${fixtureURL}/restart`)).ok()).toBeTruthy();
   await page.reload();
   await expect(page.getByText('Imported Collection', { exact: true })).toBeVisible();
   await expect(page.getByText('Imported HTTP', { exact: true })).toBeVisible();
