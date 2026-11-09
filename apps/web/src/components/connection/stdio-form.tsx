@@ -22,7 +22,7 @@ function Section({ label, htmlFor, children }: { label: string; htmlFor?: string
 
 function RemoveButton({ label, onClick }: { label: string; onClick: () => void }) {
   return (
-    <Button type="button" variant="ghost" size="icon-sm" aria-label={label} onClick={onClick} className="text-muted-foreground hover:text-destructive">
+    <Button type="button" variant="ghost" size="icon-sm" aria-label={label} onClick={onClick} className="text-muted-foreground hover:text-destructive-text">
       <X size={13} />
     </Button>
   );
@@ -63,7 +63,7 @@ export function StdioForm({ open, onOpenChange }: { open: boolean; onOpenChange:
         aria-controls="stdio-settings"
         aria-label={`STDIO settings: ${summary}`}
         onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-primary"
+        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
       >
         <ChevronRight size={12} className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
         <span className="font-medium">STDIO settings</span>

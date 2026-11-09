@@ -8,9 +8,9 @@ export function OAuthSignInNotice() {
   if (!url) return null;
   return (
     <div role="status" className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground">
-      <Loader2 size={12} className="animate-spin" />
+      <Loader2 size={12} className="motion-safe:animate-spin" />
       <span>Waiting for sign-in in your browser.</span>
-      <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary hover:underline">
+      <a href={url} target="_blank" rel="noopener noreferrer" className="font-medium text-primary-text hover:underline">
         Open sign-in page
       </a>
       <button onClick={() => void disconnect()} className="font-medium hover:text-foreground">

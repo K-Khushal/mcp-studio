@@ -16,7 +16,7 @@ export function TimelinePanel() {
           <div className="flex flex-col items-center">
             <div className={cn(
               'w-5 h-5 rounded-full flex items-center justify-center shrink-0',
-              step.status === 'completed' ? 'text-success' : step.status === 'active' ? 'text-primary' : 'text-muted-foreground'
+              step.status === 'completed' ? 'text-success-text' : step.status === 'active' ? 'text-primary-text' : 'text-muted-foreground'
             )}>
               {step.status === 'completed'
                 ? <CheckCircle2 size={16} />

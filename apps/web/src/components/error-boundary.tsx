@@ -20,7 +20,7 @@ export class ErrorBoundary extends Component<Props, State> {
   render() {
     if (this.state.hasError) {
       return this.props.fallback ?? (
-        <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive">
+        <div className="p-3 rounded-md bg-destructive/10 border border-destructive/30 text-xs text-destructive-text">
           <span className="font-semibold">Component error:</span>{' '}
           {this.state.error?.message ?? 'Unknown error'}
         </div>

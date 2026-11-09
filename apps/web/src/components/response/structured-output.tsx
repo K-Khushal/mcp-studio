@@ -44,7 +44,7 @@ export function StructuredOutput({ result, schema }: { result: CallToolResult; s
   if (result.structuredContent === undefined && !status) return null;
   return <section aria-label="Structured content" className="mb-4 space-y-2">
     <h4 className="text-xs font-medium">Structured content</h4>
-    {status && <p role={valid ? 'status' : 'alert'} className={`rounded-md border px-3 py-2 text-xs ${valid ? 'border-border text-muted-foreground' : 'border-destructive/40 bg-destructive/10 text-destructive'}`}>{status}</p>}
+    {status && <p role={valid ? 'status' : 'alert'} className={`rounded-md border px-3 py-2 text-xs ${valid ? 'border-border text-muted-foreground' : 'border-destructive/40 bg-destructive/10 text-destructive-text'}`}>{status}</p>}
     {result.structuredContent !== undefined && <JsonViewer data={result.structuredContent} />}
   </section>;
 }

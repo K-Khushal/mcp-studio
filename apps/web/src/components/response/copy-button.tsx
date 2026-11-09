@@ -34,9 +34,9 @@ export function CopyButton({ text }: CopyButtonProps) {
       className={cn(
         'flex size-6 items-center justify-center rounded-md transition-[color,background-color,transform] duration-150 ease-out',
         'text-muted-foreground hover:bg-muted hover:text-foreground active:scale-[0.96]',
-        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50',
+        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         'disabled:pointer-events-none disabled:opacity-40',
-        copied && 'text-success',
+        copied && 'text-success-text',
       )}
     >
       {copied ? <Check size={13} /> : <Copy size={13} />}

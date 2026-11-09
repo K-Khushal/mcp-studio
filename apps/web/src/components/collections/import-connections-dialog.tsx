@@ -78,14 +78,14 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
           {!target && <Input aria-label="New Collection name" placeholder="Collection name" value={newName} onChange={e => setNewName(e.target.value)} />}
         </div>
       </fieldset>
-      {(error || preview.error) && <p role="alert" className="text-xs text-destructive">{error || preview.error}</p>}
+      {(error || preview.error) && <p role="alert" className="text-xs text-destructive-text">{error || preview.error}</p>}
       <ul aria-label="Import preview" aria-live="polite" className="max-h-52 divide-y divide-border overflow-y-auto overscroll-contain text-xs">
         {preview.entries.map(entry => {
           const config = entry.connection?.connectionConfig;
           const result = results[entry.name];
           return <li key={entry.name} className="flex items-start justify-between gap-4 py-3">
             <div className="min-w-0"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}</div>
-            <p className={`max-w-[55%] ${entry.error || (result && result !== 'Imported') ? 'text-destructive' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>
+            <p className={`max-w-[55%] ${entry.error || (result && result !== 'Imported') ? 'text-destructive-text' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>
           </li>;
         })}
       </ul>

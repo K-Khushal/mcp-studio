@@ -25,7 +25,7 @@ interface SchemaFormProps {
 }
 
 const SELECT_CLASS =
-  'h-8 rounded-md border border-input bg-muted px-2 text-xs text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary';
+  'h-8 rounded-md border border-input bg-muted px-2 text-xs text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring';
 
 export function SchemaForm({ schema, args, onChange }: SchemaFormProps) {
   if (Object.keys(getProperties(schema)).length === 0) {
@@ -85,7 +85,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
   const kind = fieldKind(prop, depth);
   const hintId = containsVariableSyntax(prop.default) ? `${id}-default` : undefined;
   const defaultHint = hintId ? (
-    <p id={hintId} className="text-[10px] text-muted-foreground">
+    <p id={hintId} className="text-xs text-muted-foreground">
       Server default (not applied): {JSON.stringify(prop.default)}
     </p>
   ) : null;
@@ -98,7 +98,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
           {name}
           {required && <RequiredMark />}
         </legend>
-        {prop.description && <p className="text-[10px] text-muted-foreground">{prop.description}</p>}
+        {prop.description && <p className="text-xs text-muted-foreground">{prop.description}</p>}
         {defaultHint}
         <FieldList
           schema={prop}
@@ -118,7 +118,7 @@ function Field({ name, prop, required, value, onChange, depth = 0 }: FieldProps)
         {name}
         {required && <RequiredMark />}
       </label>
-      {prop.description && <p className="text-[10px] text-muted-foreground">{prop.description}</p>}
+      {prop.description && <p className="text-xs text-muted-foreground">{prop.description}</p>}
       {defaultHint}
       {kind === 'json' ? (
         <JsonField id={id} label={name} value={value} onChange={onChange} />
@@ -153,7 +153,7 @@ function JsonField({
 
 function RequiredMark() {
   return (
-    <span className="text-destructive" aria-label="required">
+    <span className="text-destructive-text" aria-label="required">
       *
     </span>
   );
@@ -272,7 +272,7 @@ function ArrayItem({
           describedBy={blank ? errorId : undefined}
         />
         {blank && (
-          <p id={errorId} role="alert" className="text-[11px] text-destructive">
+          <p id={errorId} role="alert" className="text-xs text-destructive-text">
             Enter a value or remove this item
           </p>
         )}

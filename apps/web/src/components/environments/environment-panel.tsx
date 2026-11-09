@@ -140,7 +140,7 @@ export default function EnvironmentPanel() {
                 variant="ghost"
                 onClick={handleDeleteEnv}
                 disabled={environments.length <= 1}
-                className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                className="h-8 text-xs text-muted-foreground hover:text-destructive-text"
               >
                 <Trash2 size={11} />
               </Button>
@@ -150,7 +150,7 @@ export default function EnvironmentPanel() {
 
         {/* Variable table */}
         <div className="border border-border rounded-md overflow-hidden">
-          <div className="grid grid-cols-[1fr_1fr_auto] gap-0 text-[10px] font-medium text-muted-foreground uppercase tracking-wider bg-muted/50 px-3 py-2 border-b border-border">
+          <div className="grid grid-cols-[1fr_1fr_auto] gap-0 text-xs font-medium text-muted-foreground uppercase tracking-wider bg-muted/50 px-3 py-2 border-b border-border">
             <span>Key</span>
             <span>Value</span>
             <span className="w-20" />
@@ -175,7 +175,7 @@ export default function EnvironmentPanel() {
                   <button onClick={() => copyValue(value)} className="p-1 text-muted-foreground hover:text-foreground transition-colors">
                     <Copy size={12} />
                   </button>
-                  <button onClick={() => handleRemove(key)} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
+                  <button onClick={() => handleRemove(key)} className="p-1 text-muted-foreground hover:text-destructive-text transition-colors">
                     <Trash2 size={12} />
                   </button>
                 </div>
@@ -209,8 +209,8 @@ export default function EnvironmentPanel() {
           </Button>
         </div>
 
-        <p className="text-[10px] text-muted-foreground">
-          Use <code className="font-mono text-primary">{'{{VARIABLE_NAME}}'}</code> in prompts and tool inputs for auto-substitution.
+        <p className="text-xs text-muted-foreground">
+          Use <code className="font-mono text-primary-text">{'{{VARIABLE_NAME}}'}</code> in prompts and tool inputs for auto-substitution.
         </p>
       </DialogContent>
     </Dialog>

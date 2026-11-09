@@ -79,7 +79,7 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
               if (e.key === 'Enter') commitRename();
               if (e.key === 'Escape') { setRenameValue(collection.name); setIsRenaming(false); }
             }}
-            className="flex-1 min-w-0 text-xs bg-muted border border-border rounded px-1 py-0.5 text-foreground focus:outline-hidden focus:ring-1 focus:ring-primary"
+            className="flex-1 min-w-0 text-xs bg-muted border border-border rounded px-1 py-0.5 text-foreground focus:outline-hidden focus:ring-2 focus:ring-ring"
           />
         ) : (
           <span
@@ -108,7 +108,7 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
           <button
             onClick={() => setConfirmDeleteCollection(true)}
             title="Delete"
-            className="p-0.5 text-muted-foreground hover:text-destructive transition-colors"
+            className="p-0.5 text-muted-foreground hover:text-destructive-text transition-colors"
           >
             <Trash2 size={12} />
           </button>
@@ -120,10 +120,10 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
           <div
             key={conn.id}
             className={cn(
-              'group/connection flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer',
+              'group/connection flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer border-l-2',
               selectedConnectionId === conn.id
-                ? 'bg-primary/10 text-primary'
-                : 'text-muted-foreground hover:text-foreground hover:bg-muted/30'
+                ? 'border-l-primary bg-primary/15 text-foreground'
+                : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
             )}
             onClick={() => onSelectConnection(conn)}
             onDoubleClick={() => onConnectConnection(conn)}
@@ -136,7 +136,7 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
                 setConfirmDeleteConnId(conn.id);
               }}
               title="Delete Connection"
-              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive transition-all group-hover/connection:opacity-100"
+              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive-text transition-[opacity,color] group-hover/connection:opacity-100"
             >
               <Trash2 size={11} />
             </button>

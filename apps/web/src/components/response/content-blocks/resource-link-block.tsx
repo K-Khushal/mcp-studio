@@ -11,7 +11,7 @@ export function ResourceLinkBlock({ block }: { block: ResourceLink }) {
             <span className="text-xs font-medium text-foreground">{block.name}</span>
           )}
           {block.mimeType && (
-            <span className="text-[10px] font-mono text-muted-foreground/70 bg-muted px-1.5 py-0.5 rounded">
+            <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
               {block.mimeType}
             </span>
           )}

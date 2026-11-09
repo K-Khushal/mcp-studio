@@ -16,13 +16,13 @@ function CopyButton({ text }: { text: string }) {
     <button
       onClick={handleCopy}
       className={cn(
-        'opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded transition-all',
+        'opacity-0 group-hover:opacity-100 ml-1 p-0.5 rounded transition-[opacity,color,background-color]',
         'text-muted-foreground hover:text-foreground hover:bg-muted',
       )}
       aria-label="Copy value"
       title="Copy value"
     >
-      {copied ? <Check size={9} className="text-green-400" /> : <Copy size={9} />}
+      {copied ? <Check size={9} className="text-success-text" /> : <Copy size={9} />}
     </button>
   );
 }
@@ -41,9 +41,9 @@ function PrimitiveValue({ value }: { value: string | number | boolean | null }) 
       className={cn(
         'group inline-flex items-center',
         isNull && 'text-muted-foreground italic',
-        isString && 'text-emerald-400',
-        isNumber && 'text-amber-400',
-        isBool && 'text-sky-400',
+        isString && 'text-syntax-string',
+        isNumber && 'text-syntax-number',
+        isBool && 'text-syntax-boolean',
       )}
     >
       <span>{display}</span>
@@ -54,7 +54,7 @@ function PrimitiveValue({ value }: { value: string | number | boolean | null }) 
 
 function KeyLabel({ name }: { name: string | number }) {
   return (
-    <span className="text-rose-300 font-medium">
+    <span className="text-syntax-key font-medium">
       {typeof name === 'string' ? `"${name}"` : name}
       <span className="text-muted-foreground mx-1 font-normal">:</span>
     </span>
@@ -63,7 +63,7 @@ function KeyLabel({ name }: { name: string | number }) {
 
 function CollapsedBadge({ label }: { label: string }) {
   return (
-    <span className="text-muted-foreground/70 text-[10px] font-mono bg-muted/60 px-1.5 py-px rounded-full mx-1">
+    <span className="text-muted-foreground text-xs font-mono bg-muted/60 px-1.5 py-px rounded-full mx-1">
       {label}
     </span>
   );

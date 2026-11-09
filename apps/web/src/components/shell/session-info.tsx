@@ -3,14 +3,14 @@ import { cn } from "@/lib/utils";
 
 const STATUS = {
   connected: { label: "Connected", dot: "bg-success" },
-  connecting: { label: "Connecting…", dot: "bg-warning animate-pulse motion-reduce:animate-none" },
+  connecting: { label: "Connecting…", dot: "bg-warning motion-safe:animate-pulse" },
   error: { label: "Connection failed", dot: "bg-destructive" },
   disconnected: { label: "Not connected", dot: "bg-muted-foreground/40" },
 } as const;
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground">
+    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground">
       {children}
     </span>
   );

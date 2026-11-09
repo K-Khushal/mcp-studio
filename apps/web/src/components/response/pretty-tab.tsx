@@ -7,7 +7,7 @@ import { JsonViewer } from './json-viewer';
 
 function ToolErrorBanner() {
   return (
-    <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 mb-4 text-xs text-destructive">
+    <div className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 mb-4 text-xs text-destructive-text">
       <AlertTriangle size={13} className="shrink-0" />
       <span className="font-medium">Tool execution error</span>
     </div>
@@ -68,7 +68,7 @@ function PromptMessagesView({ messages }: { messages: MCPPromptMessage[] }) {
       {messages.map((msg, i) => (
         <div key={i} className="rounded-md border border-border overflow-hidden">
           <div className="flex items-center px-3 py-1.5 bg-muted/40 border-b border-border">
-            <span className="text-[10px] font-mono font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-mono font-medium uppercase tracking-wider text-muted-foreground">
               {msg.role}
             </span>
           </div>
@@ -96,7 +96,7 @@ interface PrettyTabProps {
 export function PrettyTab({ result, error, outputSchema }: PrettyTabProps) {
   if (error) {
     return (
-      <pre className="text-xs font-mono text-destructive whitespace-pre-wrap">{error}</pre>
+      <pre className="text-xs font-mono text-destructive-text whitespace-pre-wrap">{error}</pre>
     );
   }
 

@@ -14,7 +14,7 @@ export function ElicitationFormDialog({ request, onRespond }: { request: Request
   const missing = getRequired(request.requestedSchema).filter(key => args[key] === undefined || args[key] === '');
   return (
     <Dialog open onOpenChange={open => { if (!open) onRespond({ action: 'cancel' }); }}>
-      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto overscroll-contain motion-reduce:animate-none">
+      <DialogContent className="sm:max-w-lg max-h-[85vh] overflow-y-auto overscroll-contain">
         <DialogHeader>
           <DialogTitle>MCP Server needs your input</DialogTitle>
           <DialogDescription>{request.message}</DialogDescription>

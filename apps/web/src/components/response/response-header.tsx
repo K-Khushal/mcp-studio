@@ -39,13 +39,13 @@ export function ResponseHeader({
           Response
         </span>
         {hasResult && !isToolError && !hasError && (
-          <span className="flex items-center gap-1 text-xs font-mono font-medium text-success">
+          <span className="flex items-center gap-1 text-xs font-mono font-medium text-success-text">
             <CheckCircle2 size={12} />
             OK
           </span>
         )}
         {(hasError || isToolError) && (
-          <span className="flex items-center gap-1 text-xs font-mono font-medium text-destructive">
+          <span className="flex items-center gap-1 text-xs font-mono font-medium text-destructive-text">
             <XCircle size={12} />
             Error
           </span>

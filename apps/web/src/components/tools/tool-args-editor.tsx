@@ -88,7 +88,7 @@ function ModeToggle({
             title={disabled ? hint : undefined}
             onClick={() => onChange(value)}
             className={cn(
-              'rounded-[5px] px-2.5 py-0.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50',
+              'rounded-[5px] px-2.5 py-0.5 text-xs font-medium transition-colors duration-150 focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50',
               mode === value
                 ? 'bg-background text-foreground shadow-sm'
                 : 'text-muted-foreground hover:text-foreground',

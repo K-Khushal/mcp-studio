@@ -36,7 +36,7 @@ function HeaderTable({
             const display = isSensitive && !isRevealed ? '••••••••' : value;
             return (
               <tr key={`${key}-${i}`} className="border-b border-border last:border-0 hover:bg-muted/20">
-                <td className="px-3 py-1.5 text-primary/80 align-top">{key}</td>
+                <td className="px-3 py-1.5 text-primary-text/80 align-top">{key}</td>
                 <td className="px-3 py-1.5 text-foreground break-all">
                   <span className="flex items-center gap-2">
                     <span>{display}</span>
@@ -121,9 +121,9 @@ export function HeadersTab({
               className={cn(
                 'text-xs font-mono font-medium px-1.5 py-0.5 rounded',
                 httpStatus >= 200 && httpStatus < 300
-                  ? 'bg-success/15 text-success'
+                  ? 'bg-success/15 text-success-text'
                   : httpStatus >= 400
-                    ? 'bg-destructive/15 text-destructive'
+                    ? 'bg-destructive/15 text-destructive-text'
                     : 'bg-warning/15 text-warning',
               )}
             >
