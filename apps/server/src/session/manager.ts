@@ -43,6 +43,7 @@ export class SessionManager {
   private status: ConnectionStatus = "disconnected";
   private activeEnv: Record<string, string> = {};
   private verbose = false;
+  private calls = new Map<string, AbortController>();
 
   constructor(private readonly send: Send) {}
 
@@ -62,11 +63,14 @@ export class SessionManager {
         this.verbose = msg.verbose;
         this.client?.setVerbose(msg.verbose);
         break;
+      case "cancel":
+        this.calls.get(msg.requestId)?.abort("cancelled");
+        break;
       case "invoke":
-        await this.invoke(msg.tool, msg.params);
+        await this.invoke(msg);
         break;
       case "invoke_prompt":
-        await this.invokePrompt(msg.prompt, msg.args);
+        await this.invokePrompt(msg);
         break;
       case "disconnect":
         await this.disconnect();
@@ -125,16 +129,16 @@ export class SessionManager {
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,
               onLog: this.forwardLog,
-              onChunk: (requestId, data) =>
-                this.send({ type: "chunk", requestId, data }),
+              onProgress: (requestId, progress) => this.send({ type: "progress", requestId, ...progress }),
+              onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
             })
           : new StreamableHTTPClient(config.config, {
               onElicitation: this.requestElicitation,
               onClose: () => this.connectionClosed(client),
               verbose: this.verbose,
               onLog: this.forwardLog,
-              onChunk: (requestId, data) =>
-                this.send({ type: "chunk", requestId, data }),
+              onProgress: (requestId, progress) => this.send({ type: "progress", requestId, ...progress }),
+              onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
             });
@@ -168,47 +172,52 @@ export class SessionManager {
     }
   }
 
-  private async invoke(tool: string, rawParams: Record<string, unknown>): Promise<void> {
+  private async runCall(
+    msg: Extract<ClientMessage, { type: "invoke" | "invoke_prompt" }>,
+    execute: (client: MCPClientInterface, requestId: string, options: { signal: AbortSignal; timeout: number }) => Promise<ServerMessage>,
+  ): Promise<void> {
+    const requestId = msg.requestId ?? nanoid();
     if (!this.client?.isConnected) {
-      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
+      this.send({ type: "error", requestId, message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-
-    const requestId = nanoid();
-
+    if (this.calls.has(requestId)) return;
+    const seconds = typeof msg.requestTimeout === "number" && Number.isFinite(msg.requestTimeout) && msg.requestTimeout > 0
+      ? msg.requestTimeout : 30;
+    // Browsers store seconds. Clamp to the timer limit rather than overflowing to 1ms.
+    const timeout = Math.min(seconds * 1000, 2_147_483_647);
+    const controller = new AbortController();
+    this.calls.set(requestId, controller);
+    const timer = setTimeout(() => controller.abort("timeout"), timeout);
     try {
-      const params = this.resolveVariables(rawParams);
-      const result = await this.client.callTool(tool, params, requestId);
-
-      this.send({ type: "result", requestId, data: result });
+      const result = await execute(this.client, requestId, { signal: controller.signal, timeout });
+      if (!controller.signal.aborted) this.send(result);
     } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      this.send({ type: "error", requestId, message, code: "TOOL_ERROR" });
+      if (controller.signal.reason === "cancelled") {
+        this.send({ type: "cancelled", requestId });
+      } else if (controller.signal.reason === "timeout") {
+        this.send({ type: "error", requestId, code: "CALL_TIMEOUT", message: `Call timed out after ${seconds} seconds` });
+      } else {
+        this.send({ type: "error", requestId, code: msg.type === "invoke" ? "TOOL_ERROR" : "PROMPT_ERROR", message: err instanceof Error ? err.message : String(err) });
+      }
+    } finally {
+      clearTimeout(timer);
+      this.calls.delete(requestId);
     }
   }
 
-  private async invokePrompt(
-    prompt: string,
-    args: Record<string, string>
-  ): Promise<void> {
-    if (!this.client?.isConnected) {
-      this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
-      return;
-    }
+  private invoke(msg: Extract<ClientMessage, { type: "invoke" }>): Promise<void> {
+    return this.runCall(msg, async (client, requestId, options) => ({
+      type: "result", requestId,
+      data: await client.callTool(msg.tool, this.resolveVariables(msg.params), requestId, options),
+    }));
+  }
 
-    const requestId = nanoid();
-
-    try {
-      const messages = await this.client.callPrompt(prompt, this.resolveVariables(args), requestId);
-      this.send({ type: "prompt_result", requestId, messages });
-    } catch (err) {
-      this.send({
-        type: "error",
-        requestId,
-        message: err instanceof Error ? err.message : String(err),
-        code: "PROMPT_ERROR",
-      });
-    }
+  private invokePrompt(msg: Extract<ClientMessage, { type: "invoke_prompt" }>): Promise<void> {
+    return this.runCall(msg, async (client, requestId, options) => ({
+      type: "prompt_result", requestId,
+      messages: await client.callPrompt(msg.prompt, this.resolveVariables(msg.args), requestId, options),
+    }));
   }
 
   private async listTools(): Promise<void> {
@@ -232,6 +241,7 @@ export class SessionManager {
   async disconnect(): Promise<void> {
     if (this.status === "disconnected") return;
     this.clearElicitations();
+    for (const call of this.calls.values()) call.abort("cancelled");
     const client = this.client;
     this.client = null;
     this.setStatus("disconnected");

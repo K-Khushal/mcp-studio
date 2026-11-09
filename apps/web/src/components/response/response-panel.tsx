@@ -6,7 +6,7 @@ import { HeadersTab, buildEffectiveRequestHeaders } from './headers-tab';
 import { PrettyTab, hasToolError } from './pretty-tab';
 import { RawTab } from './raw-tab';
 import { EmptyState } from './empty-state';
-import { LoadingState } from './loading-state';
+import { LoadingState, LiveCallStatus } from './loading-state';
 import { getCopyText, getResponseSize } from './response-copy';
 
 export function ResponsePanel() {
@@ -21,7 +21,7 @@ export function ResponsePanel() {
 
   const hasResult = response.result !== null;
   const hasError = response.error !== null;
-  const isEmpty = !hasResult && !hasError && !response.isStreaming;
+  const isEmpty = !hasResult && !hasError && !response.isRunning;
   const isToolError = hasResult && hasToolError(response.result);
 
   const latencyMs =
@@ -51,15 +51,21 @@ export function ResponsePanel() {
         hasResult={hasResult}
         hasError={hasError}
         isToolError={isToolError}
-        isStreaming={response.isStreaming}
+        isRunning={response.isRunning}
+        isCancelled={response.outcome === "cancelled"}
         latencyMs={latencyMs}
         sizeBytes={getResponseSize(response.result, response.error)}
         copyText={copyText}
       />
 
+      {response.isRunning && <LiveCallStatus />}
       <div className="flex-1 overflow-auto p-4">
-        {response.isStreaming ? (
+        {activeTab === 'timeline' ? (
+          <TimelinePanel />
+        ) : response.isRunning ? (
           <LoadingState />
+        ) : response.outcome === "cancelled" ? (
+          <p className="text-sm text-muted-foreground">Call cancelled.</p>
         ) : isEmpty ? (
           <EmptyState />
         ) : activeTab === 'pretty' ? (

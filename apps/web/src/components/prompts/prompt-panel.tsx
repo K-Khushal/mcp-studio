@@ -177,11 +177,11 @@ export function PromptPanel() {
               <Button
                 size="sm"
                 onClick={handleRun}
-                disabled={response.isStreaming}
+                disabled={response.isRunning}
                 className="gap-1.5 text-xs"
               >
                 <Play size={12} />
-                {response.isStreaming ? 'Running…' : 'Run Prompt'}
+                {response.isRunning ? 'Running…' : 'Run Prompt'}
               </Button>
             </div>
           </>

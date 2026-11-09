@@ -11,7 +11,7 @@ const baseProps = {
   hasResult: true,
   hasError: false,
   isToolError: false,
-  isStreaming: false,
+  isRunning: false,
   latencyMs: 12,
   sizeBytes: 2048,
   copyText: "hello",

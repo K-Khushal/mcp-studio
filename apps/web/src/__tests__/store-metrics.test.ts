@@ -17,16 +17,16 @@ it("counts connection failures, Calls and tool errors, retaining last latency", 
   receive({ type: "connected", tools: [], prompts: [] });
   expect(useStore.getState().errorCount).toBe(0);
   await useStore.getState().invokeTool("error", {});
-  receive({ type: "result", requestId: "1", data: { isError: true, content: [] } });
+  receive({ type: "result", requestId: useStore.getState().response.requestId!, data: { isError: true, content: [] } });
   expect(useStore.getState().requestCount).toBe(1);
   expect(useStore.getState().errorCount).toBe(1);
   expect(useStore.getState().latency).toBeGreaterThanOrEqual(0);
   await useStore.getState().invokeTool("echo", {});
-  receive({ type: "result", requestId: "2", data: { content: [] } });
+  receive({ type: "result", requestId: useStore.getState().response.requestId!, data: { content: [] } });
   expect(useStore.getState().requestCount).toBe(2);
   expect(useStore.getState().errorCount).toBe(1);
   await useStore.getState().invokeTool("missing", {});
-  receive({ type: "error", requestId: "3", code: "TOOL_ERROR", message: "Unknown tool" });
+  receive({ type: "error", requestId: useStore.getState().response.requestId!, code: "TOOL_ERROR", message: "Unknown tool" });
   expect(useStore.getState().requestCount).toBe(3);
   expect(useStore.getState().errorCount).toBe(2);
   receive({ type: "log", level: "ERROR", source: "studio", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
@@ -50,7 +50,7 @@ it("a crash counts once and retains the pending Call error after cache cleanup",
   receive({ type: "status", status: "disconnected" });
   receive({ type: "log", level: "ERROR", source: "studio", message: "MCP Server connection closed unexpectedly", timestamp: 2 });
   receive({ type: "disconnected", reason: "MCP Server connection closed unexpectedly" });
-  receive({ type: "error", requestId: "pending", code: "TOOL_ERROR", message: "Connection closed" });
+  receive({ type: "error", requestId: useStore.getState().response.requestId!, code: "TOOL_ERROR", message: "Connection closed" });
   expect(useStore.getState().errorCount).toBe(1);
   expect(useStore.getState().response.error).toBe("Connection closed");
   vi.restoreAllMocks();

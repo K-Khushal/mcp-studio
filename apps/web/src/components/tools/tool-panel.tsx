@@ -103,11 +103,11 @@ export default function ToolPanel() {
               <Button
                 size="sm"
                 onClick={handleInvoke}
-                disabled={response.isStreaming || !argsValid}
+                disabled={response.isRunning || !argsValid}
                 className="gap-1.5 text-xs"
               >
                 <Play size={12} />
-                {response.isStreaming ? 'Running…' : 'Run Tool'}
+                {response.isRunning ? 'Running…' : 'Run Tool'}
               </Button>
             </div>
           </>

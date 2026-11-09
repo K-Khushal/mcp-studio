@@ -32,7 +32,7 @@ beforeEach(() => {
     selectedTool: tool,
     toolFormValues: {},
     pendingParams: null,
-    response: { ...useStore.getState().response, isStreaming: false },
+    response: { ...useStore.getState().response, isRunning: false },
     invokeTool,
   });
 });

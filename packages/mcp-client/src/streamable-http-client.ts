@@ -8,6 +8,7 @@ import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
+  protected readonly transportPhase = "connect" as const;
   private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
   // Tracks the in-flight requestId so the fetch wrapper can tag response headers
   private activeRequestId: string | null = null;
@@ -22,11 +23,12 @@ export class StreamableHTTPClient extends BaseMCPClient {
   override async callTool(
     name: string,
     params: Record<string, unknown>,
-    requestId: string
+    requestId: string,
+    options?: { signal: AbortSignal; timeout: number }
   ): Promise<unknown> {
     this.activeRequestId = requestId;
     try {
-      return await super.callTool(name, params, requestId);
+      return await super.callTool(name, params, requestId, options);
     } finally {
       this.activeRequestId = null;
     }
@@ -35,11 +37,12 @@ export class StreamableHTTPClient extends BaseMCPClient {
   override async callPrompt(
     name: string,
     args: Record<string, string>,
-    requestId: string
+    requestId: string,
+    options?: { signal: AbortSignal; timeout: number }
   ): Promise<MCPPromptMessage[]> {
     this.activeRequestId = requestId;
     try {
-      return await super.callPrompt(name, args, requestId);
+      return await super.callPrompt(name, args, requestId, options);
     } finally {
       this.activeRequestId = null;
     }
@@ -70,8 +73,8 @@ export class StreamableHTTPClient extends BaseMCPClient {
 
     // Custom fetch wrapper: captures HTTP response headers per operation
     const wrappedFetch: FetchLike = async (input, init) => {
-      const response = await fetch(input, init);
       const reqId = this.activeRequestId;
+      const response = await fetch(input, init);
       if (reqId && this.options.onHttpResponse) {
         const respHeaders: Record<string, string> = {};
         response.headers.forEach((value, key) => { respHeaders[key] = value; });
