@@ -3,7 +3,7 @@ import { expect, type Page } from '@playwright/test';
 
 export async function createConnection(page: Page, name: string, collection = name) {
   await page.goto('/');
-  await page.getByRole('button', { name: 'New collection', exact: true }).click();
+  await page.getByRole('button', { name: 'New collection', exact: true }).first().click();
   await page.getByPlaceholder('Collection name', { exact: true }).fill(collection);
   await page.getByPlaceholder('Collection name', { exact: true }).press('Enter');
   await expect(page.getByText(collection, { exact: true })).toBeVisible();

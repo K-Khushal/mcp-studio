@@ -181,7 +181,7 @@ test('Connection failure is visible; Connections and Collections can be renamed 
   await page.keyboard.type('Renamed Connection');
   await page.keyboard.press('Enter');
   await expect(page.getByText('Renamed Connection', { exact: true }).first()).toBeVisible();
-  await page.getByRole('button', { name: 'Delete Connection', exact: true }).last().click();
+  await page.getByRole('button', { name: /^Delete Connection / }).last().click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText('Renamed Connection', { exact: true })).toHaveCount(0);
   await page.getByText('Disposable Collection', { exact: true }).dblclick();
@@ -189,7 +189,7 @@ test('Connection failure is visible; Connections and Collections can be renamed 
   await page.keyboard.type('Renamed Collection');
   await page.keyboard.press('Enter');
   await expect(page.getByText('Renamed Collection', { exact: true })).toBeVisible();
-  await page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+  await page.getByRole('button', { name: 'Delete Renamed Collection', exact: true }).click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete', exact: true }).click();
   await expect(page.getByText('Renamed Collection', { exact: true })).toHaveCount(0);
 });
@@ -287,7 +287,7 @@ test('Console keyboard controls, clipboard feedback and accessible states', asyn
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await fixtureConnection(page, 'Console keyboard');
-  const toggle = page.getByRole('button', { name: /^Console/ });
+  const toggle = page.getByRole('button', { name: /^Console/ }).and(page.locator('[aria-controls="logs-body"]'));
   const shots = process.env.CONSOLE_SHOTS;
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => {

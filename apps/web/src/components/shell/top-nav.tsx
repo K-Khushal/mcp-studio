@@ -1,4 +1,5 @@
 import { Zap } from "lucide-react";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 import { ConfigurationPanel } from "@/components/configuration/configuration-panel";
 import { SessionInfo } from "./session-info";
 import { ThemeToggle } from "./theme-toggle";
@@ -6,9 +7,10 @@ import { ThemeToggle } from "./theme-toggle";
 export function TopNav() {
   return (
     <header className="flex h-11 shrink-0 items-center gap-4 border-b border-border bg-background px-4">
+      <SidebarTrigger className="-ml-2 md:hidden" aria-label="Collections" />
       <div className="flex shrink-0 items-center gap-2">
-        <Zap size={18} className="text-primary-text" />
-        <span className="text-sm font-bold tracking-tight text-foreground">MCP Studio</span>
+        <Zap size={18} className="text-primary-text" aria-hidden />
+        <h1 className="text-sm font-bold tracking-tight text-foreground">MCP Studio</h1>
       </div>
       <div className="h-4 w-px shrink-0 bg-border" aria-hidden />
       <SessionInfo />

@@ -1,5 +1,6 @@
 import { useStore } from '@/store/index';
 import { cn } from '@/lib/utils';
+import { STATUS } from './session-info';
 import { Activity, AlertCircle, Clock, FileText, Timer } from 'lucide-react';
 import { memo, useEffect, useState } from 'react';
 
@@ -62,22 +63,7 @@ export function StatusBar() {
     return null;
   });
 
-  const statusTone =
-    connectionStatus === 'connected'
-      ? 'bg-success'
-      : connectionStatus === 'connecting'
-        ? 'bg-warning'
-        : connectionStatus === 'error'
-          ? 'bg-destructive'
-          : 'bg-destructive';
-  const statusLabel =
-    connectionStatus === 'connected'
-      ? 'Connected'
-      : connectionStatus === 'connecting'
-        ? 'Connecting...'
-        : connectionStatus === 'error'
-          ? 'Error'
-          : 'Disconnected';
+  const { label: statusLabel, dot: statusDot } = STATUS[connectionStatus];
 
   return (
     <div className="flex items-center h-7 px-4 border-t border-border bg-background text-xs text-muted-foreground gap-4 shrink-0">
@@ -85,13 +71,13 @@ export function StatusBar() {
       {connectedConnectionName && (
         <div className="flex items-center gap-1 min-w-0">
           <FileText size={11} className="shrink-0" />
-          <span className="font-mono truncate max-w-35">{connectedConnectionName}</span>
+          <span className="font-mono truncate max-w-[40ch]" title={connectedConnectionName}>{connectedConnectionName}</span>
         </div>
       )}
 
       {/* Connection status dot + label */}
       <div className="flex items-center gap-1.5">
-        <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusTone)} />
+        <div className={cn('w-1.5 h-1.5 rounded-full shrink-0', statusDot)} aria-hidden />
         <span>{statusLabel}</span>
       </div>
 
@@ -105,7 +91,7 @@ export function StatusBar() {
       {/* Last Call latency */}
       <div className="flex items-center gap-1">
         <Clock size={11} />
-        <span className="tabular-nums">{latency}ms</span>
+        <span className="tabular-nums">{requestCount > 0 ? `${latency}ms` : '—'}</span>
       </div>
 
       {/* Total Calls */}
