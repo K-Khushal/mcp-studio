@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
-import { Sidebar, SidebarContent, SidebarHeader, SidebarRail } from '@/components/ui/sidebar';
+import { Sidebar, SidebarContent, SidebarHeader, SidebarRail, useSidebar } from '@/components/ui/sidebar';
 
 import { ImportConnectionsDialog } from './import-connections-dialog';
 
@@ -28,6 +28,7 @@ export function CollectionsSidebar() {
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const newNameRef = useRef<HTMLInputElement>(null);
+  const { setOpenMobile } = useSidebar();
 
   useEffect(() => {
     loadCollections().catch(console.error);
@@ -66,6 +67,7 @@ export function CollectionsSidebar() {
     if (needsConfirmation(conn)) await useStore.getState().disconnect();
     loadConnection(conn);
     if (connect) connectSelected();
+    setOpenMobile(false);
   };
 
   // Wait out the double-click window before prompting so a double-click raises one dialog, not two.
@@ -73,6 +75,7 @@ export function CollectionsSidebar() {
     window.clearTimeout(clickTimer.current);
     if (!needsConfirmation(conn)) {
       loadConnection(conn);
+      setOpenMobile(false);
       return;
     }
     clickTimer.current = window.setTimeout(() => setPendingSwitch({ conn, connect: false }), 250);
@@ -88,26 +91,30 @@ export function CollectionsSidebar() {
     if (connectedConnectionId === conn.id && connectionStatus !== 'disconnected') return;
     if (selected !== conn.id) loadConnection(conn);
     connectSelected();
+    setOpenMobile(false);
   };
 
   useEffect(() => () => window.clearTimeout(clickTimer.current), []);
 
-  const filtered = collections.filter(
-    (c) =>
-      c.name.toLowerCase().includes(search.toLowerCase()) ||
-      c.connections.some((r) => r.name.toLowerCase().includes(search.toLowerCase()))
-  );
+  // Search narrows Connections too; a Collection whose own name matches keeps all of its Connections.
+  const query = search.trim().toLowerCase();
+  const visible = collections.flatMap((col) => {
+    if (!query || col.name.toLowerCase().includes(query)) return [{ col, connections: col.connections }];
+    const connections = col.connections.filter((c) => c.name.toLowerCase().includes(query));
+    return connections.length > 0 ? [{ col, connections }] : [];
+  });
 
   return (
     <Sidebar
       collapsible="offcanvas"
       className="border-r border-sidebar-border md:top-11 md:h-[calc(100svh-2.75rem)]"
     >
+      <nav aria-label="Collections" className="flex min-h-0 flex-1 flex-col">
       <SidebarHeader className="border-b border-sidebar-border p-3">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
+          <h2 className="text-xs font-semibold uppercase tracking-wider text-sidebar-foreground/70">
             Collections
-          </span>
+          </h2>
           <div className="flex items-center">
           <Button variant="ghost" size="icon-sm" aria-label="Import Connections" title="Import Connections" onClick={() => setImporting(true)}><Import size={14} /></Button>
           <Button
@@ -127,6 +134,7 @@ export function CollectionsSidebar() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search..."
+            aria-label="Search Collections and Connections"
             className="h-8 bg-background pl-6 pr-2 text-xs"
           />
         </div>
@@ -153,24 +161,36 @@ export function CollectionsSidebar() {
           </div>
         )}
 
-        {filtered.length === 0 && !isCreating && (
-          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-            No collections yet.
-            <br />
-            Click <FolderPlus size={14} className="mx-0.5 inline" /> to create one.
-          </p>
+        {visible.length === 0 && !isCreating && (
+          query ? (
+            <div className="flex flex-col items-center gap-2 px-3 py-4 text-center text-xs text-muted-foreground">
+              <p>No Connections match &quot;{search.trim()}&quot;</p>
+              <Button variant="outline" size="xs" onClick={() => setSearch('')}>
+                Clear search
+              </Button>
+            </div>
+          ) : (
+            <p className="px-3 py-4 text-center text-xs text-muted-foreground">
+              No collections yet.
+              <br />
+              Click <FolderPlus size={14} className="mx-0.5 inline" aria-hidden /> to create one.
+            </p>
+          )
         )}
 
-        {filtered.map((col) => (
+        {visible.map(({ col, connections }) => (
           <CollectionRow
             key={col.id}
             collection={col}
+            connections={connections}
+            searching={query !== ''}
             selectedConnectionId={selectedConnectionId}
             onSelectConnection={handleSelectConnection}
             onConnectConnection={handleConnectConnection}
           />
         ))}
       </SidebarContent>
+      </nav>
       <SidebarRail />
       {importing && <ImportConnectionsDialog onClose={() => setImporting(false)} />}
 

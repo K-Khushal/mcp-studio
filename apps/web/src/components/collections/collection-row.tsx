@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, ChevronDown, Plus, FileText, Trash2, Pencil } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, FileText, Trash2, Pencil, Plug } from 'lucide-react';
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { AddConnectionDialog } from './add-connection-dialog';
@@ -16,15 +16,28 @@ import {
 import { toast } from 'sonner';
 import type { Collection, Connection } from '@mcp-studio/types';
 
+// Row actions sit over the row's right edge: revealed on hover, on keyboard focus anywhere in the row, and always on touch.
+const REVEAL_COLLECTION = 'opacity-0 transition-opacity duration-150 ease-out group-hover/collection:opacity-100 group-focus-within/collection:opacity-100 [@media(hover:none)]:opacity-100';
+const REVEAL_CONNECTION = 'opacity-0 transition-opacity duration-150 ease-out group-hover/connection:opacity-100 group-focus-within/connection:opacity-100 [@media(hover:none)]:opacity-100';
+const ACTIONS = 'absolute inset-y-0 right-1 flex items-center gap-0.5 bg-linear-to-l from-sidebar from-70% to-transparent pl-4';
+const ACTION =
+  'flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-hidden transition-[color,background-color,scale] duration-150 ease-out hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring enabled:active:scale-[0.96]';
+
 interface CollectionRowProps {
   collection: Collection;
+  /** Connections to list; the sidebar narrows them while searching. Defaults to all. */
+  connections?: Connection[];
+  searching?: boolean;
   selectedConnectionId: string | null;
   onSelectConnection: (conn: Connection) => void;
   onConnectConnection: (conn: Connection) => void;
 }
 
-export function CollectionRow({ collection, selectedConnectionId, onSelectConnection, onConnectConnection }: CollectionRowProps) {
+export function CollectionRow({ collection, connections = collection.connections, searching = false, selectedConnectionId, onSelectConnection, onConnectConnection }: CollectionRowProps) {
   const { renameCollection, deleteCollection, deleteConnection } = useStore();
+  const liveConnectionId = useStore((s) =>
+    s.connectionStatus === 'connected' ? s.connectedConnectionId : s.connectionStatus === 'connecting' ? s.connectingConnectionId : null
+  );
   const [expanded, setExpanded] = useState(true);
   const [isRenaming, setIsRenaming] = useState(false);
   const [renameValue, setRenameValue] = useState(collection.name);
@@ -57,22 +70,27 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
     toast.success(`Connection "${conn.name}" deleted`);
   };
 
+  const showConnections = expanded || searching;
   const confirmConn = collection.connections.find((r) => r.id === confirmDeleteConnId);
 
   return (
     <div>
-      <div className="group/collection flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 transition-colors">
+      <div className="group/collection relative flex items-center gap-1 px-2 py-1.5 hover:bg-muted/50 transition-colors">
         <button
+          type="button"
           onClick={() => setExpanded((e) => !e)}
-          className="text-muted-foreground hover:text-foreground transition-colors"
+          aria-label={`${showConnections ? 'Collapse' : 'Expand'} ${collection.name}`}
+          aria-expanded={showConnections}
+          className="flex size-6 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-hidden transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {expanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
+          {showConnections ? <ChevronDown size={13} aria-hidden /> : <ChevronRight size={13} aria-hidden />}
         </button>
 
         {isRenaming ? (
           <input
             ref={renameRef}
             value={renameValue}
+            aria-label="Collection name"
             onChange={(e) => setRenameValue(e.target.value)}
             onBlur={commitRename}
             onKeyDown={(e) => {
@@ -84,64 +102,103 @@ export function CollectionRow({ collection, selectedConnectionId, onSelectConnec
         ) : (
           <span
             onDoubleClick={() => setIsRenaming(true)}
+            title={collection.name}
             className="flex-1 min-w-0 text-xs font-medium text-foreground truncate"
           >
             {collection.name}
           </span>
         )}
 
-        <div className="flex items-center gap-0.5 opacity-0 transition-opacity shrink-0 group-hover/collection:opacity-100">
-          <button
-            onClick={() => setAddOpen(true)}
-            title="Add Connection"
-            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Plus size={12} />
-          </button>
-          <button
-            onClick={() => setIsRenaming(true)}
-            title="Rename"
-            className="p-0.5 text-muted-foreground hover:text-foreground transition-colors"
-          >
-            <Pencil size={12} />
-          </button>
-          <button
-            onClick={() => setConfirmDeleteCollection(true)}
-            title="Delete"
-            className="p-0.5 text-muted-foreground hover:text-destructive-text transition-colors"
-          >
-            <Trash2 size={12} />
-          </button>
-        </div>
+        {!isRenaming && (
+          <div className={cn(ACTIONS, REVEAL_COLLECTION)}>
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              aria-label={`Add Connection to ${collection.name}`}
+              title={`Add Connection to ${collection.name}`}
+              className={ACTION}
+            >
+              <Plus size={13} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsRenaming(true)}
+              aria-label={`Rename ${collection.name}`}
+              title={`Rename ${collection.name}`}
+              className={ACTION}
+            >
+              <Pencil size={13} aria-hidden />
+            </button>
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteCollection(true)}
+              aria-label={`Delete ${collection.name}`}
+              title={`Delete ${collection.name}`}
+              className={cn(ACTION, 'hover:text-destructive-text')}
+            >
+              <Trash2 size={13} aria-hidden />
+            </button>
+          </div>
+        )}
       </div>
 
-      {expanded &&
-        collection.connections.map((conn) => (
+      {showConnections &&
+        connections.map((conn) => (
           <div
             key={conn.id}
             className={cn(
-              'group/connection flex items-center gap-2 pl-8 pr-2 py-1.5 transition-colors cursor-pointer border-l-2',
+              'group/connection relative flex items-center border-l-2 transition-colors',
               selectedConnectionId === conn.id
                 ? 'border-l-primary bg-primary/15 text-foreground'
                 : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
             )}
-            onClick={() => onSelectConnection(conn)}
-            onDoubleClick={() => onConnectConnection(conn)}
           >
-            <FileText size={11} className="shrink-0" />
-            <span className="flex-1 min-w-0 text-xs truncate">{conn.name}</span>
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setConfirmDeleteConnId(conn.id);
-              }}
-              title="Delete Connection"
-              className="opacity-0 p-0.5 text-muted-foreground hover:text-destructive-text transition-[opacity,color] group-hover/connection:opacity-100"
+              type="button"
+              onClick={() => onSelectConnection(conn)}
+              onDoubleClick={() => onConnectConnection(conn)}
+              aria-current={selectedConnectionId === conn.id ? 'true' : undefined}
+              title={conn.name}
+              className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-8 pr-2 text-left text-xs outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <Trash2 size={11} />
+              <FileText size={11} className="shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{conn.name}</span>
             </button>
+            <div className={cn(ACTIONS, REVEAL_CONNECTION)}>
+              {liveConnectionId !== conn.id && (
+                <button
+                  type="button"
+                  onClick={() => onConnectConnection(conn)}
+                  aria-label={`Connect ${conn.name}`}
+                  title={`Connect ${conn.name}`}
+                  className={ACTION}
+                >
+                  <Plug size={12} aria-hidden />
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setConfirmDeleteConnId(conn.id)}
+                aria-label={`Delete Connection ${conn.name}`}
+                title={`Delete Connection ${conn.name}`}
+                className={cn(ACTION, 'hover:text-destructive-text')}
+              >
+                <Trash2 size={12} aria-hidden />
+              </button>
+            </div>
           </div>
         ))}
+
+      {showConnections && collection.connections.length === 0 && (
+        <button
+          type="button"
+          onClick={() => setAddOpen(true)}
+          className="flex w-full items-center gap-2 border-l-2 border-l-transparent py-1.5 pl-8 pr-2 text-left text-xs text-muted-foreground outline-hidden transition-colors hover:bg-muted/30 hover:text-foreground focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+        >
+          <Plus size={11} className="shrink-0" aria-hidden />
+          Add Connection
+        </button>
+      )}
 
       <AddConnectionDialog
         collection={collection}

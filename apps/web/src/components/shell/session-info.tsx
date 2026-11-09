@@ -1,7 +1,8 @@
 import { useStore } from "@/store";
 import { cn } from "@/lib/utils";
 
-const STATUS = {
+/** The one status vocabulary: top bar and status bar both read it. Idle is neutral, not a failure. */
+export const STATUS = {
   connected: { label: "Connected", dot: "bg-success" },
   connecting: { label: "Connecting…", dot: "bg-warning motion-safe:animate-pulse" },
   error: { label: "Connection failed", dot: "bg-destructive" },
