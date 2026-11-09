@@ -35,6 +35,7 @@ class PingPeer implements Transport {
 }
 
 class TestClient extends BaseMCPClient {
+  protected readonly transportPhase = "connect" as const;
   private transport = new PingPeer();
   constructor(options: MCPClientOptions) { super(options); }
   protected async setupTransport() {

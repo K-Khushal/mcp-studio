@@ -24,12 +24,12 @@ export class WebSocketTransport implements StudioTransport {
     this.send({ type: "set_verbose", verbose });
   }
 
-  async invoke(tool: string, params: Record<string, unknown>): Promise<void> {
-    this.send({ type: "invoke", tool, params });
+  async invoke(tool: string, params: Record<string, unknown>, requestId?: string, requestTimeout?: number): Promise<void> {
+    this.send({ type: "invoke", tool, params, requestId, requestTimeout });
   }
 
-  async invokePrompt(prompt: string, args: Record<string, string>): Promise<void> {
-    this.send({ type: "invoke_prompt", prompt, args });
+  async invokePrompt(prompt: string, args: Record<string, string>, requestId?: string, requestTimeout?: number): Promise<void> {
+    this.send({ type: "invoke_prompt", prompt, args, requestId, requestTimeout });
   }
 
   async disconnect(): Promise<void> {

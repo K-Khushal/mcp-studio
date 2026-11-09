@@ -11,6 +11,7 @@ import { BaseMCPClient } from "./base-client.js";
  * Spawns the MCP server process; all protocol logic lives in BaseMCPClient.
  */
 export class StdioMCPClient extends BaseMCPClient {
+  protected readonly transportPhase = "spawn" as const;
   private transport: StdioClientTransport | null = null;
   private stderrHandler: ((chunk: Buffer) => void) | null = null;
 

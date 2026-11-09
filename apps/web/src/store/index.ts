@@ -3,6 +3,7 @@ import type { ElicitationResult } from "@mcp-studio/types";
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
 import type {
+  CallProgress,
   MCPTool,
   MCPPrompt,
   MCPConfig,
@@ -51,10 +52,12 @@ export interface LogEntry {
 
 interface ResponseState {
   outputSchema?: Record<string, unknown>;
-  chunks: unknown[];
+  requestId: string | null;
+  progress: CallProgress | null;
+  outcome: "result" | "error" | "cancelled" | "timeout" | null;
   result: unknown | null;
   error: string | null;
-  isStreaming: boolean;
+  isRunning: boolean;
   startedAt: number | null;
   completedAt: number | null;
   httpStatus: number | null;
@@ -62,6 +65,8 @@ interface ResponseState {
 }
 
 interface TimelineStep {
+  scope?: "session" | "call";
+  durationMs?: number;
   label: string;
   detail: string;
   timestamp: string;
@@ -175,6 +180,7 @@ interface AppActions {
   selectPrompt: (prompt: MCPPrompt | null) => void;
 
   // Invocation
+  cancelCall: () => void;
   invokeTool: (tool: string, params: Record<string, unknown>) => Promise<void>;
   invokePrompt: (prompt: string, args: Record<string, string>) => Promise<void>;
 
@@ -222,10 +228,12 @@ interface AppActions {
 // ---------------------------------------------------------------------------
 
 const BLANK_RESPONSE = {
-  chunks: [] as unknown[],
+  requestId: null,
+  progress: null,
+  outcome: null,
   result: null,
   error: null,
-  isStreaming: false,
+  isRunning: false,
   startedAt: null,
   completedAt: null,
   httpStatus: null,
@@ -273,10 +281,12 @@ function cloneWorkspace(workspace: ConnectionWorkspaceState): ConnectionWorkspac
     promptArgValues: { ...workspace.promptArgValues },
     response: {
       outputSchema: workspace.response.outputSchema,
-      chunks: [...workspace.response.chunks],
+      requestId: workspace.response.requestId,
+      progress: workspace.response.progress,
+      outcome: workspace.response.outcome,
       result: workspace.response.result,
       error: workspace.response.error,
-      isStreaming: workspace.response.isStreaming,
+      isRunning: workspace.response.isRunning,
       startedAt: workspace.response.startedAt,
       completedAt: workspace.response.completedAt,
       httpStatus: workspace.response.httpStatus,
@@ -505,6 +515,7 @@ export const useStore = create<AppState & AppActions>()(
           connectingConnectionId: selectedConnectionId,
         });
         handshakeLogs = [];
+        handshakeTimeline = [];
         transport.onMessage(handleServerMessage);
         try {
           await transport.connect(config, get().config.verboseLogging);
@@ -606,8 +617,13 @@ export const useStore = create<AppState & AppActions>()(
         })),
 
       // ---------- invocation ----------
+      cancelCall: () => {
+        const response = get().connectedConnectionCache?.response;
+        if (response?.isRunning && response.requestId) transport.send({ type: "cancel", requestId: response.requestId });
+      },
       invokeTool: async (tool, params) => {
         const state = get();
+        if (state.response.isRunning) return;
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
           toast.error("Not connected", { description: "Connect the selected Connection first." });
           return;
@@ -616,18 +632,20 @@ export const useStore = create<AppState & AppActions>()(
         const now = Date.now();
         const response: ResponseState = {
           outputSchema: state.tools.find(t => t.name === tool)?.outputSchema,
-          chunks: [],
+          requestId: crypto.randomUUID(),
+          progress: null,
+          outcome: null,
           result: null,
           error: null,
-          isStreaming: true,
+          isRunning: true,
           startedAt: now,
           completedAt: null,
           httpStatus: null,
           httpResponseHeaders: null,
         };
         const timeline: TimelineStep[] = [
-          { label: "Request sent", detail: `Tool: ${tool}`, timestamp: fmtTime(now), status: "completed" },
-          { label: "Awaiting response", detail: "Waiting for server…", timestamp: fmtTime(now), status: "active" },
+          ...state.timeline.filter(step => step.scope === "session"),
+          { scope: "call", label: "Call sent", detail: `Tool: ${tool}`, timestamp: fmtTime(now), durationMs: 0, status: "completed" },
         ];
 
         set((s) => ({
@@ -640,11 +658,12 @@ export const useStore = create<AppState & AppActions>()(
             timeline,
           })),
         }));
-        await transport.invoke(tool, params);
+        await transport.invoke(tool, params, response.requestId!, state.config.requestTimeout);
       },
 
       invokePrompt: async (prompt, args) => {
         const state = get();
+        if (state.response.isRunning) return;
         if (state.connectionStatus !== "connected" || state.selectedConnectionId !== state.connectedConnectionId) {
           toast.error("Not connected", { description: "Connect the selected Connection first." });
           return;
@@ -652,18 +671,20 @@ export const useStore = create<AppState & AppActions>()(
 
         const now = Date.now();
         const response: ResponseState = {
-          chunks: [],
+          requestId: crypto.randomUUID(),
+          progress: null,
+          outcome: null,
           result: null,
           error: null,
-          isStreaming: true,
+          isRunning: true,
           startedAt: now,
           completedAt: null,
           httpStatus: null,
           httpResponseHeaders: null,
         };
         const timeline: TimelineStep[] = [
-          { label: "Request sent", detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), status: "completed" },
-          { label: "Awaiting response", detail: "Waiting for server…", timestamp: fmtTime(now), status: "active" },
+          ...state.timeline.filter(step => step.scope === "session"),
+          { scope: "call", label: "Call sent", detail: `Prompt: ${prompt}`, timestamp: fmtTime(now), durationMs: 0, status: "completed" },
         ];
 
         set((s) => ({
@@ -676,7 +697,7 @@ export const useStore = create<AppState & AppActions>()(
             timeline,
           })),
         }));
-        await transport.invokePrompt(prompt, args);
+        await transport.invokePrompt(prompt, args, response.requestId!, state.config.requestTimeout);
       },
 
       // ---------- Connection loading ----------
@@ -1048,6 +1069,7 @@ import.meta.hot?.dispose(stopWatchingSystemTheme);
 
 /** Logs that arrive while connecting, before the connected cache exists; adopted when the Session connects. */
 let handshakeLogs: LogEntry[] = [];
+let handshakeTimeline: TimelineStep[] = [];
 
 function handleServerMessage(msg: ServerMessage): void {
   const addLog = (level: LogLevel, source: LogSource, message: string, payload?: LogPayload, timestamp = Date.now()) => {
@@ -1088,6 +1110,12 @@ function handleServerMessage(msg: ServerMessage): void {
     });
   };
 
+  const matchesCall = (requestId: string) => {
+    const state = useStore.getState();
+    const response = state.connectedConnectionCache?.response ?? state.response;
+    return response.requestId === requestId;
+  };
+
   switch (msg.type) {
     case "status":
       useStore.setState({ connectionStatus: msg.status });
@@ -1105,10 +1133,12 @@ function handleServerMessage(msg: ServerMessage): void {
         connectionId,
         ...createBlankWorkspace(),
         logs: handshakeLogs,
+        timeline: handshakeTimeline,
         tools: msg.tools,
         prompts: msg.prompts,
       };
       handshakeLogs = [];
+      handshakeTimeline = [];
 
       useStore.setState({
         connectionStatus: "connected",
@@ -1150,34 +1180,64 @@ function handleServerMessage(msg: ServerMessage): void {
         connectingConnectionId: null,
         connectedConnectionCache: null,
         connectedAt: null,
-        ...(s.selectedConnectionId === s.connectedConnectionId ? { tools: [], prompts: [], response: { ...s.response, isStreaming: false } } : {}),
+        ...(s.selectedConnectionId === s.connectedConnectionId ? { tools: [], prompts: [], response: { ...s.response, isRunning: false, ...(s.response.isRunning ? { outcome: msg.reason ? "error" as const : "cancelled" as const, error: msg.reason ?? null, completedAt: Date.now() } : {}) } } : {}),
       }));
       break;
 
-    case "chunk":
-      useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
-        ...workspace,
-        response: { ...workspace.response, chunks: [...workspace.response.chunks, msg.data] },
-      })));
+    case "session_phase": {
+      const step: TimelineStep = { scope: "session", label: `Session: ${msg.phase}`, detail: msg.phase === "initialize" ? "MCP initialize handshake" : msg.phase === "spawn" ? "Start MCP Server process" : "Open HTTP transport", timestamp: fmtTime(msg.timestamp), durationMs: msg.durationMs, status: "completed" };
+      handshakeTimeline.push(step);
+      useStore.setState(s => ({ timeline: [...s.timeline, step] }));
+      break;
+    }
+
+    case "progress":
+      useStore.setState(s => syncConnectedWorkspace(s, workspace => {
+        if (workspace.response.requestId !== msg.requestId || !workspace.response.isRunning) return workspace;
+        const { progress, total, message } = msg;
+        const elapsed = Date.now() - (workspace.response.startedAt ?? Date.now());
+        return {
+          ...workspace,
+          response: { ...workspace.response, progress: { progress, ...(total !== undefined ? { total } : {}), ...(message !== undefined ? { message } : {}) } },
+          timeline: [...workspace.timeline.filter(step => step.label !== "Progress"), ...workspace.timeline.filter(step => step.label === "Progress").slice(-49), { scope: "call", label: "Progress", detail: `${progress}${total !== undefined ? ` / ${total}` : ""}${message ? ` — ${message}` : ""}`, timestamp: fmtTime(Date.now()), durationMs: elapsed, status: "completed" }],
+        };
+      }));
       break;
 
+    case "cancelled": {
+      const completedAt = Date.now();
+      useStore.setState(s => syncConnectedWorkspace(s, workspace => {
+        if (workspace.response.requestId !== msg.requestId || !workspace.response.isRunning) return workspace;
+        return {
+          ...workspace,
+          response: { ...workspace.response, isRunning: false, outcome: "cancelled", completedAt },
+          timeline: [...workspace.timeline, { scope: "call", label: "Cancelled", detail: "Call cancelled", timestamp: fmtTime(completedAt), durationMs: completedAt - (workspace.response.startedAt ?? completedAt), status: "completed" }],
+        };
+      }));
+      break;
+    }
+
     case "result": {
+      if (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning) break;
+      const isToolError = typeof msg.data === "object" && msg.data !== null && "isError" in msg.data && msg.data.isError === true;
       const completedAt = Date.now();
       useStore.setState((s) => {
         const startedAt = s.connectedConnectionCache?.response.startedAt;
         const elapsed = startedAt ? completedAt - startedAt : 0;
         return {
           latency: elapsed,
-          errorCount: s.errorCount + (typeof msg.data === "object" && msg.data !== null && "isError" in msg.data && msg.data.isError === true ? 1 : 0),
+          errorCount: s.errorCount + (isToolError ? 1 : 0),
           ...syncConnectedWorkspace(s, (workspace) => ({
             ...workspace,
-            response: { ...workspace.response, result: msg.data, isStreaming: false, completedAt },
+            response: { ...workspace.response, result: msg.data, outcome: isToolError ? "error" : "result", isRunning: false, completedAt },
             timeline: [
               ...workspace.timeline.map((step) =>
                 step.status === "active" ? { ...step, status: "completed" as const } : step
               ),
               {
-                label: "Result received",
+                scope: "call",
+                durationMs: elapsed,
+                label: isToolError ? "Error" : "Result received",
                 detail: `Completed in ${elapsed}ms`,
                 timestamp: fmtTime(completedAt),
                 status: "completed" as const,
@@ -1190,6 +1250,7 @@ function handleServerMessage(msg: ServerMessage): void {
     }
 
     case "prompt_result": {
+      if (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning) break;
       const completedAt = Date.now();
       useStore.setState((s) => {
         const startedAt = s.connectedConnectionCache?.response.startedAt;
@@ -1198,12 +1259,14 @@ function handleServerMessage(msg: ServerMessage): void {
           latency: elapsed,
           ...syncConnectedWorkspace(s, (workspace) => ({
             ...workspace,
-            response: { ...workspace.response, result: msg.messages, isStreaming: false, completedAt },
+            response: { ...workspace.response, result: msg.messages, outcome: "result", isRunning: false, completedAt },
             timeline: [
               ...workspace.timeline.map((step) =>
                 step.status === "active" ? { ...step, status: "completed" as const } : step
               ),
               {
+                scope: "call",
+                durationMs: elapsed,
                 label: "Result received",
                 detail: `Completed in ${elapsed}ms`,
                 timestamp: fmtTime(completedAt),
@@ -1219,6 +1282,7 @@ function handleServerMessage(msg: ServerMessage): void {
     case "error":
       if (msg.code === "CONNECTION_FAILED") {
         handshakeLogs = [];
+        handshakeTimeline = [];
         useStore.setState({
           connectionStatus: "error",
           connectedConnectionId: null,
@@ -1234,23 +1298,26 @@ function handleServerMessage(msg: ServerMessage): void {
         toast.error("Connection failed", { description: msg.message });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
+        if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;
         const errorAt = Date.now();
         useStore.setState((s) => {
           const startedAt = s.connectedConnectionCache?.response.startedAt;
           const elapsed = startedAt ? errorAt - startedAt : 0;
           return {
             errorCount: s.errorCount + (s.connectionStatus === "disconnected" ? 0 : 1),
-            ...(!s.connectedConnectionCache ? { response: { ...s.response, error: msg.message, isStreaming: false, completedAt: errorAt } } : {}),
+            ...(!s.connectedConnectionCache ? { response: { ...s.response, error: msg.message, outcome: msg.code === "CALL_TIMEOUT" ? "timeout" : "error", isRunning: false, completedAt: errorAt } } : {}),
             latency: elapsed,
             ...syncConnectedWorkspace(s, (workspace) => ({
               ...workspace,
-              response: { ...workspace.response, error: msg.message, isStreaming: false, completedAt: errorAt },
+              response: { ...workspace.response, error: msg.message, outcome: msg.code === "CALL_TIMEOUT" ? "timeout" : "error", isRunning: false, completedAt: errorAt },
               timeline: [
                 ...workspace.timeline.map((step) =>
                   step.status === "active" ? { ...step, status: "completed" as const } : step
                 ),
                 {
-                  label: "Error",
+                  scope: "call",
+                  durationMs: elapsed,
+                  label: msg.code === "CALL_TIMEOUT" ? "Timeout" : "Error",
                   detail: msg.message,
                   timestamp: fmtTime(errorAt),
                   status: "completed" as const,
@@ -1267,6 +1334,7 @@ function handleServerMessage(msg: ServerMessage): void {
       break;
 
     case "http_response":
+      if (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning) break;
       useStore.setState((s) => syncConnectedWorkspace(s, (workspace) => ({
         ...workspace,
         response: {

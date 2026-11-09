@@ -13,7 +13,8 @@ interface ResponseHeaderProps {
   hasResult: boolean;
   hasError: boolean;
   isToolError: boolean;
-  isStreaming: boolean;
+  isRunning: boolean;
+  isCancelled?: boolean;
   latencyMs: number | null;
   sizeBytes: number | null;
   copyText: string | null;
@@ -25,7 +26,8 @@ export function ResponseHeader({
   hasResult,
   hasError,
   isToolError,
-  isStreaming,
+  isRunning,
+  isCancelled,
   latencyMs,
   sizeBytes,
   copyText,
@@ -48,9 +50,10 @@ export function ResponseHeader({
             Error
           </span>
         )}
-        {isStreaming && (
+        {isCancelled && <span className="text-xs text-muted-foreground">Cancelled</span>}
+        {isRunning && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 size={12} className="animate-spin" />
+            <Loader2 size={12} className="motion-safe:animate-spin" />
             Running…
           </span>
         )}

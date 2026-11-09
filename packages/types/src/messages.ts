@@ -9,9 +9,12 @@ export type ClientMessage =
   | ({ type: "elicitation_response"; elicitationId: string } & ElicitationResult)
   | ({ type: "connect"; verbose?: boolean } & ConnectionConfig)
   | { type: "set_verbose"; verbose: boolean }
-  | { type: "invoke"; tool: string; params: Record<string, unknown> }
+  | { type: "cancel"; requestId: string }
+  | { type: "invoke"; tool: string; params: Record<string, unknown>; requestId?: string; requestTimeout?: number }
   | {
       type: "invoke_prompt";
+      requestId?: string;
+      requestTimeout?: number;
       prompt: string;
       args: Record<string, string>;
     }
@@ -42,7 +45,9 @@ export type ServerMessage =
   | { type: "connected"; httpVariant?: "streamable" | "sse"; protocolVersion?: string; tools: MCPTool[]; prompts: MCPPrompt[]; serverInfo?: { name?: string; version?: string } }
   | { type: "tools_listed"; tools: MCPTool[] }
   | { type: "prompts_listed"; prompts: MCPPrompt[] }
-  | { type: "chunk"; requestId: string; data: unknown }
+  | ({ type: "progress"; requestId: string } & CallProgress)
+  | { type: "cancelled"; requestId: string }
+  | { type: "session_phase"; phase: "spawn" | "connect" | "initialize"; timestamp: number; durationMs: number }
   | { type: "result"; requestId: string; data: unknown }
   | {
       type: "prompt_result";
@@ -63,3 +68,5 @@ export type ServerMessage =
   | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };
 
 export interface ElicitationResult { action: "accept" | "decline" | "cancel"; content?: Record<string, string | number | boolean | string[]>; }
+
+export interface CallProgress { progress: number; total?: number; message?: string; }

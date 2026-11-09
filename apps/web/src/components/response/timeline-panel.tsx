@@ -21,7 +21,7 @@ export function TimelinePanel() {
               {step.status === 'completed'
                 ? <CheckCircle2 size={16} />
                 : step.status === 'active'
-                  ? <Loader2 size={16} className="animate-spin" />
+                  ? <Loader2 size={16} className="motion-safe:animate-spin" />
                   : <Circle size={16} />}
             </div>
             {i < timeline.length - 1 && (
@@ -33,7 +33,8 @@ export function TimelinePanel() {
               {step.label}
               <span className="ml-2 font-mono text-muted-foreground font-normal">{step.timestamp}</span>
             </p>
-            <p className="text-xs font-mono text-muted-foreground mt-0.5 break-all">{step.detail}</p>
+            <p className="text-xs text-muted-foreground mt-0.5 break-words">{step.detail}</p>
+            {step.durationMs !== undefined && <p className="text-xs tabular-nums text-muted-foreground mt-1">{step.durationMs}ms{step.scope === 'call' ? ' since sent' : ''}</p>}
           </div>
         </div>
       ))}

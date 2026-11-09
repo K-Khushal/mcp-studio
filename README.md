@@ -101,7 +101,7 @@ The Vite REST proxy remains unchanged. Bun is required; `npx` is unsupported.
 ## Features
 
 - **Tool & Prompt invocation** — dynamic form builder (flat + one-level nesting) with raw JSON fallback
-- **Response streaming** — progressive rendering as chunks arrive
+- **Live Calls** — live progress updates and cancellation
 - **Protocol logs** — MCP events + raw stdout/stderr with separate filter toggles
 - **Persistent history** — rolling last 50 invocations at `~/.mcp-studio/history.json`
 - **Response diff** — side-by-side comparison of any two history entries
@@ -131,3 +131,8 @@ All data is stored locally. No database, no auth, no cloud.
 - [ ] Snapshot testing + diff
 - [ ] MCP Resources support
 - [ ] Electron desktop wrapper
+
+Call timeouts count active execution time. While an elicitation form is open, the
+Call timeout pauses and resumes with its remaining time when the form closes.
+Forms have a separate 120-second expiry. Since MCP forms carry no parent Call id,
+all active Call timers pause while any form is open (the UI runs one Call at a time).

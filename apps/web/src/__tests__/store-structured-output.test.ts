@@ -17,7 +17,7 @@ it("retains the Call's output schema when the user selects another tool", async 
   deliver({ type: "connected", protocolVersion: "2025-11-25", tools: [structured, other], prompts: [] });
   await useStore.getState().invokeTool("structured", {});
   useStore.getState().selectTool(other);
-  deliver({ type: "result", requestId: "call", data: { content: [], structuredContent: { answer: 42 } } });
+  deliver({ type: "result", requestId: useStore.getState().response.requestId!, data: { content: [], structuredContent: { answer: 42 } } });
   expect(useStore.getState().response.outputSchema).toEqual(structured.outputSchema);
   expect(useStore.getState().response.result).toEqual({ content: [], structuredContent: { answer: 42 } });
 });

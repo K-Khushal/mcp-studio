@@ -27,17 +27,25 @@ export function createProtocolServer() {
         const steps = Math.max(1, Math.min(100, Number(args.steps) || 5));
         for (let progress = 1; progress <= steps; progress++) {
           await new Promise<void>((resolve, reject) => {
-            const abort = () => { clearTimeout(timer); reject(extra.signal.reason ?? new Error("Cancelled")); };
+            const abort = () => {
+              clearTimeout(timer);
+              void server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Slow Call aborted" });
+              reject(extra.signal.reason ?? new Error("Cancelled"));
+            };
             const timer = setTimeout(() => { extra.signal.removeEventListener("abort", abort); resolve(); }, 50);
             extra.signal.addEventListener("abort", abort, { once: true });
             if (extra.signal.aborted) abort();
           });
           const progressToken = request.params._meta?.progressToken;
-          if (progressToken !== undefined) await extra.sendNotification({ method: "notifications/progress", params: { progressToken, progress, total: steps } });
+          if (progressToken !== undefined) await extra.sendNotification({ method: "notifications/progress", params: { progressToken, progress, total: steps, message: `Step ${progress} of ${steps}` } });
         }
         return text("Finished");
       }
-      case "elicit": return text(JSON.stringify(await server.elicitInput({ message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } })));
+      case "elicit": {
+        const result = await server.elicitInput({ message: "Your name?", requestedSchema: { type: "object", properties: { name: { type: "string" } }, required: ["name"] } });
+        if (args.text === "slow-after-answer") await new Promise(resolve => setTimeout(resolve, 500));
+        return text(JSON.stringify(result));
+      }
       case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Fixture log" }); return text("Logged");
       case "stderr": {
         if (args.text === "chunks") {

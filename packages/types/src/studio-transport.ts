@@ -10,8 +10,8 @@ export interface StudioTransport {
   connect(config: ConnectionConfig, verbose?: boolean): Promise<void>;
   /** Apply the verbose logging setting to the live Session without reconnecting. */
   setVerbose(verbose: boolean): void;
-  invoke(tool: string, params: Record<string, unknown>): Promise<void>;
-  invokePrompt(prompt: string, args: Record<string, string>): Promise<void>;
+  invoke(tool: string, params: Record<string, unknown>, requestId?: string, requestTimeout?: number): Promise<void>;
+  invokePrompt(prompt: string, args: Record<string, string>, requestId?: string, requestTimeout?: number): Promise<void>;
   disconnect(): Promise<void>;
   onMessage(handler: (msg: ServerMessage) => void): void;
   offMessage(handler: (msg: ServerMessage) => void): void;

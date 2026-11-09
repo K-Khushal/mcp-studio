@@ -37,11 +37,26 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   private requiredTaskTools = new Set<string>();
   private protocolVersion: string | undefined;
 
+  protected abstract readonly transportPhase: "spawn" | "connect";
+  private initializeStartedAt: number | undefined;
+  private initializePhase: { timestamp: number; durationMs: number } | undefined;
+
   /** Capture the SDK's initialize result while preserving transport negotiation. */
   protected async connectTransport(client: Client, transport: Transport): Promise<void> {
     this.protocolVersion = undefined;
+    this.initializePhase = undefined;
     this.pendingMethods.clear();
     this.captureFrames(transport);
+    const connectStartedAt = Date.now();
+    let transportStartedAt = connectStartedAt;
+    let transportDuration = 0;
+    const start = transport.start.bind(transport);
+    transport.start = async () => {
+      const timestamp = Date.now();
+      await start();
+      transportStartedAt = timestamp;
+      transportDuration = Date.now() - timestamp;
+    };
     client.setNotificationHandler(LoggingMessageNotificationSchema, (notification) => {
       const { level, ...rest } = notification.params;
       this.options.onLog?.(mapMcpLogLevel(level), "server", formatMcpLogMessage(rest));
@@ -56,11 +71,20 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       this._isConnected = false;
       if (wasConnected) this.options.onClose?.();
     };
-    client.setRequestHandler(ElicitRequestSchema, async (request) => {
+    client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
       if ("url" in request.params) return { action: "cancel" as const };
-      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }) ?? { action: "cancel" as const }) };
+      return { ...await (this.options.onElicitation?.({ message: request.params.message, requestedSchema: request.params.requestedSchema }, extra.signal) ?? { action: "cancel" as const }) };
     });
     await client.connect(transport);
+    // Emit only after successful negotiation; rejected HTTP attempts must not
+    // leave a completed connect phase before the SSE fallback.
+    this.options.onSessionPhase?.(this.transportPhase, transportStartedAt,
+      this.transportPhase === "connect" ? Date.now() - connectStartedAt : transportDuration);
+    this.emitInitializePhase();
+  }
+
+  private emitInitializePhase(): void {
+    if (this.initializePhase) this.options.onSessionPhase?.("initialize", this.initializePhase.timestamp, this.initializePhase.durationMs);
   }
 
   /** Tap both directions of the transport so every JSON-RPC frame is seen, including the initialize handshake. */
@@ -72,13 +96,19 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     };
 
     let handler: Transport["onmessage"];
+    // SDK notification handlers run in a microtask, but responses run synchronously.
+    // Deliver frames in sequence so a coalesced final progress event reaches its
+    // handler before the following result removes that handler.
+    let incoming = Promise.resolve();
     Object.defineProperty(transport, "onmessage", {
       configurable: true,
       get: () => handler,
       set: (next: Transport["onmessage"]) => {
         handler = next && ((message, extra) => {
           try { this.logFrame("in", message); } catch { /* Logging must not interrupt transport delivery. */ }
-          next(message, extra);
+          incoming = incoming.then(() => { next(message, extra); }).catch(error => {
+            this.client?.onerror?.(error instanceof Error ? error : new Error(String(error)));
+          });
         });
       },
     });
@@ -95,6 +125,13 @@ export abstract class BaseMCPClient implements MCPClientInterface {
       else if (isResponse) {
         method = this.pendingMethods.get(key);
         this.pendingMethods.delete(key);
+      }
+    }
+    if (method === "initialize") {
+      if (direction === "out" && !isResponse) this.initializeStartedAt = Date.now();
+      if (direction === "in" && isResponse && this.initializeStartedAt !== undefined) {
+        this.initializePhase = { timestamp: this.initializeStartedAt, durationMs: Date.now() - this.initializeStartedAt };
+        this.initializeStartedAt = undefined;
       }
     }
     if (!this.verbose) return;
@@ -150,7 +187,8 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   async callTool(
     name: string,
     params: Record<string, unknown>,
-    requestId: string
+    requestId: string,
+    options?: { signal: AbortSignal; timeout: number }
   ): Promise<unknown> {
     if (!this.client) throw new Error("Not connected");
 
@@ -164,10 +202,10 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     const result = await this.client.request(
       { method: "tools/call", params: { name, arguments: params } },
       CallToolResultSchema,
+      { ...options, onprogress: progress => this.options.onProgress?.(requestId, progress) },
     );
 
     this.options.onLog?.("INFO", "studio", `tools/call ← ${name} complete`);
-    this.options.onChunk?.(requestId, result);
 
     return result;
   }
@@ -197,13 +235,14 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   async callPrompt(
     name: string,
     args: Record<string, string>,
-    requestId: string
+    requestId: string,
+    options?: { signal: AbortSignal; timeout: number }
   ): Promise<MCPPromptMessage[]> {
     if (!this.client) throw new Error("Not connected");
 
     this.options.onLog?.("INFO", "studio", `prompts/get → ${name} (requestId: ${requestId})`);
 
-    const result = await this.client.getPrompt({ name, arguments: args });
+    const result = await this.client.getPrompt({ name, arguments: args }, options);
 
     return result.messages.map((m) => ({
       role: m.role as "user" | "assistant",
