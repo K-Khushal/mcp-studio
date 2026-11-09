@@ -36,7 +36,7 @@ function HeaderTable({
             const display = isSensitive && !isRevealed ? '••••••••' : value;
             return (
               <tr key={`${key}-${i}`} className="border-b border-border last:border-0 hover:bg-muted/20">
-                <td className="px-3 py-1.5 text-primary-text/80 align-top">{key}</td>
+                <td className="px-3 py-1.5 text-primary-text align-top">{key}</td>
                 <td className="px-3 py-1.5 text-foreground break-all">
                   <span className="flex items-center gap-2">
                     <span>{display}</span>

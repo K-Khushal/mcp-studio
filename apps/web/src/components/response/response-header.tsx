@@ -1,15 +1,14 @@
-import { cn } from '@/lib/utils';
+import { TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CheckCircle2, Clock, Loader2, XCircle } from 'lucide-react';
 import { CopyButton } from './copy-button';
 import { formatBytes } from './response-copy';
 
 export type ResponseTab = 'pretty' | 'raw' | 'headers' | 'timeline';
 
-const TABS: ResponseTab[] = ['pretty', 'raw', 'headers', 'timeline'];
+export const RESPONSE_TABS: ResponseTab[] = ['pretty', 'raw', 'headers', 'timeline'];
 
 interface ResponseHeaderProps {
-  activeTab: ResponseTab;
-  onTabChange: (tab: ResponseTab) => void;
+  isHttp: boolean;
   hasResult: boolean;
   hasError: boolean;
   isToolError: boolean;
@@ -21,8 +20,7 @@ interface ResponseHeaderProps {
 }
 
 export function ResponseHeader({
-  activeTab,
-  onTabChange,
+  isHttp,
   hasResult,
   hasError,
   isToolError,
@@ -70,20 +68,13 @@ export function ResponseHeader({
 
       <div className="flex items-center gap-0.5">
         <CopyButton text={copyText} />
-        {TABS.map((tab) => (
-          <button
-            key={tab}
-            onClick={() => onTabChange(tab)}
-            className={cn(
-              'px-3 py-1 rounded-md text-xs font-medium transition-colors capitalize',
-              activeTab === tab
-                ? 'bg-muted text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab}
-          </button>
-        ))}
+        <TabsList aria-label="Response views" className="border-0">
+          {RESPONSE_TABS.filter(tab => tab !== 'headers' || isHttp).map(tab => (
+            <TabsTrigger key={tab} value={tab} className="px-3 py-1">
+              {tab[0]!.toUpperCase() + tab.slice(1)}
+            </TabsTrigger>
+          ))}
+        </TabsList>
       </div>
     </div>
   );

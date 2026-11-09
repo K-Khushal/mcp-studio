@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { Tabs } from "../components/ui/tabs";
 import { ResponseHeader } from "../components/response/response-header";
 import { formatBytes, getCopyText, getResponseSize } from "../components/response/response-copy";
 
 afterEach(cleanup);
 
 const baseProps = {
-  activeTab: "pretty" as const,
-  onTabChange: () => {},
+  isHttp: true,
   hasResult: true,
   hasError: false,
   isToolError: false,
@@ -19,21 +19,21 @@ const baseProps = {
 
 describe("response header", () => {
   it("shows the response size", () => {
-    render(<ResponseHeader {...baseProps} />);
+    render(<Tabs defaultValue="pretty"><ResponseHeader {...baseProps} /></Tabs>);
     expect(screen.getByText("2.0 KB")).toBeTruthy();
   });
 
   it("copies the active representation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
-    render(<ResponseHeader {...baseProps} />);
+    render(<Tabs defaultValue="pretty"><ResponseHeader {...baseProps} /></Tabs>);
     fireEvent.click(screen.getByRole("button", { name: /copy/i }));
     expect(writeText).toHaveBeenCalledWith("hello");
     expect(await screen.findByRole("button", { name: /copied/i })).toBeTruthy();
   });
 
   it("disables copy when there is nothing to copy", () => {
-    render(<ResponseHeader {...baseProps} copyText={null} sizeBytes={null} />);
+    render(<Tabs defaultValue="pretty"><ResponseHeader {...baseProps} copyText={null} sizeBytes={null} /></Tabs>);
     const btn = screen.getByRole("button", { name: /copy/i }) as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
     expect(screen.queryByText(/KB|\bB\b/)).toBeNull();
