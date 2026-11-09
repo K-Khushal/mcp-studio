@@ -287,7 +287,7 @@ test('Console keyboard controls, clipboard feedback and accessible states', asyn
   await page.setViewportSize({ width: 1366, height: 768 });
   await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
   await fixtureConnection(page, 'Console keyboard');
-  const toggle = page.getByRole('button', { name: /^Console/ });
+  const toggle = page.getByRole('button', { name: /^Console/ }).and(page.locator('[aria-controls="logs-body"]'));
   const shots = process.env.CONSOLE_SHOTS;
   for (const theme of ['dark', 'light']) {
     await page.evaluate(theme => {
