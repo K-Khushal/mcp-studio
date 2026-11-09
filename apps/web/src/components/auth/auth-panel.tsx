@@ -26,8 +26,9 @@ export function AuthPanel() {
 
   const handleSignOut = async () => {
     if (!selectedCollection || !selectedConnectionId) return;
-    await signOut(selectedCollection.id, selectedConnectionId);
-    toast.success('Signed out', { description: 'The next connect will ask you to sign in again.' });
+    if (await signOut(selectedCollection.id, selectedConnectionId)) {
+      toast.success('Signed out', { description: 'The next connect will ask you to sign in again.' });
+    }
   };
 
   return (

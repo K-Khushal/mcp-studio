@@ -159,7 +159,7 @@ for (const failure of ["refresh", "exchange", "registration"] as const) {
     const connecting = session.send(fixture.connection(connectionId));
     if (failure === "exchange") await approveInBrowser((await session.waitFor("oauth_authorize")).url);
     await connecting;
-    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED", message: "OAuth authentication failed" });
     const emitted = JSON.stringify(session.messages);
     expect(emitted).not.toContain("diagnostic");
     for (const secret of fixture.issued) expect(emitted).not.toContain(secret);
@@ -194,7 +194,7 @@ test("editing the Connection URL retires credentials even when edited back", asy
   expect(await oauthStorage(connectionId, fixture.connection().config.url).load()).toEqual({});
 });
 
-test("disconnect during code exchange cancels persistence and post-auth reconnect", async () => {
+test("disconnect during code exchange preserves tokens without reconnecting the cancelled Session", async () => {
   const session = openSession();
   const gate = fixture.pauseTokens("authorization_code");
   const connecting = session.send(fixture.connection(connectionId));
@@ -205,7 +205,12 @@ test("disconnect during code exchange cancels persistence and post-auth reconnec
   await connecting;
   expect(session.messages.some(message => message.type === "connected")).toBe(false);
   expect(session.messages.filter(message => message.type === "error")).toEqual([]);
-  expect((await oauthStorage(connectionId, fixture.connection().config.url).load()).tokens).toBeUndefined();
+  const next = openSession();
+  await next.send(fixture.connection(connectionId));
+  await next.waitFor("connected");
+  expect(await echo(next, "exchange survived disconnect")).toMatchObject({ data: { content: [{ text: "exchange survived disconnect" }] } });
+  expect(next.messages.some(message => message.type === "oauth_authorize")).toBe(false);
+  expect(fixture.counts.authorizations).toBe(1);
 });
 
 test("SSE-only OAuth MCP Servers complete sign-in and Calls", async () => {
@@ -246,7 +251,7 @@ test("concurrent Sessions share registration and browser authorization", async (
   await first.waitFor("connected");
   await second.waitFor("connected");
   expect(fixture.counts).toEqual({ registrations: 1, authorizations: 1, refreshes: 0 });
-  expect(second.messages.some(message => message.type === "oauth_authorize")).toBe(false);
+  expect(second.messages.some(message => message.type === "oauth_authorize")).toBe(true);
 });
 
 test("unsaved sign-ins belong to one Session and are forgotten on disconnect", async () => {
@@ -319,4 +324,86 @@ test("refresh rejection fails the Call and leaves browser re-authorization to re
     await session.send({ type: "disconnect" });
     await calling;
   }
+});
+
+test("unknown tools on OAuth Connections retain the MCP error and redact known secrets", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  await session.send({ type: "invoke", tool: `missing-${fixture.issued[0]}`, params: {} });
+  const error = await session.waitFor("error");
+  expect(error).toMatchObject({ code: "TOOL_ERROR" });
+  expect(error.message).toContain("Unknown tool: missing-[REDACTED]");
+  expect(error.message).not.toContain(fixture.issued[0]!);
+});
+
+test("an unreachable OAuth MCP Server retains its network error", async () => {
+  const session = openSession();
+  const connection = fixture.connection(connectionId);
+  await fixture.close();
+  await session.send(connection);
+  expect((await session.waitFor("error")).message).toMatch(/Unable to connect|fetch failed|ECONNREFUSED|Connection refused/i);
+});
+
+test("disconnecting the first browser waiter leaves the second able to approve sign-in", async () => {
+  const first = openSession();
+  const second = openSession();
+  const firstConnecting = first.send(fixture.connection(connectionId));
+  const firstLink = await first.waitFor("oauth_authorize");
+  const secondConnecting = second.send(fixture.connection(connectionId));
+  const secondLink = await second.waitFor("oauth_authorize");
+  expect(secondLink.url).toBe(firstLink.url);
+  await first.send({ type: "disconnect" });
+  await approveInBrowser(secondLink.url);
+  await Promise.all([firstConnecting, secondConnecting]);
+  await second.waitFor("connected");
+  expect(await echo(second, "surviving browser waiter")).toMatchObject({ data: { content: [{ text: "surviving browser waiter" }] } });
+  expect(second.messages.filter(message => message.type === "error")).toEqual([]);
+  expect(fixture.counts).toEqual({ registrations: 1, authorizations: 1, refreshes: 0 });
+});
+
+test("disconnecting the refresh initiator preserves rotating tokens for the surviving Session", async () => {
+  const first = openSession();
+  const second = openSession();
+  await signInAndConnect(first);
+  await second.send(fixture.connection(connectionId));
+  await second.waitFor("connected");
+  fixture.expireAccessTokens();
+  const gate = fixture.pauseTokenResponses("refresh_token");
+  const firstCall = first.send({ type: "invoke", tool: "echo", params: { text: "leaving" } });
+  await gate.started;
+  const secondCall = second.send({ type: "invoke", tool: "echo", params: { text: "surviving refresh waiter" } });
+  await first.send({ type: "disconnect" });
+  gate.resume();
+  await Promise.all([firstCall, secondCall]);
+  expect(await second.waitFor("result")).toMatchObject({ data: { content: [{ text: "surviving refresh waiter" }] } });
+  expect(second.messages.filter(message => message.type === "error")).toEqual([]);
+  expect(fixture.counts.refreshes).toBe(1);
+  // A subsequent refresh must use the newly persisted rotating refresh token.
+  fixture.expireAccessTokens();
+  expect(await echo(second, "persisted rotation")).toMatchObject({ data: { content: [{ text: "persisted rotation" }] } });
+  expect(fixture.counts.refreshes).toBe(2);
+});
+
+test("a Streamable POST 401 authenticates before considering the SSE fallback", async () => {
+  await fixture.close();
+  fixture = await startOAuthFixture("sse-auth-first");
+  const session = openSession();
+  const connecting = session.send(fixture.connection(connectionId));
+  const link = await session.waitFor("oauth_authorize");
+  expect(session.messages.some(message => message.type === "log" && message.message.includes("trying legacy SSE"))).toBe(false);
+  await approveInBrowser(link.url);
+  await connecting;
+  expect(await session.waitFor("connected")).toMatchObject({ httpVariant: "sse" });
+  expect(await echo(session, "auth before endpoint rejection")).toMatchObject({ data: { content: [{ text: "auth before endpoint rejection" }] } });
+  expect(fixture.counts.authorizations).toBe(1);
+});
+
+test("OAuth failure after a Streamable POST 401 never attempts SSE fallback", async () => {
+  await fixture.close();
+  fixture = await startOAuthFixture("sse-auth-first");
+  fixture.faults.registration = true;
+  const session = openSession();
+  await session.send(fixture.connection(connectionId));
+  expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED", message: "OAuth authentication failed" });
+  expect(session.messages.some(message => message.type === "log" && message.message.includes("trying legacy SSE"))).toBe(false);
 });

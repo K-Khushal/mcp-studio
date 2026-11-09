@@ -3,7 +3,19 @@ import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } fr
 
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
-const authorizations = new WeakMap<object, Promise<void>>();
+/** Only errors originating in OAuth discovery, approval or token exchange. */
+export class OAuthFlowError extends Error {
+  constructor() { super("OAuth authentication failed"); }
+}
+
+type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean };
+type AuthorizationFlow = {
+  controller: AbortController;
+  waiters: Set<AuthWaiter>;
+  authorization?: { url: URL; state: string };
+  promise: Promise<void>;
+};
+const authorizations = new WeakMap<object, AuthorizationFlow>();
 
 /** Clone log data while redacting secrets; wire frames and Call results stay intact. */
 export function redactOAuthValue<T>(value: T, secrets: ReadonlySet<string>): T {
@@ -11,6 +23,13 @@ export function redactOAuthValue<T>(value: T, secrets: ReadonlySet<string>): T {
     if (typeof item === "string") {
       for (const secret of secrets) if (secret) item = (item as string).replaceAll(secret, "[REDACTED]");
       return item;
+    }
+    if (item instanceof Error) {
+      const descriptors = Object.getOwnPropertyDescriptors(item);
+      for (const descriptor of Object.values(descriptors)) {
+        if ("value" in descriptor) descriptor.value = redact(descriptor.value);
+      }
+      return Object.create(Object.getPrototypeOf(item), descriptors);
     }
     if (Array.isArray(item)) return item.map(redact);
     if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, child]) => [redact(key), redact(child)]));
@@ -42,7 +61,9 @@ export interface OAuthSignIn {
    * Show `authorizationUrl` to the user and resolve with the authorization code
    * the redirect carrying `state` delivers. Rejecting aborts the connect.
    */
-  authorize(authorizationUrl: URL, state: string): Promise<string>;
+  authorize(authorizationUrl: URL, state: string, signal: AbortSignal): Promise<string>;
+  /** Delivers the shared approval link to each waiting Session, including late joiners. */
+  onAuthorization?(authorizationUrl: URL): void;
 }
 
 /**
@@ -73,44 +94,76 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   /** Coalesce the SDK's entire auth flow, including registration and browser approval. */
   async authenticate(serverUrl: URL, rejectedAuthorization: string | null, response: Response, fetchFn: FetchLike, allowBrowserSignIn: boolean): Promise<void> {
     const key = this.signIn.storage.coordination ?? this.signIn.storage;
-    let pending = authorizations.get(key);
-    if (!pending) {
-      pending = Promise.resolve().then(async () => {
-        const current = await this.tokens();
+    const signal = this.signIn.signal;
+    signal?.throwIfAborted();
+    let flow = authorizations.get(key);
+    // A cancelled browser flow may still be settling; a token response must finish
+    // persisting before another flow can use its rotating refresh token.
+    if (flow?.controller.signal.aborted) {
+      await this.waitForFlow(flow.promise.catch(() => {}), signal);
+      return this.authenticate(serverUrl, rejectedAuthorization, response, fetchFn, allowBrowserSignIn);
+    }
+    if (!flow) {
+      const controller = new AbortController();
+      const waiters = new Set<AuthWaiter>();
+      const shared: AuthorizationFlow = { controller, waiters, promise: Promise.resolve() };
+      const provider = new StudioOAuthProvider({
+        ...this.signIn,
+        signal: controller.signal,
+        authorize: (url, state, flowSignal) => {
+          shared.authorization = { url, state };
+          // Register the redirect before sending the link to any browser.
+          const approval = this.signIn.authorize(url, state, flowSignal);
+          for (const waiter of waiters) waiter.signIn.onAuthorization?.(url);
+          return approval;
+        },
+      }, this.secrets);
+      shared.promise = Promise.resolve().then(async () => {
+        controller.signal.throwIfAborted();
+        const current = await provider.tokens();
         // Another request may already have refreshed the token rejected by this response.
         if (current && `Bearer ${current.access_token}` !== rejectedAuthorization) return;
         const { resourceMetadataUrl, scope } = extractWWWAuthenticateParams(response);
         const options = { serverUrl, resourceMetadataUrl, scope, fetchFn };
-        if (await auth(this, options) === "REDIRECT") {
+        if (await auth(provider, options) === "REDIRECT") {
           // Re-authorization mid-Call is a follow-up; reconnect may open the browser.
-          if (!allowBrowserSignIn) {
-            this.pending = undefined;
-            throw new Error("OAuth authentication failed");
-          }
-          const code = await this.authorizePending();
-          this.signIn.signal?.throwIfAborted();
-          if (!code || await auth(this, { ...options, authorizationCode: code }) !== "AUTHORIZED") {
-            throw new Error("OAuth authentication failed");
+          if (![...waiters].some(waiter => waiter.allowBrowserSignIn)) throw new OAuthFlowError();
+          const code = await provider.authorizePending();
+          controller.signal.throwIfAborted();
+          if (!code || await auth(provider, { ...options, authorizationCode: code }) !== "AUTHORIZED") {
+            throw new OAuthFlowError();
           }
         }
       }).catch(() => {
         // OAuth errors may carry raw response bodies and submitted secrets.
-        throw new Error("OAuth authentication failed");
+        throw new OAuthFlowError();
       }).finally(() => {
-        if (authorizations.get(key) === pending) authorizations.delete(key);
+        if (authorizations.get(key) === shared) authorizations.delete(key);
       });
-      authorizations.set(key, pending);
+      authorizations.set(key, shared);
+      flow = shared;
     }
-    const signal = this.signIn.signal;
+    const waiter = { signIn: this.signIn, allowBrowserSignIn };
+    flow.waiters.add(waiter);
+    try {
+      if (flow.authorization) this.signIn.onAuthorization?.(flow.authorization.url);
+      await this.waitForFlow(flow.promise, signal);
+      await this.credentials();
+    } finally {
+      flow.waiters.delete(waiter);
+      if (flow.waiters.size === 0) flow.controller.abort();
+    }
+  }
+
+  private async waitForFlow(pending: Promise<void>, signal?: AbortSignal): Promise<void> {
     signal?.throwIfAborted();
     let abort: (() => void) | undefined;
     try {
       await Promise.race([pending, new Promise<never>((_, reject) => {
-        abort = () => reject(new Error("OAuth sign-in cancelled"));
+        abort = () => reject(new OAuthFlowError());
         signal?.addEventListener("abort", abort, { once: true });
       })]);
       signal?.throwIfAborted();
-      await this.signIn.storage.load();
     } finally {
       if (abort) signal?.removeEventListener("abort", abort);
     }
@@ -193,15 +246,15 @@ export class StudioOAuthProvider implements OAuthClientProvider {
     const pending = this.pending;
     this.pending = undefined;
     if (!pending) return undefined;
-    const code = await this.signIn.authorize(pending.url, pending.state);
+    const code = await this.signIn.authorize(pending.url, pending.state, this.signIn.signal ?? new AbortController().signal);
     this.secrets.add(code);
     return code;
   }
 
   private async update(patch: OAuthCredentials) {
-    this.signIn.signal?.throwIfAborted();
+    // Finish persisting token responses even if the last Session left mid-request.
+    // Storage still rejects a retired credential generation (sign-out / URL edit).
     const credentials = await this.signIn.storage.load();
-    this.signIn.signal?.throwIfAborted();
     this.remember(patch);
     await this.signIn.storage.save({ ...credentials, ...patch });
   }

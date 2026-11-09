@@ -7,7 +7,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
-import { StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
+import { OAuthFlowError, StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
@@ -72,7 +72,9 @@ export class StreamableHTTPClient extends BaseMCPClient {
   // SDK OAuth errors can contain raw endpoint bodies, codes, verifiers and tokens.
   // Do not retain their message, cause or response on any public exception.
   private safeError(error: unknown): unknown {
-    return this.config.auth?.type === "oauth" ? new Error("OAuth authentication failed") : error;
+    if (this.config.auth?.type !== "oauth") return error;
+    if (error instanceof OAuthFlowError || error instanceof UnauthorizedError) return new OAuthFlowError();
+    return redactOAuthValue(error, this.oauthSecrets);
   }
 
   private variant: "streamable" | "sse" = "streamable";
@@ -110,26 +112,29 @@ export class StreamableHTTPClient extends BaseMCPClient {
     }
 
     // Auth traffic has its own fetch: never expose token/discovery response metadata.
-    const authFetch: FetchLike = (input, init) => {
+    // Shared auth outlives any individual Session. In particular, never abort a
+    // rotating-token exchange before its response can be persisted.
+    const authFetch: FetchLike = (input, init) => fetch(input, init);
+    const resourceFetch: FetchLike = (input, init) => {
       const signal = init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal;
       return fetch(input, { ...init, signal });
     };
     const needsAuthorization = (response: Response) => response.status === 401 ||
       (response.status === 403 && extractWWWAuthenticateParams(response).error === "insufficient_scope");
     const wrappedFetch: FetchLike = async (input, init) => {
-      let response = await authFetch(input, init);
+      let response = await resourceFetch(input, init);
       if (authProvider && needsAuthorization(response)) {
         const headers = new Headers(init?.headers);
         await response.body?.cancel();
         await authProvider.authenticate(url, headers.get("authorization"), response, authFetch, !this.isConnected);
         this.signal.throwIfAborted();
         const tokens = await authProvider.tokens();
-        if (!tokens) throw new Error("OAuth authentication failed");
+        if (!tokens) throw new OAuthFlowError();
         headers.set("authorization", `Bearer ${tokens.access_token}`);
-        response = await authFetch(input, { ...init, headers });
+        response = await resourceFetch(input, { ...init, headers });
         if (needsAuthorization(response)) {
           await response.body?.cancel();
-          throw new Error("OAuth authentication failed");
+          throw new OAuthFlowError();
         }
       }
       const reqId = this.activeRequestId;
@@ -174,7 +179,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         this.variant = "sse";
       } catch (fallbackError) {
         await client.close();
-        if (fallbackError instanceof UnauthorizedError) throw fallbackError;
+        if (fallbackError instanceof OAuthFlowError) throw fallbackError;
         throw new Error(
           `Streamable HTTP rejected (HTTP ${error.code}); legacy SSE failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
           { cause: fallbackError },

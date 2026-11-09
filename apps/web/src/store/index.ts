@@ -172,7 +172,7 @@ interface AppActions {
   connect: (config: ConnectionConfig) => Promise<void>;
   disconnect: () => Promise<void>;
   /** Forget a Connection's OAuth sign-in; ends its Session if live. */
-  signOut: (collectionId: string, connId: string) => Promise<void>;
+  signOut: (collectionId: string, connId: string) => Promise<boolean>;
 
   // Tools
   selectTool: (tool: MCPTool | null) => void;
@@ -564,8 +564,10 @@ export const useStore = create<AppState & AppActions>()(
         try {
           const response = await fetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
           if (!response.ok) throw new Error("Sign-out failed");
+          return true;
         } catch {
           toast.error("Failed to sign out");
+          return false;
         }
       },
 

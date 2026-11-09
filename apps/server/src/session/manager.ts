@@ -312,12 +312,10 @@ export class SessionManager {
       redirectUrl: oauth.redirectUrl,
       signal,
       storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
-      authorize: async (authorizationUrl, state) => {
-        signal.throwIfAborted();
-        const code = oauth.redirects.wait(state, signal);
+      authorize: (_authorizationUrl, state, flowSignal) => oauth.redirects.wait(state, flowSignal),
+      onAuthorization: authorizationUrl => {
         this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
-        return code;
       },
     };
   }

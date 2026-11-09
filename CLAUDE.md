@@ -67,7 +67,7 @@ REST (granular CRUD, no bulk replace):
 - `DELETE /collections/:id/connections/:connId/oauth` (sign out), `GET /oauth/callback` (authorization redirect)
 
 ### OAuth (ADR-0006)
-HTTP auth `{type:"oauth"}`: `StreamableHTTPClient` passes `StudioOAuthProvider` (`packages/mcp-client/src/oauth.ts`, SDK `OAuthClientProvider` over `OAuthStorage`) as `authProvider`; SDK does discovery/DCR/PKCE/refresh. On `UnauthorizedError` the client calls `OAuthSignIn.authorize()` → SessionManager sends `oauth_authorize` and awaits `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) keyed by `state`, then `finishAuth` + reconnect. Storage `db/queries/oauth-credentials.ts` binds credentials to the server URL. Token values must never reach logs or `ServerMessage`s (tested).
+HTTP auth `{type:"oauth"}`: `StreamableHTTPClient.wrappedFetch` intercepts 401 / insufficient-scope responses and calls `StudioOAuthProvider.authenticate()` (`packages/mcp-client/src/oauth.ts`); the SDK handles discovery/DCR/PKCE/refresh through a separate auth fetch. Flows coalesce per credential generation: every waiting Session receives `oauth_authorize`, and `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) delivers the code before exchange and MCP retry. Sessions cancel their own waits; the last waiter leaving cancels browser approval, while in-flight token responses finish persisting. Storage `db/queries/oauth-credentials.ts` binds credentials to the server URL and rejects generations retired by sign-out or URL changes. Browser approval is limited to connect; failed refresh during a Call requires reconnect. Only OAuth-flow failures are sanitized; other MCP/network errors retain their messages with known secrets redacted. Tokens must never reach logs or `ServerMessage`s (tested).
 
 Frontend proxies via Vite → `localhost:3000` in development. Production CLI serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. The package build bundles the CLI and copies web assets and Drizzle migrations into `dist/`; keep these paths relative to the bundle, independent of the working directory. `bun scripts/build-binary.ts` compiles a standalone CLI with embedded web assets and migrations, extracted to a temporary directory at startup; the release workflow builds five targets and creates draft releases only.
 
@@ -110,7 +110,6 @@ Update after any session with: new package/route/transport, schema change, arch 
 - **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
 - **AppState includes `selectedConnectionId`, `transport`, `connectionUrl`** — moved from local component state to store so connection panel and home page stay in sync.
 
-
 ## Tests
 
 Session protocol seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`. `SessionHarness` in `src/__tests__/fixtures/session-harness.ts` drives the real SessionManager: `await harness.send(clientMessage)` then `await harness.waitFor("result", message => message.requestId === id, 3000)`. Waits consume matching events once, including already emitted events; `messages` retains the full stream for diagnostics. Start waits before sending when observing events during an unfinished Call; always close the harness and HTTP fixture in `finally`.
@@ -122,5 +121,4 @@ Form elicitation: MCP clients advertise `elicitation.form`; SessionManager bridg
 
 OAuth: `fixtures/oauth-fixture.ts` — `startOAuthFixture()` (protected `/mcp` + minimal AS: metadata, DCR, PKCE, refresh; `counts`, `issued`, `presented`, `expireAccessTokens()`, `revokeTokens()`), `startOAuthCallback()` (real callback route), `approveInBrowser(url)`. `new SessionHarness({ oauth })` enables sign-in.
 
-
-OAuth lifecycle: credential storage adapters share a per-Connection generation, retired on sign-out or URL change; saves and Session reconnects reject stale generations or aborted Sessions. The SDK auth flow is coalesced per generation across Sessions, uses a separate fetch for auth traffic, and exposes safe errors without endpoint bodies; file-backed DBs use private permissions (0700 directory, 0600 file).
+OAuth lifecycle: credential storage adapters share a per-Connection generation, retired on sign-out or URL change; saves reject stale generations, and aborted Sessions cannot reconnect. The SDK auth flow is coalesced per generation across Sessions, uses a separate fetch for auth traffic, and exposes safe errors without endpoint bodies; file-backed DBs use private permissions (0700 directory, 0600 file).

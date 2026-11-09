@@ -11,10 +11,10 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
  * RFC 8414 authorization-server metadata, dynamic client registration, PKCE (S256)
  * authorization code grant and refresh tokens. /authorize approves immediately.
  */
-export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable") {
-  let tokenGate: { grant: string; started: () => void; resume: Promise<void> } | undefined;
+export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-first" = "streamable") {
+  let tokenGate: { grant: string; phase: "request" | "response"; started: () => void; resume: Promise<void> } | undefined;
   const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean } = {};
-  const legacy = mode === "sse" ? await startHTTPFixture("sse") : undefined;
+  const legacy = mode !== "streamable" ? await startHTTPFixture("sse") : undefined;
   const endpoint = legacy ? {
     handle(request: Request) {
       const target = new URL(request.url);
@@ -40,6 +40,20 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
     refreshTokens.add(refresh);
     issued.push(access, refresh);
     return json({ access_token: access, token_type: "Bearer", expires_in: 3600, refresh_token: refresh });
+  };
+
+  const waitAtGate = async (grant: string | null, phase: "request" | "response") => {
+    if (tokenGate?.grant !== grant || tokenGate.phase !== phase) return;
+    const gate = tokenGate;
+    tokenGate = undefined;
+    gate.started();
+    await gate.resume;
+  };
+  const pause = (grant: "refresh_token" | "authorization_code", phase: "request" | "response") => {
+    const started = Promise.withResolvers<void>();
+    const resume = Promise.withResolvers<void>();
+    tokenGate = { grant, phase, started: () => started.resolve(), resume: resume.promise };
+    return { started: started.promise, resume: () => resume.resolve() };
   };
 
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
@@ -86,12 +100,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
       }
       case "/token": {
         const form = new URLSearchParams(await request.text());
-        if (tokenGate?.grant === form.get("grant_type")) {
-          const gate = tokenGate;
-          tokenGate = undefined;
-          gate.started();
-          await gate.resume;
-        }
+        await waitAtGate(form.get("grant_type"), "request");
         if (faults.refresh && form.get("grant_type") === "refresh_token") {
           return json({ error: "invalid_request", error_description: `refresh diagnostic: ${form.get("refresh_token")}` }, 400);
         }
@@ -105,18 +114,22 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
           if (!grant || grant.clientId !== form.get("client_id") || grant.redirectUri !== form.get("redirect_uri") || grant.challenge !== challenge) {
             return json({ error: "invalid_grant" }, 400);
           }
-          return issueTokens();
+          const response = issueTokens();
+          await waitAtGate(form.get("grant_type"), "response");
+          return response;
         }
         if (form.get("grant_type") === "refresh_token") {
           if (!refreshTokens.delete(form.get("refresh_token") ?? "")) return json({ error: "invalid_grant" }, 400);
           counts.refreshes++;
-          return issueTokens();
+          const response = issueTokens();
+          await waitAtGate(form.get("grant_type"), "response");
+          return response;
         }
         return json({ error: "unsupported_grant_type" }, 400);
       }
       case "/messages":
       case "/mcp": {
-        if (legacy && url.pathname === "/mcp" && request.method === "POST") return new Response("Use legacy SSE", { status: 405 });
+        if (mode === "sse" && url.pathname === "/mcp" && request.method === "POST") return new Response("Use legacy SSE", { status: 405 });
         const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (token) presented.add(token);
         const state = token ? accessTokens.get(token) : undefined;
@@ -126,6 +139,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
         if (!state || state.expired) {
           return new Response("Unauthorized", { status: 401, headers: { "www-authenticate": `Bearer resource_metadata="${resourceMetadata}"` } });
         }
+        if (legacy && url.pathname === "/mcp" && request.method === "POST") return new Response("Use legacy SSE", { status: 405 });
         return endpoint.handle(request);
       }
       default:
@@ -141,10 +155,11 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
     counts,
     faults,
     pauseTokens(grant: "refresh_token" | "authorization_code") {
-      const started = Promise.withResolvers<void>();
-      const resume = Promise.withResolvers<void>();
-      tokenGate = { grant, started: () => started.resolve(), resume: resume.promise };
-      return { started: started.promise, resume: () => resume.resolve() };
+      return pause(grant, "request");
+    },
+    /** Hold the response after the grant was accepted and refresh token rotated. */
+    pauseTokenResponses(grant: "refresh_token" | "authorization_code") {
+      return pause(grant, "response");
     },
     /** Every access and refresh token the authorization server issued. */
     issued,
