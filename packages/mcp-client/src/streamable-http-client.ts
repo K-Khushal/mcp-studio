@@ -9,7 +9,7 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
-import { OAuthFlowError, StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
+import { createOAuthFetch, OAuthFlowError, OAuthPolicyError, StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
@@ -103,6 +103,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
   // SDK OAuth errors can contain raw endpoint bodies, codes, verifiers and tokens.
   // Do not retain their message, cause or response on any public exception.
   private safeError(error: unknown): unknown {
+    if (error instanceof OAuthPolicyError) return error;
     if (error instanceof OAuthFlowError || error instanceof UnauthorizedError) return new OAuthFlowError();
     this.rememberDiagnosticSecrets(this.diagnosticSecrets);
     return redactOAuthValue(error, this.diagnosticSecrets);
@@ -146,7 +147,8 @@ export class StreamableHTTPClient extends BaseMCPClient {
     // Shared auth outlives any individual Session. In particular, never abort a
     // rotating-token exchange before its response can be persisted. Bound each
     // auth endpoint independently so a hung endpoint cannot wedge the shared flow.
-    const authFetch: FetchLike = async (input, init) => limitResponseBody(await fetch(input, {
+    const policyFetch = createOAuthFetch(url);
+    const authFetch: FetchLike = async (input, init) => limitResponseBody(await policyFetch(input, {
       ...init, signal: AbortSignal.timeout(this.options.oauthRequestTimeoutMs ?? 30_000),
     }));
     const resourceFetch: FetchLike = (input, init) => {

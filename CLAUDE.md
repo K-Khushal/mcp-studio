@@ -37,7 +37,7 @@ Ports: frontend `5173`, backend WS `ws://localhost:3000/ws`, REST `localhost:300
 ```
 apps/server/         Bun — WebSocket server + SessionManager + persistence
 apps/web/            React 19 + Vite + Tailwind
-packages/types/      Shared TS types, no runtime code
+packages/types/      Shared TS types + isSafeOAuthUrl runtime helper
 packages/mcp-client/ MCP SDK wrapper, no Bun/browser deps
 ```
 

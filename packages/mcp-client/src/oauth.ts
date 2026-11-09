@@ -1,3 +1,6 @@
+import { isSafeOAuthUrl } from "@mcp-studio/types";
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
 import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
@@ -5,7 +8,95 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 /** Only errors originating in OAuth discovery, approval or token exchange. */
 export class OAuthFlowError extends Error {
-  constructor() { super("OAuth authentication failed"); }
+  constructor(message = "OAuth authentication failed") { super(message); }
+}
+
+/** Fixed messages only: never expose an untrusted endpoint or SDK error. */
+export class OAuthPolicyError extends OAuthFlowError {
+  constructor(reason: "authorization" | "endpoint") {
+    super(reason === "authorization"
+      ? "OAuth sign-in requires HTTPS (HTTP is allowed only for loopback hosts)"
+      : "OAuth endpoint refused: private or invalid destination for a public MCP Server");
+  }
+}
+
+/** Applied before any browser approval callback. */
+function validateAuthorizationUrl(url: URL): void {
+  if (!isSafeOAuthUrl(url.href)) throw new OAuthPolicyError("authorization");
+}
+
+/** Normalize IPv6 and unwrap IPv4-mapped and well-known NAT64 destinations. */
+function unwrapAddress(address: string): string {
+  if (isIP(address) !== 6) return address;
+  const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
+  if (/^(?:::ffff:|64:ff9b::)(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(normalized)) {
+    const suffix = normalized.split(":");
+    const low = parseInt(suffix.pop() || "0", 16);
+    const high = parseInt(suffix.pop() || "0", 16);
+    return `${high >> 8}.${high & 255}.${low >> 8}.${low & 255}`;
+  }
+  return normalized;
+}
+
+// Only globally routable unicast addresses are public.
+function isPublicAddress(address: string): boolean {
+  address = unwrapAddress(address);
+  if (isIP(address) === 4) {
+    const [a = 0, b = 0, c = 0] = address.split(".").map(Number);
+    return !(a === 0 || a === 10 || a === 127 || a >= 224 ||
+      (a === 100 && b >= 64 && b <= 127) ||
+      (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) ||
+      (a === 192 && (b === 168 || (b === 0 && (c === 0 || c === 2)) || (b === 88 && c === 99))) ||
+      (a === 198 && (b === 18 || b === 19 || (b === 51 && c === 100))) ||
+      (a === 203 && b === 0 && c === 113));
+  }
+  if (isIP(address) !== 6) return false;
+  // ULA, link-local, multicast and unspecified are outside 2000::/3.
+  return /^[23][0-9a-f]{3}:/.test(address) &&
+    !address.startsWith("2002:") && !/^2001:(?:db8:|0:|:|2:0:|2::|[12][0-9a-f]:)/.test(address) &&
+    !/^3fff:(?:[0-9a-f]{1,3}:|:)/.test(address);
+}
+
+function isLinkLocalAddress(address: string): boolean {
+  address = unwrapAddress(address);
+  if (isIP(address) === 4) return address.startsWith("169.254.");
+  return isIP(address) === 6 && /^fe[89ab][0-9a-f]:/i.test(address);
+}
+
+async function addresses(hostname: string): Promise<string[]> {
+  const host = hostname.replace(/^\[|\]$/g, "");
+  if (isIP(host)) return [host];
+  if (host === "localhost" || host.endsWith(".localhost")) return ["127.0.0.1"];
+  return (await lookup(host, { all: true, verbatim: true })).map(result => result.address);
+}
+
+/** Guard every auth request, including each redirect hop made by the SDK. */
+export function createOAuthFetch(serverUrl: URL, fetchFn: FetchLike = fetch): FetchLike {
+  // User-entered literal hosts alone confer private-network trust. DNS must
+  // never upgrade a public Connection after discovery or browser approval.
+  const host = serverUrl.hostname.replace(/^\[|\]$/g, "");
+  const privateServer = host === "localhost" || host.endsWith(".localhost") ||
+    (isIP(host) !== 0 && !isPublicAddress(host));
+  return async (input, init) => {
+    let destination: URL;
+    try {
+      destination = new URL(input instanceof Request ? input.url : String(input));
+      if (!["http:", "https:"].includes(destination.protocol) || destination.username || destination.password) {
+        throw new OAuthPolicyError("endpoint");
+      }
+      if (destination.origin !== serverUrl.origin) {
+        const resolved = await addresses(destination.hostname);
+        if (!resolved.length || !resolved.every(isPublicAddress)) {
+          if (!privateServer || (!isLinkLocalAddress(host) && resolved.some(isLinkLocalAddress))) throw new OAuthPolicyError("endpoint");
+        }
+      }
+    } catch {
+      throw new OAuthPolicyError("endpoint");
+    }
+    // Never let runtime automatic redirects bypass destination validation. The
+    // SDK follows permitted same-origin redirects through this guarded fetch.
+    return fetchFn(input, { ...init, redirect: "manual" });
+  };
 }
 
 type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean; rejectBrowserSignIn(): void };
@@ -117,7 +208,8 @@ export class StudioOAuthProvider implements OAuthClientProvider {
             throw new OAuthFlowError();
           }
         }
-      }).catch(() => {
+      }).catch((error: unknown) => {
+        if (error instanceof OAuthPolicyError) throw error;
         // OAuth errors may carry raw response bodies and submitted secrets.
         throw new OAuthFlowError();
       }).finally(() => {
@@ -198,6 +290,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   redirectToAuthorization(url: URL) {
+    validateAuthorizationUrl(url);
     if (!this.lastState) throw new Error("OAuth authorization requested without state");
     this.pending = { url, state: this.lastState };
   }

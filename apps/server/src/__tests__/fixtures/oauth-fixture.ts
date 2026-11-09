@@ -14,7 +14,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-first" = "streamable") {
   let discoveryGate: { started(): void; resume: Promise<void> } | undefined;
   let tokenGate: { grant: string; phase: "request" | "response"; started: () => void; resume: Promise<void> } | undefined;
-  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean; expireOnPrompts?: boolean } = {};
+  const faults: { authorizationUrl?: string; refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean; expireOnPrompts?: boolean } = {};
   const legacy = mode !== "streamable" ? await startHTTPFixture("sse") : undefined;
   const endpoint = legacy ? {
     handle(request: Request) {
@@ -76,7 +76,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
       case "/.well-known/oauth-authorization-server":
         return json({
           issuer: origin,
-          authorization_endpoint: `${origin}/authorize`,
+          authorization_endpoint: faults.authorizationUrl ?? `${origin}/authorize`,
           token_endpoint: `${origin}/token`,
           registration_endpoint: `${origin}/register`,
           response_types_supported: ["code"],

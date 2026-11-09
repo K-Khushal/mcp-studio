@@ -1,3 +1,4 @@
+import { isSafeOAuthUrl } from "@/lib/oauth-url";
 import { Loader2 } from 'lucide-react';
 import { useStore } from '@/store';
 
@@ -5,7 +6,7 @@ import { useStore } from '@/store';
 export function OAuthSignInNotice() {
   const url = useStore((s) => s.oauthAuthorizationUrl);
   const disconnect = useStore((s) => s.disconnect);
-  if (!url) return null;
+  if (!url || !isSafeOAuthUrl(url)) return null;
   return (
     <div role="status" className="flex items-center gap-2 px-3 pb-3 text-xs text-muted-foreground">
       <Loader2 size={12} className="motion-safe:animate-spin" />
