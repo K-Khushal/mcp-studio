@@ -40,7 +40,7 @@ function isPublicAddress(address: string): boolean {
   if (isIP(address) !== 6) return false;
   const normalized = new URL(`http://[${address}]/`).hostname.slice(1, -1);
   // Well-known NAT64 destinations inherit the embedded IPv4 policy.
-  if (normalized.startsWith("64:ff9b::")) {
+  if (/^64:ff9b::(?:[0-9a-f]{1,4}:)?[0-9a-f]{1,4}$/.test(normalized)) {
     const suffix = normalized.slice("64:ff9b::".length).split(":");
     const low = parseInt(suffix.pop() || "0", 16);
     const high = parseInt(suffix.pop() || "0", 16);
@@ -48,8 +48,13 @@ function isPublicAddress(address: string): boolean {
   }
   // Mapped addresses, ULA, link-local, multicast and unspecified are outside 2000::/3.
   return /^[23][0-9a-f]{3}:/.test(normalized) &&
-    !normalized.startsWith("2002:") && !/^2001:(?:db8:|0:|:|1[0-9a-f]:)/.test(normalized) &&
+    !normalized.startsWith("2002:") && !/^2001:(?:db8:|0:|:|2:0:|2::|[12][0-9a-f]:)/.test(normalized) &&
     !/^3fff:(?:[0-9a-f]{1,3}:|:)/.test(normalized);
+}
+
+function isLinkLocalAddress(address: string): boolean {
+  if (isIP(address) === 4) return address.startsWith("169.254.");
+  return isIP(address) === 6 && /^fe[89ab][0-9a-f]:/i.test(address);
 }
 
 async function addresses(hostname: string): Promise<string[]> {
@@ -76,7 +81,7 @@ export function createOAuthFetch(serverUrl: URL, fetchFn: FetchLike = fetch): Fe
       if (destination.origin !== serverUrl.origin) {
         const resolved = await addresses(destination.hostname);
         if (!resolved.length || !resolved.every(isPublicAddress)) {
-          if (!privateServer) throw new OAuthPolicyError("endpoint");
+          if (!privateServer || (!isLinkLocalAddress(host) && resolved.some(isLinkLocalAddress))) throw new OAuthPolicyError("endpoint");
         }
       }
     } catch {

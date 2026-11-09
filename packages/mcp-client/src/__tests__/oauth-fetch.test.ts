@@ -9,7 +9,7 @@ beforeEach(() => {
   ) as never);
 });
 
-const privateHosts = ["127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "169.254.169.254", "100.64.0.1", "0.0.0.0", "[::1]", "[fc00::1]", "[fe80::1]", "[::ffff:127.0.0.1]", "internal.example", "localhost"];
+const privateHosts = ["127.0.0.1", "10.0.0.1", "172.16.0.1", "192.168.1.1", "192.0.0.8", "192.0.2.8", "169.254.169.254", "100.64.0.1", "0.0.0.0", "[::1]", "[fc00::1]", "[fe80::1]", "[::ffff:127.0.0.1]", "internal.example", "localhost"];
 for (const path of ["/.well-known/oauth-authorization-server", "/token", "/register"]) {
   test.each(privateHosts)(`public MCP Server cannot fetch %s${path}`, async (host) => {
     const fetch = vi.fn().mockResolvedValue(new Response("{}"));
@@ -111,7 +111,7 @@ test.each(["2001:db80::1", "64:ff9b::5db8:d822"])("public IPv6 %s remains usable
   const guarded = createOAuthFetch(new URL("https://mcp.example"), async () => new Response("ok"));
   expect((await guarded(`https://[${host}]/token`)).status).toBe(200);
 });
-test.each(["2001:db8::1", "64:ff9b::7f00:1", "64:ff9b::a00:1", "3fff::1", "3fff:fff::1", "2001:10::1", "2001:1f::1"])("non-public IPv6 %s is refused", async (host) => {
+test.each(["2001:2::1", "2001:20::1", "2001:2f::1", "64:ff9b::1:5db8:d822", "2001:db8::1", "64:ff9b::7f00:1", "64:ff9b::a00:1", "3fff::1", "3fff:fff::1", "2001:10::1", "2001:1f::1"])("non-public IPv6 %s is refused", async (host) => {
   const guarded = createOAuthFetch(new URL("https://mcp.example"), vi.fn());
   await expect(guarded(`https://[${host}]/token`)).rejects.toThrow("OAuth endpoint refused");
 });
@@ -148,4 +148,17 @@ test("a transient DNS failure does not poison later endpoint validation", async 
   const guarded = createOAuthFetch(new URL("https://mcp.example"), async () => new Response("ok"));
   await expect(guarded("https://auth.example/token")).rejects.toThrow("OAuth endpoint refused");
   expect((await guarded("https://auth.example/token")).status).toBe(200);
+});
+
+test.each(["http://169.254.169.254/token", "http://[fe80::1]/token", "http://[febf::1]/token", "http://metadata.example/token"])("localhost MCP Server refuses link-local endpoint %s", async (endpoint) => {
+  vi.mocked(lookup).mockResolvedValue([{ address: "169.254.169.254", family: 4 }] as never);
+  const network = vi.fn();
+  await expect(createOAuthFetch(new URL("http://localhost/mcp"), network)(endpoint)).rejects.toThrow("OAuth endpoint refused");
+  expect(network).not.toHaveBeenCalled();
+});
+
+test.each(["http://169.254.1.1/mcp", "http://[fe80::2]/mcp"])("link-local MCP Server %s can use link-local endpoints", async (server) => {
+  const guarded = createOAuthFetch(new URL(server), async () => new Response("ok"));
+  expect((await guarded("http://169.254.169.254/token")).status).toBe(200);
+  expect((await guarded("http://[fe80::1]/token")).status).toBe(200);
 });
