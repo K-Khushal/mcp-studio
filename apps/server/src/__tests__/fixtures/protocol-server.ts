@@ -61,11 +61,30 @@ export function createProtocolServer() {
     }
   });
   server.setRequestHandler(ListPromptsRequestSchema, async () => ({ prompts: [{ name: "greet", arguments: [{ name: "name", required: true }] }] }));
-  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+  server.setRequestHandler(GetPromptRequestSchema, async (request, extra) => {
     if (request.params.name !== "greet") throw new Error("Unknown prompt");
+    if (request.params.arguments?.name === "slow") {
+      await server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Slow prompt started" });
+      await new Promise<void>((resolve, reject) => {
+        const abort = () => {
+          clearTimeout(timer);
+          void server.sendLoggingMessage({ level: "info", logger: "fixture", data: "Slow prompt aborted" });
+          reject(extra.signal.reason);
+        };
+        const timer = setTimeout(() => { extra.signal.removeEventListener("abort", abort); resolve(); }, 500);
+        extra.signal.addEventListener("abort", abort, { once: true });
+        if (extra.signal.aborted) abort();
+      });
+    }
     return { messages: [{ role: "user", content: { type: "text", text: `Hello, ${request.params.arguments?.name}!` } }] };
   });
   return server;
 }
 
-if (import.meta.main) await createProtocolServer().connect(new StdioServerTransport());
+if (import.meta.main) {
+  const server = createProtocolServer();
+  if (process.argv.includes("--fail-prompts")) {
+    server.setRequestHandler(ListPromptsRequestSchema, async () => { throw new Error("Fixture prompts unavailable"); });
+  }
+  await server.connect(new StdioServerTransport());
+}

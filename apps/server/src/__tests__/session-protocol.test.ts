@@ -160,3 +160,21 @@ test("a rejected replacement Connection preserves live Session crash detection",
     expect(await session.waitFor("disconnected")).toMatchObject({ reason: "MCP Server connection closed unexpectedly" });
   } finally { await session.close(); }
 });
+
+test("STDIO connects with tools and a Studio WARN when prompts/list fails", async () => {
+  const session = new SessionHarness();
+  try {
+    if (stdioFixture.type !== "connect" || stdioFixture.transport !== "stdio") throw new Error("Expected STDIO fixture");
+    await session.send({ ...stdioFixture, config: { ...stdioFixture.config, args: [...stdioFixture.config.args, "--fail-prompts"] } });
+    const connected = await session.waitFor("connected");
+    expect(connected.tools).toContainEqual(expect.objectContaining({ name: "echo" }));
+    expect(connected.prompts).toEqual([]);
+    expect(await session.waitFor("log", message => message.level === "WARN" && message.source === "studio")).toMatchObject({
+      message: expect.stringContaining("prompts/list"),
+    });
+    await session.send({ type: "list_prompts" });
+    expect(await session.waitFor("error")).toMatchObject({ code: "PROMPTS_ERROR" });
+  } finally {
+    await session.close();
+  }
+});

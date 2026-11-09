@@ -5,6 +5,8 @@ import { SessionManager } from "./session/manager.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
 import { createConnection, deleteConnection, updateConnection } from "./db/queries/connections.js";
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
+import { clearOAuthCredentials, oauthStorage } from "./db/queries/oauth-credentials.js";
+import { oauthCallbackResponse, OAuthRedirects } from "./oauth/redirects.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
 const production = process.env["STUDIO_PRODUCTION"] === "1";
@@ -12,6 +14,7 @@ const CORS_ORIGIN = process.env["CORS_ORIGIN"] ?? (production ? "" : "http://loc
 const webRoot = process.env["STUDIO_RESOURCE_DIR"]
   ? resolve(process.env["STUDIO_RESOURCE_DIR"], "web")
   : fileURLToPath(new URL("./web/", import.meta.url));
+const oauthRedirects = new OAuthRedirects();
 
 console.log(`[mcp-studio/server] Starting on ws://localhost:${PORT}`);
 
@@ -98,6 +101,20 @@ const server = Bun.serve<{ session: SessionManager | null }>({
       }
     }
 
+    // Sign out: forget the Connection's OAuth tokens and client registration
+    const oauthMatch = url.pathname.match(/^\/collections\/([^/]+)\/connections\/([^/]+)\/oauth$/);
+    if (oauthMatch && req.method === "DELETE") {
+      await clearOAuthCredentials(oauthMatch[2]!);
+      return json({ ok: true });
+    }
+
+    // ---------------------------------------------------------------------------
+    // OAuth redirect from the authorization server (loopback only, like every route)
+    // ---------------------------------------------------------------------------
+    if (req.method === "GET" && url.pathname === "/oauth/callback") {
+      return oauthCallbackResponse(url, oauthRedirects);
+    }
+
     // ---------------------------------------------------------------------------
     // Environments
     // ---------------------------------------------------------------------------
@@ -151,7 +168,13 @@ const server = Bun.serve<{ session: SessionManager | null }>({
   websocket: {
     open(ws) {
       const send = (msg: ServerMessage) => ws.send(JSON.stringify(msg));
-      ws.data.session = new SessionManager(send);
+      ws.data.session = new SessionManager(send, {
+        oauth: {
+          redirectUrl: `http://localhost:${server.port}/oauth/callback`,
+          redirects: oauthRedirects,
+          storage: oauthStorage,
+        },
+      });
       console.log("[ws] Client connected");
     },
 

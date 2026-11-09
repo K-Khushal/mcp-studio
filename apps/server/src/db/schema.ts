@@ -1,5 +1,6 @@
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 import type { ConnectionConfig } from "@mcp-studio/types";
+import type { OAuthCredentials } from "@mcp-studio/mcp-client";
 
 export const collections = sqliteTable("collections", {
   id: text("id").primaryKey(),
@@ -18,6 +19,16 @@ export const connections = sqliteTable("connections", {
     .$type<ConnectionConfig | null>()
     .default(null),
   createdAt: integer("created_at").notNull(),
+  updatedAt: integer("updated_at").notNull(),
+});
+
+/** OAuth tokens and client registration for one Connection, bound to the MCP Server URL they were issued for. */
+export const oauthCredentials = sqliteTable("oauth_credentials", {
+  connectionId: text("connection_id")
+    .primaryKey()
+    .references(() => connections.id, { onDelete: "cascade" }),
+  serverUrl: text("server_url").notNull(),
+  credentials: text("credentials", { mode: "json" }).$type<OAuthCredentials>().notNull(),
   updatedAt: integer("updated_at").notNull(),
 });
 

@@ -14,7 +14,9 @@ export interface StdioConfig {
 export type HttpAuth =
   | { type: "none" }
   | { type: "bearer"; token: string }
-  | { type: "apikey"; key: string; value: string; in: "header" | "query" };
+  | { type: "apikey"; key: string; value: string; in: "header" | "query" }
+  /** OAuth 2.1 browser sign-in; tokens are held by the Studio Server, never by the browser. */
+  | { type: "oauth" };
 
 export interface HttpConfig {
   url: string;

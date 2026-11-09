@@ -7,7 +7,8 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, ConnectionStatus } from "./m
 
 export type ClientMessage =
   | ({ type: "elicitation_response"; elicitationId: string } & ElicitationResult)
-  | ({ type: "connect"; verbose?: boolean } & ConnectionConfig)
+  /** `connectionId` scopes stored OAuth credentials to the saved Connection. */
+  | ({ type: "connect"; verbose?: boolean; connectionId?: string } & ConnectionConfig)
   | { type: "set_verbose"; verbose: boolean }
   | { type: "cancel"; requestId: string }
   | { type: "invoke"; tool: string; params: Record<string, unknown>; requestId?: string; requestTimeout?: number }
@@ -65,7 +66,9 @@ export type ServerMessage =
     }
   | { type: "disconnected"; reason?: string }
   | { type: "status"; status: ConnectionStatus }
-  | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> };
+  | { type: "http_response"; requestId: string; status: number; headers: Record<string, string> }
+  /** The MCP Server requires OAuth sign-in: open `url` in the browser to continue connecting. */
+  | { type: "oauth_authorize"; url: string };
 
 export interface ElicitationResult { action: "accept" | "decline" | "cancel"; content?: Record<string, string | number | boolean | string[]>; }
 

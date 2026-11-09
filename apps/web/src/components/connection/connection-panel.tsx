@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
+import { OAuthSignInNotice } from '../auth/oauth-sign-in-notice';
 import { Loader2, Plug, Unplug } from 'lucide-react';
 import { VariableInput } from '@/components/shared/variable-input';
 import { buildConnectionConfig, isConnectable } from '@/store/connection-form';
@@ -232,8 +233,8 @@ export function ConnectionPanel() {
           {isSelectedConnectionConnected ? 'Disconnect' : 'Connect'}
         </button>
       </div>
-
       {transport === 'stdio' && <StdioForm />}
+      <OAuthSignInNotice />
     </div>
   );
 }

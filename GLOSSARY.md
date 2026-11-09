@@ -47,3 +47,7 @@ _Avoid_: log line, event
 **Log source**:
 Where a Log entry came from: Protocol (JSON-RPC frames, only with verbose logging on), Server (MCP Server `notifications/message` and subprocess stderr), or Studio (MCP Studio's own lifecycle events).
 _Avoid_: origin, channel
+
+**Sign-in**:
+The OAuth credentials (tokens and client registration) MCP Studio holds for one Connection after the user authorizes it in the browser, bound to the MCP Server URL they were issued for. Signing out discards it.
+_Avoid_: login, session (when meaning the stored credentials), auth token

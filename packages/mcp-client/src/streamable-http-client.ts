@@ -1,14 +1,18 @@
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { UnauthorizedError, extractWWWAuthenticateParams } from "@modelcontextprotocol/sdk/client/auth.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
+import { OAuthFlowError, StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
+  private readonly oauthSecrets: Set<string>;
+  private readonly lifetime = new AbortController();
   private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
   // The UI runs one Call at a time; this shared id tags its HTTP response headers.
   // Concurrent programmatic Calls do not have independent HTTP header attribution.
@@ -18,7 +22,27 @@ export class StreamableHTTPClient extends BaseMCPClient {
     private readonly config: HttpConfig,
     options: MCPClientOptions = {}
   ) {
-    super(options);
+    const secrets = new Set<string>();
+    super({ ...options, onLog: (level, source, text, payload) =>
+      options.onLog?.(level, source, redactOAuthValue(text, secrets), redactOAuthValue(payload, secrets)),
+    });
+    this.oauthSecrets = secrets;
+  }
+
+  override async listTools() {
+    try {
+      return await super.listTools();
+    } catch (error) {
+      throw this.safeError(error);
+    }
+  }
+
+  override async listPrompts() {
+    try {
+      return await super.listPrompts();
+    } catch (error) {
+      throw this.safeError(error);
+    }
   }
 
   override async callTool(
@@ -30,6 +54,8 @@ export class StreamableHTTPClient extends BaseMCPClient {
     this.activeRequestId = requestId;
     try {
       return await super.callTool(name, params, requestId, options);
+    } catch (error) {
+      throw this.safeError(error);
     } finally {
       this.activeRequestId = null;
     }
@@ -44,18 +70,47 @@ export class StreamableHTTPClient extends BaseMCPClient {
     this.activeRequestId = requestId;
     try {
       return await super.callPrompt(name, args, requestId, options);
+    } catch (error) {
+      throw this.safeError(error);
     } finally {
       this.activeRequestId = null;
     }
   }
 
   override async connect() {
-    return { ...await super.connect(), httpVariant: this.variant };
+    try {
+      return { ...await super.connect(), httpVariant: this.variant };
+    } catch (error) {
+      throw this.safeError(error);
+    }
+  }
+
+  // SDK OAuth errors can contain raw endpoint bodies, codes, verifiers and tokens.
+  // Do not retain their message, cause or response on any public exception.
+  private safeError(error: unknown): unknown {
+    if (this.config.auth?.type !== "oauth") return error;
+    if (error instanceof OAuthFlowError || error instanceof UnauthorizedError) return new OAuthFlowError();
+    return redactOAuthValue(error, this.oauthSecrets);
   }
 
   private variant: "streamable" | "sse" = "streamable";
 
   protected async setupTransport(): Promise<Client> {
+    const { auth } = this.config;
+    if (auth?.type !== "oauth") return this.connectHttp();
+    if (!this.options.oauth) throw new Error("OAuth sign-in is not available in this Studio Server");
+    const provider = new StudioOAuthProvider({ ...this.options.oauth, signal: this.signal }, this.oauthSecrets);
+    return this.connectHttp(provider);
+  }
+
+  private get signal(): AbortSignal {
+    return this.options.oauth?.signal
+      ? AbortSignal.any([this.lifetime.signal, this.options.oauth.signal])
+      : this.lifetime.signal;
+  }
+
+  private async connectHttp(authProvider?: StudioOAuthProvider): Promise<Client> {
+    this.signal.throwIfAborted();
     const url = new URL(this.config.url);
 
     // Merge auth into headers/URL before connecting
@@ -72,10 +127,36 @@ export class StreamableHTTPClient extends BaseMCPClient {
       }
     }
 
-    // Custom fetch wrapper: captures HTTP response headers per operation
+    // Auth traffic has its own fetch: never expose token/discovery response metadata.
+    // Shared auth outlives any individual Session. In particular, never abort a
+    // rotating-token exchange before its response can be persisted. Bound each
+    // auth endpoint independently so a hung endpoint cannot wedge the shared flow.
+    const authFetch: FetchLike = (input, init) => fetch(input, {
+      ...init, signal: AbortSignal.timeout(this.options.oauthRequestTimeoutMs ?? 30_000),
+    });
+    const resourceFetch: FetchLike = (input, init) => {
+      const signal = init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal;
+      return fetch(input, { ...init, signal });
+    };
+    const needsAuthorization = (response: Response) => response.status === 401 ||
+      (response.status === 403 && extractWWWAuthenticateParams(response).error === "insufficient_scope");
     const wrappedFetch: FetchLike = async (input, init) => {
+      let response = await resourceFetch(input, init);
+      if (authProvider && needsAuthorization(response)) {
+        const headers = new Headers(init?.headers);
+        await response.body?.cancel();
+        await authProvider.authenticate(url, headers.get("authorization"), response, authFetch, !this.isConnected);
+        this.signal.throwIfAborted();
+        const tokens = await authProvider.tokens();
+        if (!tokens) throw new OAuthFlowError();
+        headers.set("authorization", `Bearer ${tokens.access_token}`);
+        response = await resourceFetch(input, { ...init, headers });
+        if (needsAuthorization(response)) {
+          await response.body?.cancel();
+          throw new OAuthFlowError();
+        }
+      }
       const reqId = this.activeRequestId;
-      const response = await fetch(input, init);
       if (reqId && this.options.onHttpResponse) {
         const respHeaders: Record<string, string> = {};
         response.headers.forEach((value, key) => { respHeaders[key] = value; });
@@ -87,6 +168,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
     this.transport = new StreamableHTTPClientTransport(url, {
       requestInit: { headers },
       fetch: wrappedFetch,
+      authProvider,
     });
 
     const logUrl = new URL(url);
@@ -108,6 +190,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         requestInit: { headers },
         eventSourceInit: { fetch: (input, init) => wrappedFetch(input, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), ...headers } }) },
         fetch: wrappedFetch,
+        authProvider,
       });
       client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
       try {
@@ -115,6 +198,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         this.variant = "sse";
       } catch (fallbackError) {
         await client.close();
+        if (fallbackError instanceof OAuthFlowError) throw fallbackError;
         throw new Error(
           `Streamable HTTP rejected (HTTP ${error.code}); legacy SSE failed: ${fallbackError instanceof Error ? fallbackError.message : String(fallbackError)}`,
           { cause: fallbackError },
@@ -126,6 +210,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
   }
 
   protected async teardownTransport(): Promise<void> {
+    this.lifetime.abort();
     if (this.transport) {
       await this.transport.close();
       this.transport = null;

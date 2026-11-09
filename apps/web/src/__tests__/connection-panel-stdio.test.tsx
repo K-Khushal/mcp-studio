@@ -136,7 +136,7 @@ describe("STDIO form", () => {
     render(<ConnectionPanel />);
     fireEvent.click(screen.getByRole("button", { name: "Connect" }));
     await act(async () => { await vi.advanceTimersByTimeAsync(0); });
-    expect(transport.connect).toHaveBeenCalledWith(savedConfig, false);
+    expect(transport.connect).toHaveBeenCalledWith(savedConfig, false, "conn-1");
   });
 
   it("switching Connections inside the debounce window still saves the outgoing edit once", async () => {

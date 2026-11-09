@@ -52,18 +52,22 @@ Browser → WebSocketTransport → Bun WS server
 **Zustand store** (`apps/web/src/store/index.ts`) — `handleServerMessage()` at bottom is sole mutation point for `ServerMessage` events; registered via `transport.onMessage()` at connect time.
 
 ### Message protocol
-`ClientMessage` → server: `connect` (stdio|http, optional `verbose`), `set_verbose`, `invoke`, `invoke_prompt`, `cancel`, `disconnect`, `list_tools`, `list_prompts`
-`ServerMessage` → browser: `connected`, `session_phase`, `progress`, `cancelled`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`
+`ClientMessage` → server: `connect` (stdio|http, optional `verbose` and `connectionId` for OAuth Sign-in), `set_verbose`, `invoke`, `invoke_prompt`, `cancel`, `disconnect`, `list_tools`, `list_prompts`
+`ServerMessage` → browser: `connected`, `session_phase`, `progress`, `cancelled`, `result`, `prompt_result`, `error`, `log`, `disconnected`, `status`, `tools_listed`, `prompts_listed`, `oauth_authorize` (browser opens URL)
 `requestId` ties progress, results, errors and cancellation to the originating tool or prompt Call. The browser supplies it; SessionManager generates one for older clients. Every tools/call gets an SDK progressToken; per-Call AbortSignals send MCP cancellation on Cancel or timeout. `session_phase` reports transport start (spawn/connect) and initialize durations independently of verbose logging.
 `log` carries `source` (`protocol`|`server`|`studio`) + optional `payload` (`direction`,`method`,`id`,`body`). With `verbose` on, `BaseMCPClient` taps transport send/onmessage and logs every JSON-RPC frame as a protocol-source DEBUG entry (live-toggle via `set_verbose`); `notifications/message` → server source (levels mapped in `mcp-client/src/log.ts`), STDIO stderr → server INFO. Store buffers logs arriving during connect (`handshakeLogs`) and adopts them on `connected`.
 
 ### Persistence
-SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `connections`, `environments`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `Connection` (table renamed from `requests` in migration `0002`, rows preserved) has no `tool`/`params` fields — tools fetched live from MCP after connect (dropped in migration `0001`).
+SQLite at `~/.mcp-studio/studio.db` via **Drizzle ORM** (`drizzle-orm/bun-sqlite`). Schema: `apps/server/src/db/schema.ts` (tables: `collections`, `connections`, `environments`, `oauth_credentials`). Queries: `apps/server/src/db/queries/`. Migrations in `apps/server/drizzle/`, applied automatically on server startup via `migrate()`. History removed entirely. `STUDIO_DB_PATH` env var overrides DB path — set to `:memory:` for test isolation. `Connection` (table renamed from `requests` in migration `0002`, rows preserved) has no `tool`/`params` fields — tools fetched live from MCP after connect (dropped in migration `0001`).
 
 REST (granular CRUD, no bulk replace):
 - `GET/POST /collections`, `PATCH/DELETE /collections/:id`
 - `POST /collections/:id/connections`, `PATCH|DELETE /collections/:id/connections/:connId`
 - `GET/POST /environments`, `PATCH/DELETE /environments/:id`
+- `DELETE /collections/:id/connections/:connId/oauth` (sign out), `GET /oauth/callback` (authorization redirect)
+
+### OAuth (ADR-0006)
+HTTP auth `{type:"oauth"}`: `StreamableHTTPClient.wrappedFetch` intercepts 401 / insufficient-scope responses and calls `StudioOAuthProvider.authenticate()` (`packages/mcp-client/src/oauth.ts`); the SDK handles discovery/DCR/PKCE/refresh through a separate auth fetch. Flows coalesce per credential generation: only browser-allowed connecting Sessions receive `oauth_authorize` (including late joiners); connected waiters fail promptly if browser approval becomes necessary, and `OAuthRedirects` (`apps/server/src/oauth/redirects.ts`) delivers the code before exchange and MCP retry. Sessions cancel their own waits; the last waiter leaving cancels browser approval, while in-flight token responses finish persisting. Storage `db/queries/oauth-credentials.ts` binds credentials to the server URL and rejects generations retired by sign-out or URL changes. Browser approval is limited to connect; failed refresh during a Call requires reconnect. Auth endpoint requests time out after 30 seconds independently of Session lifetimes. Only OAuth-flow failures are sanitized; other MCP/network errors retain their messages with known secrets redacted. Tokens must never reach logs or `ServerMessage`s (tested).
 
 Frontend proxies via Vite → `localhost:3000` in development. Production CLI serves built web assets, REST (also under `/api`) and `/ws` on one loopback port; the browser uses same-origin URLs. The package build bundles the CLI and copies web assets and Drizzle migrations into `dist/`; keep these paths relative to the bundle, independent of the working directory. `bun scripts/build-binary.ts` compiles a standalone CLI with embedded web assets and migrations, extracted to a temporary directory at startup; the release workflow builds five targets and creates draft releases only.
 
@@ -106,7 +110,6 @@ Update after any session with: new package/route/transport, schema change, arch 
 - **Server tests use `bun:test`, not vitest** — `bun:sqlite` is a native Bun module; Vite's transformer can't resolve it. Server tests import from `"bun:test"`; web tests use vitest + jsdom.
 - **AppState includes `selectedConnectionId`, `transport`, `connectionUrl`** — moved from local component state to store so connection panel and home page stay in sync.
 
-
 ## Tests
 
 Session protocol seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`. `SessionHarness` in `src/__tests__/fixtures/session-harness.ts` drives the real SessionManager: `await harness.send(clientMessage)` then `await harness.waitFor("result", message => message.requestId === id, 3000)`. Waits consume matching events once, including already emitted events; `messages` retains the full stream for diagnostics. Start waits before sending when observing events during an unfinished Call; always close the harness and HTTP fixture in `finally`.
@@ -115,3 +118,7 @@ Session protocol seam: `cd apps/server && bun test src/__tests__/session-protoco
 
 Form elicitation: MCP clients advertise `elicitation.form`; SessionManager bridges `elicitation_request`/`elicitation_response` with unique elicitation IDs. Pending forms cancel after 120 seconds or Session closure; `elicitation_closed` removes expired dialogs. The browser queues forms and reuses ToolArgsEditor.
 - **`inheritSystemEnv=false` still gets the MCP SDK's minimal safe env** (PATH, HOME, TERM, …) so commands resolve; only arbitrary parent vars are excluded.
+
+OAuth: `fixtures/oauth-fixture.ts` — `startOAuthFixture()` (protected `/mcp` + minimal AS: metadata, DCR, PKCE, refresh; `counts`, `issued`, `presented`, `expireAccessTokens()`, `revokeTokens()`), `startOAuthCallback()` (real callback route), `approveInBrowser(url)`. `new SessionHarness({ oauth })` enables sign-in.
+
+OAuth lifecycle: credential storage adapters share a per-Connection generation, retired on sign-out or URL change; saves reject stale generations, and aborted Sessions cannot reconnect. The SDK auth flow is coalesced per generation across Sessions, uses a separate fetch for auth traffic, and exposes safe errors without endpoint bodies; file-backed DBs use private permissions (0700 directory, 0600 file).

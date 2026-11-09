@@ -3,7 +3,7 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
 import { createServer } from "node:http";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
-import { SessionManager } from "../../session/manager";
+import { SessionManager, type SessionOptions } from "../../session/manager";
 import { createProtocolServer } from "./protocol-server";
 
 type Waiter = { accept: (message: ServerMessage) => boolean; reject: (error: Error) => void };
@@ -13,12 +13,16 @@ export class SessionHarness {
   readonly messages: ServerMessage[] = [];
   private pending: ServerMessage[] = [];
   private waiters: Waiter[] = [];
-  private session = new SessionManager(message => {
-    this.messages.push(message);
-    const index = this.waiters.findIndex(waiter => waiter.accept(message));
-    if (index >= 0) this.waiters.splice(index, 1);
-    else this.pending.push(message);
-  });
+  private session: SessionManager;
+
+  constructor(options: SessionOptions = {}) {
+    this.session = new SessionManager(message => {
+      this.messages.push(message);
+      const index = this.waiters.findIndex(waiter => waiter.accept(message));
+      if (index >= 0) this.waiters.splice(index, 1);
+      else this.pending.push(message);
+    }, options);
+  }
 
   setActiveEnv(env: Record<string, string>) { this.session.setActiveEnv(env); }
 
@@ -62,42 +66,54 @@ export function startHTTPFixture(mode: "streamable" | "sse" = "streamable") {
   return mode === "sse" ? startSSEFixture() : startStreamableFixture();
 }
 
-async function startStreamableFixture() {
+/** Stateful Streamable HTTP MCP endpoint backed by the protocol fixture. */
+export function createStreamableEndpoint() {
   const sessions = new Map<string, WebStandardStreamableHTTPServerTransport>();
   const protocols = new Set<ReturnType<typeof createProtocolServer>>();
+  return {
+    async handle(request: Request): Promise<Response> {
+      const sessionId = request.headers.get("mcp-session-id");
+      if (sessionId) {
+        const transport = sessions.get(sessionId);
+        return transport ? transport.handleRequest(request) : new Response("Unknown session", { status: 404 });
+      }
+      const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
+      if (!isInitializeRequest(body)) return new Response("Expected initialize", { status: 400 });
+      const protocol = createProtocolServer();
+      const transport = new WebStandardStreamableHTTPServerTransport({
+        sessionIdGenerator: () => crypto.randomUUID(),
+        onsessioninitialized: id => { sessions.set(id, transport); },
+        onsessionclosed: id => { sessions.delete(id); },
+      });
+      protocols.add(protocol);
+      await protocol.connect(transport);
+      return transport.handleRequest(request);
+    },
+    async close() {
+      await Promise.all([...protocols].map(protocol => protocol.close()));
+    },
+  };
+}
+
+async function startStreamableFixture() {
+  const endpoint = createStreamableEndpoint();
   const versions: (string | null)[] = [];
   const requests: unknown[] = [];
   const server = Bun.serve({ hostname: "127.0.0.1", port: 0, async fetch(request) {
     versions.push(request.headers.get("mcp-protocol-version"));
     if (request.method === "POST") requests.push(await request.clone().json());
-    const sessionId = request.headers.get("mcp-session-id");
-    if (sessionId) {
-      const transport = sessions.get(sessionId);
-      return transport ? transport.handleRequest(request) : new Response("Unknown session", { status: 404 });
-    }
-    const body = request.method === "POST" ? await request.clone().json().catch(() => null) : null;
-    if (!isInitializeRequest(body)) return new Response("Expected initialize", { status: 400 });
-    const protocol = createProtocolServer();
-    const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
-      onsessioninitialized: id => { sessions.set(id, transport); },
-      onsessionclosed: id => { sessions.delete(id); },
-    });
-    protocols.add(protocol);
-    await protocol.connect(transport);
-    return transport.handleRequest(request);
+    return endpoint.handle(request);
   } });
   return {
     connection: { type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } } satisfies ClientMessage,
     versions,
     requests,
     async close() {
-      await Promise.all([...protocols].map(protocol => protocol.close()));
+      await endpoint.close();
       await server.stop(true);
     },
   };
 }
-
 
 async function startSSEFixture() {
   const sessions = new Map<string, SSEServerTransport>();

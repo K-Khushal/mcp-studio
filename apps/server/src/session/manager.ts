@@ -1,6 +1,6 @@
 import type { ElicitationResult } from "@mcp-studio/types";
 import { StdioMCPClient, StreamableHTTPClient } from "@mcp-studio/mcp-client";
-import type { MCPClientInterface, MCPClientOptions } from "@mcp-studio/mcp-client";
+import type { MCPClientInterface, MCPClientOptions, OAuthSignIn, OAuthStorage } from "@mcp-studio/mcp-client";
 import type {
   ClientMessage,
   ServerMessage,
@@ -9,9 +9,25 @@ import type {
 } from "@mcp-studio/types";
 import { StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { interpolate } from "../env/interpolate.js";
+import type { OAuthRedirects } from "../oauth/redirects.js";
 import { nanoid } from "../utils/nanoid.js";
 
 type Send = (msg: ServerMessage) => void;
+
+export interface SessionOptions {
+  /** Enables OAuth sign-in for HTTP Connections. */
+  oauth?: {
+    redirectUrl: string;
+    redirects: OAuthRedirects;
+    storage(connectionId: string, serverUrl: string): OAuthStorage;
+  };
+}
+
+/** Stand-in storage for a connect without a saved Connection: credentials last one Session. */
+function sessionStorage(): OAuthStorage {
+  let credentials = {};
+  return { load: async () => credentials, save: async (next) => { credentials = next; } };
+}
 
 /**
  * SessionManager — owns the single MCP connection lifecycle.
@@ -52,8 +68,11 @@ export class SessionManager {
   private verbose = false;
   private calls = new Map<string, AbortController>();
   private callClocks = new Map<string, { pause(): void; resume(): void }>();
+  /** Owns the whole Session authentication lifecycle, including exchange and refresh. */
+  private signInAbort: AbortController | null = null;
+  private sessionOAuthStorage: OAuthStorage | null = null;
 
-  constructor(private readonly send: Send) {}
+  constructor(private readonly send: Send, private readonly options: SessionOptions = {}) {}
 
   setActiveEnv(env: Record<string, string>): void {
     this.activeEnv = env;
@@ -129,6 +148,8 @@ export class SessionManager {
     }
 
     this.setStatus("connecting");
+    const lifecycle = new AbortController();
+    this.signInAbort = lifecycle;
 
     try {
       const client: MCPClientInterface =
@@ -150,10 +171,17 @@ export class SessionManager {
               onSessionPhase: (phase, timestamp, durationMs) => this.send({ type: "session_phase", phase, timestamp, durationMs }),
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
+              oauth: config.config.auth?.type === "oauth"
+                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal)
+                : undefined,
             });
 
       this.client = client;
       const info = await client.connect();
+      if (lifecycle.signal.aborted || this.client !== client) {
+        await client.disconnect();
+        return;
+      }
       this.setStatus("connected");
 
       this.send({
@@ -165,6 +193,7 @@ export class SessionManager {
         serverInfo: { name: info.serverName, version: info.serverVersion },
       });
     } catch (err) {
+      if (lifecycle.signal.aborted || this.signInAbort !== lifecycle) return;
       this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
@@ -263,8 +292,14 @@ export class SessionManager {
       this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-    const tools = await this.client.listTools();
-    this.send({ type: "tools_listed", tools });
+    try {
+      const tools = await this.client.listTools();
+      this.send({ type: "tools_listed", tools });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
+      this.send({ type: "error", message, code: "TOOLS_ERROR" });
+    }
   }
 
   private async listPrompts(): Promise<void> {
@@ -272,11 +307,35 @@ export class SessionManager {
       this.send({ type: "error", message: "Not connected", code: "NOT_CONNECTED" });
       return;
     }
-    const prompts = await this.client.listPrompts();
-    this.send({ type: "prompts_listed", prompts });
+    try {
+      const prompts = await this.client.listPrompts();
+      this.send({ type: "prompts_listed", prompts });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
+      this.send({ type: "error", message, code: "PROMPTS_ERROR" });
+    }
+  }
+
+  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal): OAuthSignIn | undefined {
+    const oauth = this.options.oauth;
+    if (!oauth) return undefined;
+    return {
+      redirectUrl: oauth.redirectUrl,
+      signal,
+      storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
+      authorize: (_authorizationUrl, state, flowSignal) => oauth.redirects.wait(state, flowSignal),
+      onAuthorization: authorizationUrl => {
+        this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
+        this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
+      },
+    };
   }
 
   async disconnect(): Promise<void> {
+    this.signInAbort?.abort();
+    this.signInAbort = null;
+    this.sessionOAuthStorage = null;
     if (this.status === "disconnected") return;
     this.clearElicitations();
     for (const call of this.calls.values()) call.abort("cancelled");

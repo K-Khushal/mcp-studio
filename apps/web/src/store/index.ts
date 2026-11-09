@@ -157,6 +157,9 @@ interface AppState {
   errorCount: number;
   connectedAt: number | null;
 
+  // OAuth sign-in the Studio Server is waiting on, while connecting
+  oauthAuthorizationUrl: string | null;
+
   // UI
   isLogsCollapsed: boolean;
   logsHeight: number;
@@ -168,6 +171,8 @@ interface AppActions {
   // Connection
   connect: (config: ConnectionConfig) => Promise<void>;
   disconnect: () => Promise<void>;
+  /** Forget a Connection's OAuth sign-in; ends its Session if live. */
+  signOut: (collectionId: string, connId: string) => Promise<boolean>;
 
   // Tools
   selectTool: (tool: MCPTool | null) => void;
@@ -480,6 +485,7 @@ export const useStore = create<AppState & AppActions>()(
       requestCount: 0,
       errorCount: 0,
       connectedAt: null,
+      oauthAuthorizationUrl: null,
       isLogsCollapsed: true,
       logsHeight: LOGS_DEFAULT_HEIGHT,
 
@@ -499,6 +505,7 @@ export const useStore = create<AppState & AppActions>()(
           protocolVersion: null,
           httpVariant: undefined,
           connectionStatus: "connecting",
+          oauthAuthorizationUrl: null,
           requestCount: 0,
           errorCount: 0,
           latency: 0,
@@ -518,7 +525,7 @@ export const useStore = create<AppState & AppActions>()(
         handshakeTimeline = [];
         transport.onMessage(handleServerMessage);
         try {
-          await transport.connect(config, get().config.verboseLogging);
+          await transport.connect(config, get().config.verboseLogging, selectedConnectionId ?? undefined);
         } catch (err) {
           handleServerMessage({ type: "error", code: "CONNECTION_FAILED", message: err instanceof Error ? err.message : String(err) });
         }
@@ -537,6 +544,7 @@ export const useStore = create<AppState & AppActions>()(
           connectedConnectionId: null,
           connectingConnectionId: null,
           connectedConnectionCache: null,
+          oauthAuthorizationUrl: null,
           requestCount: 0,
           errorCount: 0,
           latency: 0,
@@ -545,6 +553,21 @@ export const useStore = create<AppState & AppActions>()(
 
         if (transport.isConnected) {
           await transport.disconnect();
+        }
+      },
+
+      signOut: async (collectionId, connId) => {
+        const { connectedConnectionId, connectingConnectionId } = get();
+        if (connectedConnectionId === connId || connectingConnectionId === connId) {
+          await get().disconnect();
+        }
+        try {
+          const response = await fetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
+          if (!response.ok) throw new Error("Sign-out failed");
+          return true;
+        } catch {
+          toast.error("Failed to sign out");
+          return false;
         }
       },
 
@@ -1125,7 +1148,7 @@ function handleServerMessage(msg: ServerMessage): void {
       const state = useStore.getState();
       const connectionId = state.connectingConnectionId ?? state.selectedConnectionId;
       if (!connectionId) {
-        useStore.setState({ connectionStatus: "connected", httpVariant: msg.httpVariant });
+        useStore.setState({ connectionStatus: "connected", httpVariant: msg.httpVariant, oauthAuthorizationUrl: null });
         return;
       }
 
@@ -1142,6 +1165,7 @@ function handleServerMessage(msg: ServerMessage): void {
 
       useStore.setState({
         connectionStatus: "connected",
+        oauthAuthorizationUrl: null,
         connectedConnectionId: connectionId,
         connectingConnectionId: null,
         connectedConnectionCache: nextCache,
@@ -1172,6 +1196,7 @@ function handleServerMessage(msg: ServerMessage): void {
       useStore.setState((s) => ({
         elicitations: [],
         connectionStatus: "disconnected",
+        oauthAuthorizationUrl: null,
         connectionConfig: null,
         serverInfo: null,
         protocolVersion: null,
@@ -1285,6 +1310,7 @@ function handleServerMessage(msg: ServerMessage): void {
         handshakeTimeline = [];
         useStore.setState({
           connectionStatus: "error",
+          oauthAuthorizationUrl: null,
           connectedConnectionId: null,
           connectingConnectionId: null,
           connectedConnectionCache: null,
@@ -1350,6 +1376,13 @@ function handleServerMessage(msg: ServerMessage): void {
         ...workspace,
         tools: msg.tools,
       })));
+      break;
+
+    case "oauth_authorize":
+      // Not a user gesture, so popup blockers may stop this; the connection panel keeps the link.
+      window.open(msg.url, "_blank", "noopener");
+      useStore.setState({ oauthAuthorizationUrl: msg.url });
+      addLog("INFO", "protocol", "OAuth sign-in opened in the browser");
       break;
 
     case "prompts_listed":
