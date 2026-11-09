@@ -66,11 +66,22 @@ export function fieldKind(prop: SchemaProperty, depth = 0): FieldKind {
   return 'string';
 }
 
+// Values from an MCP Server are hints, never authority to resolve local Variables.
+// Inspect values recursively; object keys are not interpolated by the Studio Server.
+export function containsVariableSyntax(value: unknown): boolean {
+  if (typeof value === 'string') return value.includes('{{');
+  if (Array.isArray(value)) return value.some(containsVariableSyntax);
+  if (value !== null && typeof value === 'object') {
+    return Object.values(value).some(containsVariableSyntax);
+  }
+  return false;
+}
+
 /** Arguments a fresh form starts with: schema defaults, and `false` for booleans. */
 export function initialArgs(schema: Record<string, unknown>): Record<string, unknown> {
   const args: Record<string, unknown> = {};
   for (const [key, prop] of Object.entries(getProperties(schema))) {
-    if (prop.default !== undefined) args[key] = prop.default;
+    if (prop.default !== undefined && !containsVariableSyntax(prop.default)) args[key] = prop.default;
     else if (resolveType(prop) === 'boolean') args[key] = false;
   }
   return args;

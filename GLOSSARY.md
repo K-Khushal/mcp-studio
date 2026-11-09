@@ -37,7 +37,7 @@ A named set of Variables; exactly one Environment may be active at a time, and i
 _Avoid_: profile, config
 
 **Variable**:
-A key-value pair in an Environment, referenced as `{{NAME}}` in connection fields and Call arguments and substituted at use time.
+A key-value pair in an Environment, referenced as `{{NAME}}` in connection fields and Call arguments and substituted at use time. References express user intent; text supplied by an MCP Server is not authorization to read an Environment.
 _Avoid_: secret, placeholder
 
 **Elicitation**:

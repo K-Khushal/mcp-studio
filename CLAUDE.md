@@ -75,7 +75,9 @@ Dev: Vite proxies `/api` → `localhost:3000`; WS direct to `ws://localhost:3000
 ### Env interpolation
 `apps/server/src/env/interpolate.ts` resolves Variables before connect and every Call, recursively. `{{name}}` with `[A-Za-z0-9_]+` is a reference, no escape syntax; `{{ name }}` (spaces) not matched. Unresolved Variables block connect/Call. Only values interpolated, not keys.
 
-Variable editors (`components/shared/variable-input.tsx`) keep native editing, painting token backgrounds in a scroll-synced mirror. Hover previews mask names containing secret/token/password/passwd/credential/key (display heuristic, not a secrecy boundary).
+Server-provided form defaults containing `{{` anywhere in their values are shown as hints and omitted from tool/elicitation arguments; matching enum choices are disabled (array items choose a safe option). Prompt argument metadata is never pre-filled. Only user-entered text can introduce Variable references; keep server defaults/examples/enum values out of that path.
+
+Variable editors (`components/shared/variable-input.tsx`) keep native editing, painting token backgrounds in a scroll-synced mirror. Hover previews mask names containing secret/token/password/passwd/pwd/cred/auth/private/key (display heuristic, not a secrecy boundary). The Environments dialog masks every value by default; reveal resets on reopen or Environment change.
 
 ### Frontend structure
 Single screen (`pages/home.tsx`): collections sidebar + studio view + logs panel; no view switching or icon sidebar.  

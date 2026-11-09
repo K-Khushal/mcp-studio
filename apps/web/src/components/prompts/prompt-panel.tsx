@@ -165,7 +165,7 @@ export function PromptPanel() {
                     <VariableInput
                       value={promptArgValues[arg.name] ?? ''}
                       onChange={(e) => handleArgChange(arg.name, e.target.value)}
-                      placeholder={arg.description ?? arg.name}
+                      placeholder={arg.description?.includes('{{') ? arg.name : arg.description ?? arg.name}
                       className="h-8 text-xs"
                     />
                   </div>
