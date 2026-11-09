@@ -138,8 +138,9 @@ export class SessionManager {
       config = this.interpolateConfig(msg);
     } catch (err) {
       if (!this.client?.isConnected) this.setStatus("error");
-      this.send({ type: "log", level: "ERROR", source: "studio", message: String(err), timestamp: Date.now() });
-      this.send({ type: "error", message: err instanceof Error ? err.message : String(err), code: "CONNECTION_FAILED" });
+      const message = err instanceof Error ? err.message : String(err);
+      this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
+      this.send({ type: "error", message, code: "CONNECTION_FAILED" });
       return;
     }
 

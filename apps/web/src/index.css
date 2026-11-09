@@ -273,3 +273,10 @@
 ::-webkit-scrollbar-thumb:hover {
   background: hsl(var(--muted-foreground));
 }
+
+/* Keep diagnostic descriptions as readable as toast titles in either theme. */
+.toaster [data-sonner-toast][data-styled="true"] [data-description] {
+  color: var(--popover-foreground);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

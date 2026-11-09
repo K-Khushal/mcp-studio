@@ -113,6 +113,7 @@ for (const status of [401, 405]) {
       await session.send({ type: "connect", transport: "http", config: { url: server.url.toString(), headers: {} } });
       const error = await session.waitFor("error");
       expect(error.code).toBe("CONNECTION_FAILED");
+      expect(session.messages.filter(m => m.type === "log" && m.level === "ERROR" && m.source === "studio")).toMatchObject([{ message: error.message }]);
       if (status === 401) {
         expect(methods).toEqual(["POST"]);
         expect(error.message).toMatch(/401|Unauthorized/i);
@@ -132,9 +133,10 @@ test("bad command reports a connection error and error status", async () => {
   const session = new SessionHarness();
   try {
     await session.send({ type: "connect", transport: "stdio", config: { command: "/missing-mcp-command", args: [], env: {}, inheritSystemEnv: false } });
-    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED" });
+    const error = await session.waitFor("error");
+    expect(error.code).toBe("CONNECTION_FAILED");
     expect(session.messages).toContainEqual({ type: "status", status: "error" });
-    expect(session.messages.some(m => m.type === "log" && m.level === "ERROR" && m.source === "studio")).toBe(true);
+    expect(session.messages.filter(m => m.type === "log" && m.level === "ERROR" && m.source === "studio")).toMatchObject([{ message: error.message }]);
   } finally { await session.close(); }
 });
 

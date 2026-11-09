@@ -104,6 +104,7 @@ interface AppState {
   elicitations: Extract<ServerMessage, { type: "elicitation_request" }>[];
   // Connection
   connectionStatus: ConnectionStatus;
+  lastConnectionError: { connectionId: string; message: string } | null;
   connectionConfig: ConnectionConfig | null;
   serverInfo: { name?: string; version?: string } | null;
   protocolVersion: string | null;
@@ -489,6 +490,8 @@ export const useStore = create<AppState & AppActions>()(
       isLogsCollapsed: true,
       logsHeight: LOGS_DEFAULT_HEIGHT,
 
+      lastConnectionError: null,
+
       // ---------- connection ----------
       connect: async (config) => {
         const selectedConnectionId = get().selectedConnectionId;
@@ -497,6 +500,7 @@ export const useStore = create<AppState & AppActions>()(
         const clearedWorkspace = blankWorkspacePatch();
         set({
           ...clearedWorkspace,
+          lastConnectionError: null,
           connectedConnectionId: null,
           connectingConnectionId: selectedConnectionId,
           connectedConnectionCache: null,
@@ -535,6 +539,7 @@ export const useStore = create<AppState & AppActions>()(
         const clearedWorkspace = blankWorkspacePatch();
         set({
           ...clearedWorkspace,
+          lastConnectionError: null,
           elicitations: [],
             connectionStatus: "disconnected",
           connectionConfig: null,
@@ -738,6 +743,7 @@ export const useStore = create<AppState & AppActions>()(
         set({
           ...blankWorkspacePatch(),
           selectedConnectionId: connection.id,
+          lastConnectionError: null,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
           stdio: draft.stdio ?? DEFAULT_STDIO_DRAFT,
@@ -1306,6 +1312,13 @@ function handleServerMessage(msg: ServerMessage): void {
 
     case "error":
       if (msg.code === "CONNECTION_FAILED") {
+        const state = useStore.getState();
+        const connectionId = state.connectingConnectionId ?? state.selectedConnectionId;
+        // The Studio Server normally sends this log first. Browser transport failures do not.
+        if (!state.logs.some(log => log.source === "studio" && log.level === "ERROR" && log.message === msg.message)) {
+          addLog("ERROR", "studio", msg.message);
+        }
+        const failureLogs = useStore.getState().logs;
         handshakeLogs = [];
         handshakeTimeline = [];
         useStore.setState({
@@ -1320,8 +1333,10 @@ function handleServerMessage(msg: ServerMessage): void {
           httpVariant: undefined,
           connectedAt: null,
           ...blankWorkspacePatch(),
+          logs: failureLogs,
+          lastConnectionError: connectionId ? { connectionId, message: msg.message } : null,
         });
-        toast.error("Connection failed", { description: msg.message });
+        toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: Infinity });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
         if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;

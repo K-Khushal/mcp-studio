@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, within } from "@testing-library/react";
-import type { Collection, ConnectionConfig } from "@mcp-studio/types";
+import type { Collection, ConnectionConfig, ServerMessage } from "@mcp-studio/types";
 
 vi.mock("../components/environments/environment-panel", () => ({ default: () => null }));
 vi.mock("../transport/websocket-transport", () => ({
@@ -158,4 +158,19 @@ describe("STDIO form", () => {
     render(<ConnectionPanel />);
     expect(within(document.body).queryByLabelText("Working directory")).toBeNull();
   });
+});
+
+it("keeps the connection failure inline until the next Connect attempt", async () => {
+  let receive!: (message: ServerMessage) => void;
+  vi.mocked(transport.onMessage).mockImplementation(handler => { receive = handler; });
+  render(<ConnectionPanel />);
+  fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+  act(() => receive({ type: "error", code: "CONNECTION_FAILED", message: "ENOENT: /missing-mcp-command" }));
+  expect(screen.getByRole("alert").textContent).toContain("ENOENT: /missing-mcp-command");
+  await act(async () => { await vi.advanceTimersByTimeAsync(10_000); });
+  expect(screen.getByRole("alert").textContent).toContain("ENOENT");
+  fireEvent.click(screen.getByRole("button", { name: "Connect" }));
+  expect(screen.queryByRole("alert")).toBeNull();
+  await act(async () => { await vi.advanceTimersByTimeAsync(0); });
 });

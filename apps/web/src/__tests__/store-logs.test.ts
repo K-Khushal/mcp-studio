@@ -93,3 +93,18 @@ it("bounds retained frame bodies and searches the retained text case-insensitive
   expect(filterLogs([entry], { level: null, source: null, search: "NEEDLE" })).toEqual([entry]);
   expect(filterLogs([entry], { level: null, source: null, search: "discarded-tail" })).toEqual([]);
 });
+
+for (const serverLog of [true, false]) {
+  it(`retains one full Studio ERROR after failed connect (server log: ${serverLog})`, async () => {
+    await useStore.getState().connect(stdio);
+    deliver({ type: "log", level: "INFO", source: "server", message: "starting", timestamp: 1 });
+    const reason = "ECONNREFUSED: could not reach http://localhost:4000/mcp";
+    deliver({ type: "status", status: "error" });
+    if (serverLog) deliver({ type: "log", level: "ERROR", source: "studio", message: reason, timestamp: 2 });
+    deliver({ type: "error", code: "CONNECTION_FAILED", message: reason });
+    expect(useStore.getState().logs.filter(log => log.level === "ERROR")).toMatchObject([
+      { source: "studio", message: reason },
+    ]);
+    expect(useStore.getState().logs.some(log => log.message === "starting")).toBe(true);
+  });
+}
