@@ -18,6 +18,11 @@ export function createProtocolServer() {
   server.setRequestHandler(CallToolRequestSchema, async (request, extra) => {
     const args = request.params.arguments ?? {};
     switch (request.params.name) {
+      case "large-blocks": return { structuredContent: { answer: 42 }, content: [
+        args.text === "image" ? { type: "image", mimeType: "image/png", data: "a".repeat(9 * 1024 * 1024) } : { type: "text", text: "x".repeat(9 * 1024 * 1024) },
+        { type: "text", text: "keep me" },
+        { type: "image", mimeType: "image/png", data: "a".repeat(256 * 1024) },
+      ] };
       case "echo": return text(String(args.text ?? "hello"));
       case "error": return { ...text("Fixture tool error"), isError: true };
       case "structured-bad": return { ...text('{"answer":"wrong"}'), structuredContent: { answer: "wrong" } };
@@ -46,6 +51,11 @@ export function createProtocolServer() {
         if (args.text === "slow-after-answer") await new Promise(resolve => setTimeout(resolve, 500));
         return text(JSON.stringify(result));
       }
+      case "notification-burst":
+        for (let i = 0; i < 6000; i++) {
+          await server.sendLoggingMessage({ level: "info", data: `${i}:` + "x".repeat(1024) });
+        }
+        return text("Burst complete");
       case "log": await server.sendLoggingMessage({ level: "info", logger: "fixture", data: String(args.text ?? "Fixture log") }); return text("Logged");
       case "stderr": {
         if (args.text === "chunks") {

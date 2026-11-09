@@ -40,7 +40,9 @@ export function formatLogLine(l: LogEntry, time: string): string {
 }
 
 /** Bound retained frame bodies and build the search index once, at ingestion. */
-export function prepareLog(message: string, payload?: LogPayload): { payload?: LogPayload; searchText: string } {
+export function prepareLog(message: string, payload?: LogPayload): { message: string; payload?: LogPayload; searchText: string } {
+  const originalBytes = new TextEncoder().encode(message);
+  if (originalBytes.length > 16 * 1024) message = new TextDecoder().decode(originalBytes.subarray(0, 16 * 1024)) + ` [truncated, ${originalBytes.length} bytes]`;
   const maxBodyLength = 64 * 1024;
   let storedPayload = payload;
   if (payload) {
@@ -50,8 +52,46 @@ export function prepareLog(message: string, payload?: LogPayload): { payload?: L
       storedPayload = { ...payload, body: body.slice(0, maxBodyLength - marker.length) + marker };
     }
   }
+  if (storedPayload) storedPayload = {
+    ...storedPayload,
+    method: storedPayload.method?.slice(0, 1024),
+    id: typeof storedPayload.id === 'string' ? storedPayload.id.slice(0, 1024) : storedPayload.id,
+  };
   const searchText = storedPayload
     ? `${message} ${storedPayload.method ?? ""} ${storedPayload.id ?? ""} ${JSON.stringify(storedPayload.body)}`.toLowerCase()
     : message.toLowerCase();
-  return { ...(storedPayload ? { payload: storedPayload } : {}), searchText };
+  return { message, ...(storedPayload ? { payload: storedPayload } : {}), searchText };
+}
+
+const MAX_LOGS = 500;
+const MAX_LOG_BYTES = 4 * 1024 * 1024;
+const encoder = new TextEncoder();
+const entryBytes = new WeakMap<LogEntry, number>();
+const retainedBytes = new WeakMap<LogEntry[], number>();
+
+function logBytes(entry: LogEntry): number {
+  let bytes = entryBytes.get(entry);
+  if (bytes === undefined) {
+    bytes = encoder.encode(JSON.stringify(entry)).length;
+    entryBytes.set(entry, bytes);
+  }
+  return bytes;
+}
+
+/** Append with incremental byte accounting. Each entry is measured once and evicted once.
+ * Immutable snapshots copy at most 500 references for Zustand subscribers.
+ * Weak maps let cleared workspaces and their accounting be garbage collected together.
+ */
+export function appendLog(logs: LogEntry[], entry: LogEntry): LogEntry[] {
+  const bytes = retainedBytes.get(logs) ?? logs.reduce((total, log) => total + logBytes(log), 0);
+  let total = bytes + logBytes(entry);
+  let start = 0;
+  while (start < logs.length && (logs.length + 1 - start > MAX_LOGS || total > MAX_LOG_BYTES)) {
+    total -= logBytes(logs[start++]!);
+  }
+  const next = logs.slice(start);
+  if (total <= MAX_LOG_BYTES) next.push(entry);
+  else total = 0; // An individually oversized entry cannot fit the budget.
+  retainedBytes.set(next, total);
+  return next;
 }

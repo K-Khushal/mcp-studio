@@ -1,4 +1,5 @@
 import { rememberConnectionSecrets } from "./diagnostics.js";
+import { BoundedLines } from "./limits.js";
 import { inspectionValidator } from "./inspection-validator.js";
 import { StringDecoder } from "node:string_decoder";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
@@ -17,7 +18,7 @@ export class StdioMCPClient extends BaseMCPClient {
   private stderrHandler: ((chunk: Buffer) => void) | null = null;
 
   private stderrDecoder = new StringDecoder("utf8");
-  private stderrBuffer = "";
+  private stderrLines = new BoundedLines(line => this.emitStderrLine(line));
 
   constructor(
     private readonly config: StdioConfig,
@@ -42,15 +43,8 @@ export class StdioMCPClient extends BaseMCPClient {
 
     // Forward subprocess stderr to the UI so startup messages are visible.
     this.stderrDecoder = new StringDecoder("utf8");
-    this.stderrBuffer = "";
-    this.stderrHandler = (chunk: Buffer) => {
-      this.stderrBuffer += this.stderrDecoder.write(chunk);
-      let end: number;
-      while ((end = this.stderrBuffer.indexOf("\n")) >= 0) {
-        this.emitStderrLine(this.stderrBuffer.slice(0, end));
-        this.stderrBuffer = this.stderrBuffer.slice(end + 1);
-      }
-    };
+    this.stderrLines = new BoundedLines(line => this.emitStderrLine(line));
+    this.stderrHandler = (chunk: Buffer) => this.stderrLines.write(this.stderrDecoder.write(chunk));
     this.transport.stderr?.on("data", this.stderrHandler);
 
     const client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
@@ -69,8 +63,8 @@ export class StdioMCPClient extends BaseMCPClient {
     if (this.stderrHandler) {
       this.transport?.stderr?.off("data", this.stderrHandler);
       this.stderrHandler = null;
-      this.emitStderrLine(this.stderrBuffer + this.stderrDecoder.end());
-      this.stderrBuffer = "";
+      this.stderrLines.write(this.stderrDecoder.end());
+      this.stderrLines.flush();
     }
     if (this.transport) {
       await this.transport.close();

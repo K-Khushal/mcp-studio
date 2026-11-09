@@ -53,3 +53,10 @@ describe("audio block", () => {
     expect(screen.getByRole("link", { name: /download/i }).getAttribute("download")).toBe("audio.mp3");
   });
 });
+
+it.each(['text/html', 'image/svg+xml', 'image/html', 'audio/html'])('downloads unsafe %s as inert binary', mimeType => {
+  render(<ContentBlockRenderer block={{ type: 'image', data: PNG_B64, mimeType }} />);
+  const link = screen.getByRole('link', { name: /download/i });
+  expect(link.getAttribute('download')).toBe('image.bin');
+  expect(link.getAttribute('href')).toBe(`data:application/octet-stream;base64,${PNG_B64}`);
+});

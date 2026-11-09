@@ -7,3 +7,4 @@ export { StudioOAuthProvider } from "./oauth.js";
 export type { OAuthCredentials, OAuthSignIn, OAuthStorage } from "./oauth.js";
 
 export { redactDiagnosticValue, rememberConnectionSecrets, rememberDiagnosticSecret, isCredentialKey } from "./diagnostics.js";
+export { boundedText } from "./limits.js";

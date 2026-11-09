@@ -108,3 +108,29 @@ for (const serverLog of [true, false]) {
     expect(useStore.getState().logs.some(log => log.message === "starting")).toBe(true);
   });
 }
+
+it('bounds huge log entries and total retained logs', () => {
+  const stringify = vi.spyOn(JSON, 'stringify');
+  for (let i = 0; i < 510; i++) deliver({ type: 'log', level: 'INFO', source: 'server', message: 'x'.repeat(20000), timestamp: i });
+  const serializations = stringify.mock.calls.length;
+  stringify.mockRestore();
+  // Retention must measure new entries, never serialize the retained history again.
+  expect(serializations).toBeLessThan(1020);
+  const logs = useStore.getState().logs;
+  expect(logs.at(-1)?.timestamp).toBe(509);
+  expect(logs[0]!.timestamp).toBeGreaterThan(0);
+  expect(new TextEncoder().encode(JSON.stringify(logs)).length).toBeLessThan(4 * 1024 * 1024);
+  expect(logs.length).toBeLessThanOrEqual(500);
+  expect(logs.at(-1)?.message).toContain('truncated, 20000 bytes');
+  expect(JSON.stringify(logs).length).toBeLessThan(5 * 1024 * 1024);
+});
+
+it("evicts oldest entries at the count limit and resets accounting on clear", () => {
+  useStore.getState().clearLogs();
+  for (let i = 0; i < 510; i++) deliver({ type: "log", level: "INFO", source: "server", message: `entry ${i}`, timestamp: i });
+  expect(useStore.getState().logs).toHaveLength(500);
+  expect(useStore.getState().logs[0]?.message).toBe("entry 10");
+  useStore.getState().clearLogs();
+  deliver({ type: "log", level: "INFO", source: "server", message: "fresh", timestamp: 511 });
+  expect(useStore.getState().logs.map(log => log.message)).toEqual(["fresh"]);
+});

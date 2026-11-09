@@ -19,7 +19,7 @@ import type {
   LogSource,
   LogPayload,
 } from "@mcp-studio/types";
-import { prepareLog } from "@/components/logs/filter-logs";
+import { prepareLog, appendLog } from "@/components/logs/filter-logs";
 import { transport } from "@/transport/websocket-transport";
 import { applyTheme, watchSystemTheme } from "@/lib/theme";
 import { persistConfig, readPersistedConfig } from "./config";
@@ -300,13 +300,6 @@ function cloneWorkspace(workspace: ConnectionWorkspaceState): ConnectionWorkspac
     },
     timeline: [...workspace.timeline],
     logs: [...workspace.logs],
-  };
-}
-
-function cloneConnectedCache(cache: ConnectedConnectionCache): ConnectedConnectionCache {
-  return {
-    connectionId: cache.connectionId,
-    ...cloneWorkspace(cache),
   };
 }
 
@@ -1084,19 +1077,18 @@ function handleServerMessage(msg: ServerMessage): void {
         id: `log_${nextLogIdCounter}`,
         level,
         source,
-        message,
         timestamp,
         ...prepareLog(message, payload),
       };
 
       if (!s.connectedConnectionCache) {
-        if (s.connectionStatus === "connecting") handshakeLogs = [...handshakeLogs, nextLog].slice(-500);
-        return { logIdCounter: nextLogIdCounter, logs: [...s.logs, nextLog].slice(-500) };
+        if (s.connectionStatus === "connecting") handshakeLogs = appendLog(handshakeLogs, nextLog);
+        return { logIdCounter: nextLogIdCounter, logs: appendLog(s.logs, nextLog) };
       }
 
-      const nextLogs = [...s.connectedConnectionCache.logs, nextLog].slice(-500);
+      const nextLogs = appendLog(s.connectedConnectionCache.logs, nextLog);
       const nextCache: ConnectedConnectionCache = {
-        ...cloneConnectedCache(s.connectedConnectionCache),
+        ...s.connectedConnectionCache,
         logs: nextLogs,
       };
 

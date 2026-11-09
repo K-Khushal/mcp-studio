@@ -81,3 +81,24 @@ it.each([
   render(<PrettyTab result={{ content: [], structuredContent: { answer: "wrong" } }} error={null} outputSchema={{ ...schema, $schema }} />);
   expect(screen.getByRole("alert")).toHaveTextContent(/output schema mismatch.*answer.*number/i);
 });
+
+it('declines hostile regex validation without running the pattern', () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { value: 'a'.repeat(100) + '!' } }} error={null} outputSchema={{
+    type: 'object', properties: { value: { type: 'string', pattern: '(a+)+$' } },
+  }} />);
+  expect(screen.getByRole('note')).toHaveTextContent(/pattern validation is disabled/i);
+});
+it('keeps type validation when hostile patterns are disabled', () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { value: 42 } }} error={null} outputSchema={{
+    type: 'object', properties: { value: { type: 'string', pattern: '(a+)+$' } }, patternProperties: { '(a+)+$': { type: 'string' } },
+  }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent(/output schema mismatch.*string/i);
+  expect(screen.getByText(/pattern validation is disabled/i)).toBeVisible();
+});
+it('treats keyword-like property names and literal data as data and validates formats', () => {
+  render(<PrettyTab result={{ content: [], structuredContent: { pattern: 42, email: 'invalid' } }} error={null} outputSchema={{
+    type: 'object', properties: { pattern: { type: 'number', enum: [42], default: { pattern: 'literal' } }, email: { type: 'string', format: 'email' } },
+  }} />);
+  expect(screen.getByRole('alert')).toHaveTextContent(/output schema mismatch.*email/i);
+  expect(screen.queryByText(/pattern validation is disabled/i)).not.toBeInTheDocument();
+});

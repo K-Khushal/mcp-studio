@@ -22,8 +22,8 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState('');
   const [results, setResults] = useState<Record<string, string>>({});
   const locked = useRef(false);
-  const preview = source.trim() ? parseClaudeConfig(source, collections.find(c => c.id === target)?.connections.filter(c => results[c.name] !== 'Imported').map(c => c.name)) : { entries: [] };
-  const ready = preview.entries.filter(e => e.connection && results[e.name] !== 'Imported');
+  const preview = source.trim() ? parseClaudeConfig(source, collections.find(c => c.id === target)?.connections.filter(c => (Object.hasOwn(results, c.name) ? results[c.name] : undefined) !== 'Imported').map(c => c.name)) : { entries: [] };
+  const ready = preview.entries.filter(e => e.connection && (Object.hasOwn(results, e.name) ? results[e.name] : undefined) !== 'Imported');
   const changeSource = (value: string) => { setSource(value); setResults({}); setError(''); };
 
   const importConnections = async () => {
@@ -83,9 +83,15 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
       <ul aria-label="Import preview" aria-live="polite" className="max-h-52 divide-y divide-border overflow-y-auto overscroll-contain text-xs">
         {preview.entries.map(entry => {
           const config = entry.connection?.connectionConfig;
-          const result = results[entry.name];
+          const result = Object.hasOwn(results, entry.name) ? results[entry.name] : undefined;
           return <li key={entry.name} className="flex items-start justify-between gap-4 py-3">
-            <div className="min-w-0"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}</div>
+            <div className="min-w-0"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}{config?.transport === 'stdio' && <div className="break-all text-muted-foreground">
+              <p>Args:</p>
+              <ul aria-label={`${entry.name} arguments`} className="list-inside list-disc">{config.config.args.map((arg, index) => <li key={index}>{arg}</li>)}</ul>
+              <p>Env:</p>
+              <ul aria-label={`${entry.name} environment`} className="list-inside list-disc">{Object.entries(config.config.env).map(([name, value]) => <li key={name}>{name}: {/secret|token|password|passwd|credential|key/i.test(name) ? '•••••••• (masked)' : value}</li>)}</ul>
+              <p>Inherit system environment: {config.config.inheritSystemEnv ? 'Yes — all Studio process variables' : 'No'}</p>
+            </div>}</div>
             <p className={`max-w-[55%] ${entry.error || (result && result !== 'Imported') ? 'text-destructive-text' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>
           </li>;
         })}

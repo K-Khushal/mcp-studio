@@ -137,3 +137,20 @@ test("Call timeout resumes after an elicitation answer", async () => {
     expect(session.messages.some(m => m.type === "result" && m.requestId === "resume")).toBe(false);
   } finally { await session.close(); }
 });
+
+for (const mode of ["streamable", "sse"] as const) {
+  test(`delivers 6000 notifications without exhausting the ${mode} Session`, async () => {
+    const http = await (mode === "sse" ? startHTTPFixture("sse") : startHTTPFixture("streamable"));
+    const session = new SessionHarness();
+    try {
+      await session.send(http.connection);
+      await session.send({ type: "invoke", requestId: "burst", tool: "notification-burst", params: {}, requestTimeout: 5 });
+      // Delivery on the standalone GET stream can finish after the POST result.
+      for (let i = 0; i < 100 && session.messages.filter(m => m.type === "log" && m.source === "server").length < 6000; i++) await Bun.sleep(10);
+      expect(session.messages.filter(m => m.type === "log" && m.source === "server")).toHaveLength(6000);
+      await session.send({ type: "invoke", requestId: "healthy", tool: "echo", params: { text: "still healthy" } });
+      expect(session.messages.find(m => m.type === "result" && m.requestId === "healthy")).toMatchObject({ data: { content: [{ text: "still healthy" }] } });
+      expect(session.messages.some(m => m.type === "status" && (m.status === "error" || m.status === "disconnected"))).toBe(false);
+    } finally { await session.close(); await http.close(); }
+  }, 15000);
+}
