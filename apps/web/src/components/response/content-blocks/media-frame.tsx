@@ -14,7 +14,7 @@ export function MediaFrame({ icon, mimeType, href, filename, children }: MediaFr
     <div className="rounded-md border border-border overflow-hidden">
       <div className="flex items-center gap-2 px-3 py-2 bg-muted/40 border-b border-border">
         <span className="text-muted-foreground shrink-0">{icon}</span>
-        <span className="text-[11px] font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
+        <span className="text-xs font-mono text-muted-foreground bg-muted px-1.5 py-0.5 rounded">
           {mimeType}
         </span>
         <a

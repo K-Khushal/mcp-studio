@@ -157,8 +157,17 @@ describe("components", () => {
     expect(offenders).toEqual([]);
   });
 
-  it("keeps content text at 12px or larger (10px allowed only on mono metadata)", () => {
-    const offenders = files.filter(([, src]) => /text-\[10px\]/.test(src)).map(([p]) => p);
+  it("keeps all UI text at 12px or larger, including monospace metadata", () => {
+    const offenders = files.flatMap(([p, src]) =>
+      src
+        .split("\n")
+        .map((line, i) => [i + 1, line] as const)
+        .filter(([, line]) =>
+          [...line.matchAll(/text-\[(?:length:)?(\d*\.?\d+)(px|rem|em)\]/g)]
+            .some((m) => Number(m[1]) * (m[2] === "px" ? 1 : 16) < 12),
+        )
+        .map(([n]) => `${p}:${n}`),
+    );
     expect(offenders).toEqual([]);
   });
 });

@@ -68,7 +68,7 @@ function PromptMessagesView({ messages }: { messages: MCPPromptMessage[] }) {
       {messages.map((msg, i) => (
         <div key={i} className="rounded-md border border-border overflow-hidden">
           <div className="flex items-center px-3 py-1.5 bg-muted/40 border-b border-border">
-            <span className="text-[11px] font-mono font-medium uppercase tracking-wider text-muted-foreground">
+            <span className="text-xs font-mono font-medium uppercase tracking-wider text-muted-foreground">
               {msg.role}
             </span>
           </div>

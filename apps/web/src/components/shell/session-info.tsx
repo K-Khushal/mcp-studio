@@ -10,7 +10,7 @@ const STATUS = {
 
 function Chip({ children }: { children: React.ReactNode }) {
   return (
-    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-[11px] leading-none text-muted-foreground">
+    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground">
       {children}
     </span>
   );

@@ -24,7 +24,7 @@ export function ResourceBlock({ block }: { block: EmbeddedResource }) {
         <Package size={12} className="text-muted-foreground shrink-0" />
         <span className="text-xs font-mono text-muted-foreground truncate flex-1">{resource.uri}</span>
         {resource.mimeType && (
-          <span className="text-[11px] font-mono text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded">
+          <span className="text-xs font-mono text-muted-foreground shrink-0 bg-muted px-1.5 py-0.5 rounded">
             {resource.mimeType}
           </span>
         )}

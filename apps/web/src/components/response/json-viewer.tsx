@@ -63,7 +63,7 @@ function KeyLabel({ name }: { name: string | number }) {
 
 function CollapsedBadge({ label }: { label: string }) {
   return (
-    <span className="text-muted-foreground text-[11px] font-mono bg-muted/60 px-1.5 py-px rounded-full mx-1">
+    <span className="text-muted-foreground text-xs font-mono bg-muted/60 px-1.5 py-px rounded-full mx-1">
       {label}
     </span>
   );

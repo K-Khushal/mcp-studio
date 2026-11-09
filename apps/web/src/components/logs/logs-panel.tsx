@@ -29,7 +29,7 @@ const sourceColors: Record<LogSource, string> = {
 
 const chipClass = (active: boolean) =>
   cn(
-    "text-[11px] px-2 py-1 rounded font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
+    "text-xs px-2 py-1 rounded font-medium transition-colors outline-hidden focus-visible:ring-2 focus-visible:ring-ring",
     active ? "bg-primary/15 text-primary-text" : "text-muted-foreground hover:text-foreground",
   );
 
@@ -40,7 +40,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
     <>
       <span className="text-muted-foreground shrink-0 tabular-nums">[{formatTimestamp(log.timestamp)}]</span>
       <span className={cn("shrink-0 w-11 font-semibold", levelColors[log.level] ?? "text-foreground")}>{log.level}</span>
-      <span className={cn("shrink-0 w-14 text-[11px] leading-5 italic", sourceColors[log.source])}>{log.source}</span>
+      <span className={cn("shrink-0 w-14 font-mono text-xs leading-5 italic", sourceColors[log.source])}>{log.source}</span>
       <span className="text-foreground">{log.message}</span>
     </>
   );
@@ -66,7 +66,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
       {expanded && (
         <pre
           id={detailId}
-          className="ml-4 my-1 max-h-64 overflow-auto overscroll-contain rounded-md border border-border bg-muted/50 p-2 text-[11px] leading-4 text-foreground select-text"
+          className="ml-4 my-1 max-h-64 overflow-auto overscroll-contain rounded-md border border-border bg-muted/50 p-2 font-mono text-xs leading-4 text-foreground select-text"
         >
           {JSON.stringify(payload.body, null, 2)}
         </pre>
@@ -215,7 +215,7 @@ export function LogsPanel() {
               <Copy size={12} />
             </button>
           </div>
-          <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-1 font-mono text-[11px] leading-5">
+          <div ref={listRef} className="flex-1 overflow-y-auto overscroll-contain px-3 py-1 font-mono text-xs leading-5">
             {filtered.map((log) => (
               <LogRow key={log.id} log={log} expanded={expanded.has(log.id)} onToggle={() => toggleExpanded(log.id)} />
             ))}

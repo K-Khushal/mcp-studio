@@ -25,7 +25,7 @@ export function ToolBadges({ tool }: { tool: MCPTool }) {
       const value = tool.annotations?.[key];
       if (value === undefined) return null;
       return <span key={key} title={`MCP Server hint: ${key} = ${value}. Hints are not guarantees.`}
-        className={`rounded border px-1 py-0.5 text-[11px] leading-3 ${key === 'destructiveHint' && value ? 'border-destructive/40 text-destructive-text' : 'border-border text-muted-foreground'}`}>
+        className={`rounded border px-1 py-0.5 text-xs leading-3 ${key === 'destructiveHint' && value ? 'border-destructive/40 text-destructive-text' : 'border-border text-muted-foreground'}`}>
         {value ? yes : no}
       </span>;
     })}
