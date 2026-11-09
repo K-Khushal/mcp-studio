@@ -539,6 +539,7 @@ export const useStore = create<AppState & AppActions>()(
         const clearedWorkspace = blankWorkspacePatch();
         set({
           ...clearedWorkspace,
+          lastConnectionError: null,
           elicitations: [],
             connectionStatus: "disconnected",
           connectionConfig: null,
@@ -742,6 +743,7 @@ export const useStore = create<AppState & AppActions>()(
         set({
           ...blankWorkspacePatch(),
           selectedConnectionId: connection.id,
+          lastConnectionError: null,
           transport: draft.transport,
           connectionUrl: draft.connectionUrl,
           stdio: draft.stdio ?? DEFAULT_STDIO_DRAFT,
@@ -1334,7 +1336,7 @@ function handleServerMessage(msg: ServerMessage): void {
           logs: failureLogs,
           lastConnectionError: connectionId ? { connectionId, message: msg.message } : null,
         });
-        toast.error("Connection failed", { description: msg.message, duration: Infinity });
+        toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: Infinity });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
         if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;
