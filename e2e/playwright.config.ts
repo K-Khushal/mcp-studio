@@ -13,6 +13,7 @@ export default defineConfig({
     command: 'bun runtime.ts',
     url: `${fixtureURL}/info`,
     reuseExistingServer: false,
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 5_000 },
     timeout: 30_000,
   },
   projects: [

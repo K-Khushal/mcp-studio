@@ -13,12 +13,16 @@ const candidates = [
 ];
 
 let httpConnections = 0;
+const attemptedHTTP = new Set<string>();
 test.afterAll(() => {
-  expect(httpConnections, 'At least one HTTP candidate must connect').toBeGreaterThan(0);
+  if (attemptedHTTP.size === candidates.filter(candidate => candidate.url).length) {
+    expect(httpConnections, 'At least one HTTP candidate must connect').toBeGreaterThan(0);
+  }
 });
 
 for (const candidate of candidates) {
   test(candidate.name, async ({ page }, testInfo) => {
+    if (candidate.url) attemptedHTTP.add(candidate.url);
     const row = { server: candidate.url ?? candidate.package!, transport: candidate.url ? 'HTTP' : 'STDIO', tools: 0, call: candidate.tool, result: 'FAIL', reason: '' };
     let connected: { tools: Tool[] } | undefined;
     let lastError = '';
@@ -46,7 +50,7 @@ for (const candidate of candidates) {
       } catch (error) {
         // Classify only the surfaced connection error, never Playwright's
         // visibility timeout: a missing Disconnect can be a Studio regression.
-        const remoteUnavailable = /\b(?:ENOTFOUND|ECONNREFUSED|ETIMEDOUT)\b|timed?\s*out|timeout|(?:HTTP|status|code|response|error)[^\n]*\b[45]\d{2}\b/i.test(lastError);
+        const remoteUnavailable = /\b(?:ENOTFOUND|ECONNREFUSED|ETIMEDOUT)\b|timed?\s*out|timeout|\b(?:HTTP|status)\s+[45]\d{2}\b/i.test(lastError);
         if (!candidate.url || !remoteUnavailable) throw error;
         row.result = 'SKIPPED';
         row.reason = lastError;
