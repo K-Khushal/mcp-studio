@@ -30,6 +30,9 @@ WebSocket on `http://localhost:47831`; a test-only lifecycle controller uses
 `E2E_PORT=48831 E2E_FIXTURE_PORT=48832 bun run e2e`). Keep these ports free and run one suite at a time. The controller
 terminates the CLI and fixture transports and deletes its temporary database
 on exit. It never uses `~/.mcp-studio`. No dev server or mocked Studio APIs.
+The CLI runs with a fixed `STUDIO_TOKEN` (`E2E_TOKEN` overrides) and the Playwright
+context starts with its Launch token cookie; the `launch token` test uses a fresh
+context to cover the help page, the printed link, reload and the CSP (ADR-0007).
 
 The local Chromium project covers Collection/Connection create, rename and
 delete, STDIO + Streamable HTTP + legacy SSE, form/JSON Calls and invalid JSON,

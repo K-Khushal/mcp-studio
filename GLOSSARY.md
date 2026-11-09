@@ -12,6 +12,10 @@ _Avoid_: backend, target
 MCP Studio's own local backend that the browser talks to and that holds the connection to the MCP Server.
 _Avoid_: server (unqualified), backend
 
+**Launch token**:
+A random secret the Studio Server generates each time it starts. Only a browser that opened the link printed at launch, or a script presenting the token, may use the Studio Server; a restart replaces it.
+_Avoid_: session token (a Session is the MCP link), API key, password
+
 **Transport**:
 How MCP Studio reaches an MCP Server: either STDIO (spawned subprocess) or HTTP (Streamable HTTP, falling back to legacy SSE).
 _Avoid_: connection type
