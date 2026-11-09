@@ -18,3 +18,13 @@ test("connection registration accepts plausible credentials and auth schemes onl
   } } }, secrets);
   expect([...secrets].sort()).toEqual(["Basic encoded-credential", "abcd", "another-credential", "encoded-credential", "pass", "token another-credential"].sort());
 });
+
+test("URL userinfo keeps usernames and remembers decoded passwords without plausibility limits", () => {
+  for (const password of ["1234", "x", "true", "p%40ss"]) {
+    const secrets = new Set<string>();
+    rememberConnectionSecrets({ transport: "http", config: { headers: {}, url: `http://visible-user:${password}@localhost/mcp` } }, secrets);
+    expect([...secrets]).toEqual([decodeURIComponent(password)]);
+    expect(redactDiagnosticValue(`failed http://visible-user:${password}@localhost/mcp`, secrets))
+      .toBe("failed http://visible-user:[REDACTED]@localhost/mcp");
+  }
+});

@@ -121,3 +121,29 @@ test("Variable redaction follows references and rebuilds on environment changes 
     expect(await echo("reconnect-value")).toContain("reconnect-value");
   } finally { await session.close(); }
 });
+
+test("connection URL logs retain username but redact numeric userinfo passwords", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send({ type: "connect", transport: "http", config: { headers: {}, url: "http://user:1234@127.0.0.1:9/mcp?a=b" } });
+    const log = await session.waitFor("log", msg => msg.message.includes("Connecting via"));
+    expect(log.message).toContain("http://user:[REDACTED]@127.0.0.1:9/mcp");
+    expect(diagnostics(session)).not.toContain("1234");
+  } finally { await session.close(); }
+});
+
+test("running Calls keep resolved Variables redacted across Environment changes", async () => {
+  const session = new SessionHarness();
+  try {
+    session.setActiveEnv({ VALUE: "running-call-private" });
+    await session.send({ ...(stdioFixture as Extract<ClientMessage, { type: "connect" }>), verbose: true });
+    await session.waitFor("connected");
+    const call = session.send({ type: "invoke", tool: "elicit", params: { text: "{{VALUE}}" }, requestId: "held" });
+    const form = await session.waitFor("elicitation_request");
+    session.setActiveEnv({});
+    const start = session.messages.length;
+    await session.send({ type: "elicitation_response", elicitationId: form.elicitationId, action: "accept", content: { name: "running-call-private" } });
+    await call;
+    expect(JSON.stringify(session.messages.slice(start).filter(msg => msg.type === "log"))).not.toContain("running-call-private");
+  } finally { await session.close(); }
+});

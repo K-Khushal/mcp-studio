@@ -176,10 +176,11 @@ export class StreamableHTTPClient extends BaseMCPClient {
     });
 
     const logUrl = new URL(url);
+    if (logUrl.password) logUrl.password = "[REDACTED]";
     for (const key of new Set(logUrl.searchParams.keys())) logUrl.searchParams.set(key, "[REDACTED]");
     let client = new Client({ name: "mcp-studio", version: "0.0.1" }, { jsonSchemaValidator: inspectionValidator, capabilities: { elicitation: { form: {} } } });
 
-    this.options.onLog?.("INFO", "studio", `Connecting via Streamable HTTP to ${logUrl.toString()}`);
+    this.options.onLog?.("INFO", "studio", `Connecting via Streamable HTTP to ${logUrl.toString().replace(":%5BREDACTED%5D@", ":[REDACTED]@")}`);
     this.variant = "streamable";
     try {
       await this.connectTransport(client, this.transport);

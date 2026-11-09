@@ -89,11 +89,13 @@ export class SessionManager {
   private connectionTemplate: ConnectionConfig | null = null;
   private connectionConfig: ConnectionConfig | null = null;
   private referencedVariables = new Set<string>();
+  private callSecrets = new Map<string, Set<string>>();
 
-  private rememberVariables(value: unknown): void {
+  private rememberVariables(value: unknown, callSecrets?: Set<string>): void {
+    const references = new Set<string>();
     const visit = (item: unknown): void => {
       if (typeof item === "string") {
-        for (const match of item.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) this.referencedVariables.add(match[1]!);
+        for (const match of item.matchAll(/\{\{([A-Za-z0-9_]+)\}\}/g)) { this.referencedVariables.add(match[1]!); references.add(match[1]!); }
       } else if (item && typeof item === "object") {
         for (const child of Object.values(item)) visit(child);
       }
@@ -101,7 +103,9 @@ export class SessionManager {
     visit(value);
     for (const [name, entry] of Object.entries(this.activeEnv)) {
       if (this.referencedVariables.has(name) || isCredentialKey(name)) {
-        rememberDiagnosticSecret(interpolate(entry, this.activeEnv).result, this.diagnosticSecrets, isCredentialKey(name));
+        const resolved = interpolate(entry, this.activeEnv).result;
+        rememberDiagnosticSecret(resolved, this.diagnosticSecrets, isCredentialKey(name));
+        if (callSecrets && references.has(name)) rememberDiagnosticSecret(resolved, callSecrets, isCredentialKey(name));
       }
     }
   }
@@ -112,6 +116,7 @@ export class SessionManager {
     else this.rememberVariables(null);
     if (this.connectionConfig) rememberConnectionSecrets(this.connectionConfig, this.diagnosticSecrets);
     this.client?.rememberDiagnosticSecrets(this.diagnosticSecrets);
+    for (const secrets of this.callSecrets.values()) for (const value of secrets) this.diagnosticSecrets.add(value);
   }
 
   setActiveEnv(env: Record<string, string>): void {
@@ -280,6 +285,7 @@ export class SessionManager {
     const timeout = Math.min(seconds * 1000, 2_147_483_647);
     const controller = new AbortController();
     this.calls.set(requestId, controller);
+    this.callSecrets.set(requestId, new Set());
     let remaining = timeout;
     let started = Date.now();
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -321,20 +327,22 @@ export class SessionManager {
       clearTimeout(timer);
       this.callClocks.delete(requestId);
       this.calls.delete(requestId);
+      this.callSecrets.delete(requestId);
+      this.rebuildSecrets();
     }
   }
 
   private invoke(msg: Extract<ClientMessage, { type: "invoke" }>): Promise<void> {
     return this.runCall(msg, async (client, requestId, options) => ({
       type: "result", requestId,
-      data: await client.callTool(msg.tool, this.resolveVariables(msg.params), requestId, options),
+      data: await client.callTool(msg.tool, this.resolveVariables(msg.params, requestId), requestId, options),
     }));
   }
 
   private invokePrompt(msg: Extract<ClientMessage, { type: "invoke_prompt" }>): Promise<void> {
     return this.runCall(msg, async (client, requestId, options) => ({
       type: "prompt_result", requestId,
-      messages: await client.callPrompt(msg.prompt, this.resolveVariables(msg.args), requestId, options),
+      messages: await client.callPrompt(msg.prompt, this.resolveVariables(msg.args, requestId), requestId, options),
     }));
   }
 
@@ -408,8 +416,8 @@ export class SessionManager {
     }
   }
 
-  private resolveVariables<T>(value: T): T {
-    this.rememberVariables(value);
+  private resolveVariables<T>(value: T, requestId: string): T {
+    this.rememberVariables(value, this.callSecrets.get(requestId));
     const { result, missing } = interpolate(value, this.activeEnv);
     if (missing.length) throw new Error(`Unresolved Variables: ${missing.join(", ")}`);
     return result;

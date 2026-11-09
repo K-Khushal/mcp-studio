@@ -31,8 +31,7 @@ export function rememberConnectionSecrets(connection: ConnectionConfig, secrets:
     if (auth?.type === "apikey") remember(auth.value);
     try {
       const parsed = new URL(url);
-      remember(decodeURIComponent(parsed.username));
-      remember(decodeURIComponent(parsed.password));
+      if (parsed.password) secrets.add(decodeURIComponent(parsed.password));
       parsed.searchParams.forEach((value, key) => { if (isCredentialKey(key) || (auth?.type === "apikey" && auth.in === "query" && auth.key === key)) remember(value); });
     } catch { /* A malformed URL is reported by the transport. */ }
   }
