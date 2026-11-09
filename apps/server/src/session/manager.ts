@@ -315,7 +315,7 @@ export class SessionManager {
       authorize: async (authorizationUrl, state) => {
         signal.throwIfAborted();
         const code = oauth.redirects.wait(state, signal);
-        this.send({ type: "log", level: "INFO", source: "protocol", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
+        this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
         return code;
       },

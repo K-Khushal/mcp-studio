@@ -39,7 +39,7 @@ afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 describe("OAuth sign-in", () => {
   it("connects with the selected Connection so the Studio Server can use its stored sign-in", async () => {
     await useStore.getState().connect(oauth);
-    expect(transport.connect).toHaveBeenCalledWith(oauth, "conn-1");
+    expect(transport.connect).toHaveBeenCalledWith(oauth, false, "conn-1");
   });
 
   it("opens the authorization page and keeps its link until the Session connects", async () => {

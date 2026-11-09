@@ -5,6 +5,20 @@ import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 
 const authorizations = new WeakMap<object, Promise<void>>();
 
+/** Clone log data while redacting secrets; wire frames and Call results stay intact. */
+export function redactOAuthValue<T>(value: T, secrets: ReadonlySet<string>): T {
+  const redact = (item: unknown): unknown => {
+    if (typeof item === "string") {
+      for (const secret of secrets) if (secret) item = (item as string).replaceAll(secret, "[REDACTED]");
+      return item;
+    }
+    if (Array.isArray(item)) return item.map(redact);
+    if (item && typeof item === "object") return Object.fromEntries(Object.entries(item).map(([key, child]) => [redact(key), redact(child)]));
+    return item;
+  };
+  return redact(value) as T;
+}
+
 /** What Studio keeps between Sessions for one Connection's OAuth sign-in. */
 export interface OAuthCredentials {
   tokens?: OAuthTokens;
@@ -42,7 +56,19 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   private lastState: string | undefined;
   private pending: { url: URL; state: string } | undefined;
 
-  constructor(private readonly signIn: OAuthSignIn) {}
+  constructor(private readonly signIn: OAuthSignIn, private readonly secrets = new Set<string>()) {}
+
+  private async credentials(): Promise<OAuthCredentials> {
+    const credentials = await this.signIn.storage.load();
+    this.remember(credentials);
+    return credentials;
+  }
+
+  private remember(credentials: OAuthCredentials): void {
+    for (const secret of [credentials.tokens?.access_token, credentials.tokens?.refresh_token, credentials.clientInformation?.client_secret]) {
+      if (secret) this.secrets.add(secret);
+    }
+  }
 
   /** Coalesce the SDK's entire auth flow, including registration and browser approval. */
   async authenticate(serverUrl: URL, rejectedAuthorization: string | null, response: Response, fetchFn: FetchLike): Promise<void> {
@@ -105,7 +131,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   async clientInformation() {
-    const info = (await this.signIn.storage.load()).clientInformation;
+    const info = (await this.credentials()).clientInformation;
     // Registered for another redirect URL (the Studio Server port changed): register again.
     if (info && "redirect_uris" in info && !info.redirect_uris.includes(this.signIn.redirectUrl)) return undefined;
     return info;
@@ -116,7 +142,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   async tokens() {
-    return (await this.signIn.storage.load()).tokens;
+    return (await this.credentials()).tokens;
   }
 
   async saveTokens(tokens: OAuthTokens) {
@@ -129,6 +155,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
   }
 
   saveCodeVerifier(codeVerifier: string) {
+    this.secrets.add(codeVerifier);
     this.verifier = codeVerifier;
   }
 
@@ -160,13 +187,17 @@ export class StudioOAuthProvider implements OAuthClientProvider {
     this.signIn.signal?.throwIfAborted();
     const pending = this.pending;
     this.pending = undefined;
-    return pending && this.signIn.authorize(pending.url, pending.state);
+    if (!pending) return undefined;
+    const code = await this.signIn.authorize(pending.url, pending.state);
+    this.secrets.add(code);
+    return code;
   }
 
   private async update(patch: OAuthCredentials) {
     this.signIn.signal?.throwIfAborted();
     const credentials = await this.signIn.storage.load();
     this.signIn.signal?.throwIfAborted();
+    this.remember(patch);
     await this.signIn.storage.save({ ...credentials, ...patch });
   }
 }

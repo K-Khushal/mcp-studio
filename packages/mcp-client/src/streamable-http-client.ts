@@ -1,16 +1,17 @@
 import { inspectionValidator } from "./inspection-validator.js";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { UnauthorizedError } from "@modelcontextprotocol/sdk/client/auth.js";
+import { UnauthorizedError, extractWWWAuthenticateParams } from "@modelcontextprotocol/sdk/client/auth.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport, StreamableHTTPError } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { HttpConfig, MCPPromptMessage } from "@mcp-studio/types";
 import type { MCPClientOptions } from "./types.js";
 import { BaseMCPClient } from "./base-client.js";
-import { StudioOAuthProvider } from "./oauth.js";
+import { StudioOAuthProvider, redactOAuthValue } from "./oauth.js";
 
 export class StreamableHTTPClient extends BaseMCPClient {
   protected readonly transportPhase = "connect" as const;
+  private readonly oauthSecrets: Set<string>;
   private readonly lifetime = new AbortController();
   private transport: StreamableHTTPClientTransport | SSEClientTransport | null = null;
   // The UI runs one Call at a time; this shared id tags its HTTP response headers.
@@ -21,7 +22,11 @@ export class StreamableHTTPClient extends BaseMCPClient {
     private readonly config: HttpConfig,
     options: MCPClientOptions = {}
   ) {
-    super(options);
+    const secrets = new Set<string>();
+    super({ ...options, onLog: (level, source, text, payload) =>
+      options.onLog?.(level, source, redactOAuthValue(text, secrets), redactOAuthValue(payload, secrets)),
+    });
+    this.oauthSecrets = secrets;
   }
 
   override async callTool(
@@ -76,7 +81,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
     const { auth } = this.config;
     if (auth?.type !== "oauth") return this.connectHttp();
     if (!this.options.oauth) throw new Error("OAuth sign-in is not available in this Studio Server");
-    const provider = new StudioOAuthProvider({ ...this.options.oauth, signal: this.signal });
+    const provider = new StudioOAuthProvider({ ...this.options.oauth, signal: this.signal }, this.oauthSecrets);
     return this.connectHttp(provider);
   }
 
@@ -109,9 +114,11 @@ export class StreamableHTTPClient extends BaseMCPClient {
       const signal = init?.signal ? AbortSignal.any([this.signal, init.signal]) : this.signal;
       return fetch(input, { ...init, signal });
     };
+    const needsAuthorization = (response: Response) => response.status === 401 ||
+      (response.status === 403 && extractWWWAuthenticateParams(response).error === "insufficient_scope");
     const wrappedFetch: FetchLike = async (input, init) => {
       let response = await authFetch(input, init);
-      if (authProvider && response.status === 401) {
+      if (authProvider && needsAuthorization(response)) {
         const headers = new Headers(init?.headers);
         await response.body?.cancel();
         await authProvider.authenticate(url, headers.get("authorization"), response, authFetch);
@@ -120,7 +127,7 @@ export class StreamableHTTPClient extends BaseMCPClient {
         if (!tokens) throw new Error("OAuth authentication failed");
         headers.set("authorization", `Bearer ${tokens.access_token}`);
         response = await authFetch(input, { ...init, headers });
-        if (response.status === 401) {
+        if (needsAuthorization(response)) {
           await response.body?.cancel();
           throw new Error("OAuth authentication failed");
         }

@@ -105,6 +105,7 @@ test("no token value reaches the browser or the logs", async () => {
   }
   const emitted = JSON.stringify(session.messages) + logs.join("\n");
   expect(fixture.issued.length).toBe(4);
+  expect(session.messages.some(message => message.type === "log" && message.payload?.method === "initialize")).toBe(true);
   for (const secret of fixture.issued) expect(emitted).not.toContain(secret);
 });
 
@@ -280,5 +281,25 @@ test("refresh and discovery response metadata never reaches http_response messag
   await echo(session, "refresh metadata stays private");
   const responses = session.messages.filter(message => message.type === "http_response");
   expect(responses.length).toBeGreaterThan(0);
+  expect(responses.every(message => !("x-fixture-oauth" in message.headers))).toBe(true);
+});
+
+test("verbose MCP frames redact known OAuth secrets without changing the Call", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  const secret = fixture.issued[0]!;
+  expect(await echo(session, secret)).toMatchObject({ data: { content: [{ text: secret }] } });
+  const logs = JSON.stringify(session.messages.filter(message => message.type === "log"));
+  expect(logs.includes(secret)).toBe(false);
+  expect(logs).toContain("[REDACTED]");
+});
+
+test("SDK scope discovery and token response metadata stays private", async () => {
+  const session = openSession();
+  await signInAndConnect(session);
+  fixture.expireAccessTokens();
+  fixture.faults.scope = true;
+  await echo(session, "scope metadata stays private");
+  const responses = session.messages.filter(message => message.type === "http_response");
   expect(responses.every(message => !("x-fixture-oauth" in message.headers))).toBe(true);
 });

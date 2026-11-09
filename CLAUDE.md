@@ -122,3 +122,5 @@ Form elicitation: MCP clients advertise `elicitation.form`; SessionManager bridg
 
 OAuth: `fixtures/oauth-fixture.ts` — `startOAuthFixture()` (protected `/mcp` + minimal AS: metadata, DCR, PKCE, refresh; `counts`, `issued`, `presented`, `expireAccessTokens()`, `revokeTokens()`), `startOAuthCallback()` (real callback route), `approveInBrowser(url)`. `new SessionHarness({ oauth })` enables sign-in.
 
+
+OAuth lifecycle: credential storage adapters share a per-Connection generation, retired on sign-out or URL change; saves and Session reconnects reject stale generations or aborted Sessions. The SDK auth flow is coalesced per generation across Sessions, uses a separate fetch for auth traffic, and exposes safe errors without endpoint bodies; file-backed DBs use private permissions (0700 directory, 0600 file).

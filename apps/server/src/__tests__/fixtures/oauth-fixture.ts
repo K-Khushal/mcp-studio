@@ -13,7 +13,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
  */
 export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable") {
   let tokenGate: { grant: string; started: () => void; resume: Promise<void> } | undefined;
-  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean } = {};
+  const faults: { refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean } = {};
   const legacy = mode === "sse" ? await startHTTPFixture("sse") : undefined;
   const endpoint = legacy ? {
     handle(request: Request) {
@@ -120,6 +120,9 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
         const token = request.headers.get("authorization")?.match(/^Bearer (.+)$/)?.[1];
         if (token) presented.add(token);
         const state = token ? accessTokens.get(token) : undefined;
+        if (state?.expired && faults.scope) {
+          return new Response("More scope required", { status: 403, headers: { "www-authenticate": `Bearer error="insufficient_scope", scope="echo", resource_metadata="${resourceMetadata}"` } });
+        }
         if (!state || state.expired) {
           return new Response("Unauthorized", { status: 401, headers: { "www-authenticate": `Bearer resource_metadata="${resourceMetadata}"` } });
         }
@@ -132,7 +135,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" = "streamable
 
   return {
     connection: (connectionId?: string) => ({
-      type: "connect", transport: "http", ...(connectionId ? { connectionId } : {}),
+      type: "connect", transport: "http", verbose: true, ...(connectionId ? { connectionId } : {}),
       config: { url: new URL("/mcp", server.url).toString(), headers: {}, auth: { type: "oauth" } },
     }) satisfies ClientMessage,
     counts,

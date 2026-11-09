@@ -68,7 +68,7 @@ describe("verbose logging wiring", () => {
   it("sends the setting with connect", async () => {
     useStore.getState().setConfig({ verboseLogging: true });
     await useStore.getState().connect(stdio);
-    expect(mockTransport.connect).toHaveBeenLastCalledWith(stdio, true);
+    expect(mockTransport.connect).toHaveBeenLastCalledWith(stdio, true, "conn-1");
   });
 
   it("applies a change to a live Session, and only when connected", () => {
