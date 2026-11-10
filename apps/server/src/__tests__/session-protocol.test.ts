@@ -210,3 +210,22 @@ for (const kind of ['text', 'image']) test(`oversize ${kind} blocks are replaced
     expect(JSON.stringify(result).length).toBeLessThan(3 * 1024 * 1024);
   } finally { await session.close(); }
 });
+
+test("a stalled STDIO initialize times out and closes its child process", async () => {
+  const session = new SessionHarness({ connectTimeoutMs: 500 });
+  let pid: number | undefined;
+  try {
+    const connecting = session.send({ type: "connect", transport: "stdio", config: {
+      command: process.execPath, args: [new URL("./fixtures/stalled-stdio.ts", import.meta.url).pathname], env: {}, inheritSystemEnv: true,
+    } });
+    const started = await session.waitFor("log", message => message.message.includes("stalled-stdio-pid:"));
+    pid = Number(started.message.match(/stalled-stdio-pid:(\d+)/)![1]);
+    await connecting;
+    expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED", message: "Connection timed out after 500 ms" });
+    expect(session.messages.some(message => message.type === "connected")).toBe(false);
+    expect(() => process.kill(pid!, 0)).toThrow();
+  } finally {
+    await session.close();
+    if (pid) { try { process.kill(pid, "SIGKILL"); } catch { /* Already exited. */ } }
+  }
+});
