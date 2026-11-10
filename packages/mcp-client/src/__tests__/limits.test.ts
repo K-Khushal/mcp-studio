@@ -24,3 +24,28 @@ it.each(['\n', '\r', '\r\n'])('bounds individual SSE events across chunks (%j)',
   expect(await limitResponseBody(response, 16).text()).toContain('data: ok');
   await expect(limitResponseBody(new Response(`data: ${'x'.repeat(32)}\n\n`, { headers: { 'content-type': 'text/event-stream' } }), 16).text()).rejects.toThrow(/SSE event exceeds/);
 });
+
+function sseResponse(text: string, chunkSize: number) {
+  const bytes = new TextEncoder().encode(text);
+  let offset = 0;
+  return new Response(new ReadableStream<Uint8Array>({ pull(controller) {
+    if (offset === bytes.length) { controller.close(); return; }
+    controller.enqueue(bytes.slice(offset, offset + chunkSize));
+    offset = Math.min(offset + chunkSize, bytes.length);
+  } }), { headers: { 'content-type': 'text/event-stream' } });
+}
+
+it.each(['\n\n', '\r\n\r\n', '\r\r', '\n\r\n', '\r\n\n'])('preserves multiple SSE events at every chunk size with %j', async delimiter => {
+  const input = `: comment\nretry: 100\nid: 7\ndata: 😀${delimiter}data: café${delimiter}`;
+  for (let size = 1; size <= new TextEncoder().encode(input).length; size++) {
+    expect(await limitResponseBody(sseResponse(input, size), 48).text()).toBe(': comment\nretry: 100\nid: 7\ndata: 😀\n\ndata: café\n\n');
+  }
+});
+
+it('preserves an SSE event ending without a blank line', async () => {
+  expect(await limitResponseBody(sseResponse('data: café', 1), 16).text()).toBe('data: café');
+});
+
+it.each([1, 2, 3, 8, 64])('enforces the per-event cap for CRLF chunks of %i bytes', async size => {
+  await expect(limitResponseBody(sseResponse('data: ok\r\n\r\ndata: ' + 'x'.repeat(32) + '\r\n\r\n', size), 16).text()).rejects.toThrow('SSE event exceeds 16 bytes');
+});

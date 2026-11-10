@@ -39,7 +39,10 @@ export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024
     async pull(controller) {
       try {
         const next = await reader.read();
-        if (next.done) { controller.close(); return; }
+        if (next.done) {
+          if (sse && !dropping && event.length) controller.enqueue(Uint8Array.from(event));
+          controller.close(); return;
+        }
         if (sse) {
           const kept: number[] = [];
           for (const byte of next.value) {
