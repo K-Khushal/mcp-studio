@@ -43,7 +43,9 @@ export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024
         if (sse) {
           const kept: number[] = [];
           for (const byte of next.value) {
-            if (afterCR && byte === 10) { afterCR = false; if (!dropping) event.push(byte); continue; }
+            // Normalize CR/CRLF to LF so the SDK can dispatch the final event
+            // without needing another byte after a trailing CR.
+            if (afterCR && byte === 10) { afterCR = false; continue; }
             afterCR = byte === 13;
             bytes++;
             if (bytes > maxBytes && !dropping) {
@@ -52,7 +54,7 @@ export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024
               dropping = true;
               onSseLimit(new Error(`SSE event exceeds ${maxBytes} bytes; dropped`));
             }
-            if (!dropping) event.push(byte);
+            if (!dropping) event.push(byte === 13 ? 10 : byte);
             if (byte === 10 || byte === 13) {
               if (lineBytes === 0) {
                 bytes = 0;

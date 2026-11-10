@@ -16,6 +16,8 @@ import { nanoid } from "../utils/nanoid.js";
 type Send = (msg: ServerMessage) => void;
 
 export interface SessionOptions {
+  /** Whole connect deadline, including discovery and browser sign-in; defaults to 120 seconds. */
+  connectTimeoutMs?: number;
   /** Enables OAuth sign-in for HTTP Connections. */
   oauth?: {
     redirectUrl: string;
@@ -209,6 +211,7 @@ export class SessionManager {
     this.setStatus("connecting");
     const lifecycle = new AbortController();
     this.signInAbort = lifecycle;
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
 
     try {
       const client: MCPClientInterface =
@@ -238,7 +241,12 @@ export class SessionManager {
             });
 
       this.client = client;
-      const info = await client.connect();
+      // SDK request timers do not cover a transport send stuck reading HTTP.
+      // Bound the entire handshake and initial tool/prompt discovery instead.
+      const timeout = this.options.connectTimeoutMs ?? 120_000;
+      const info = await Promise.race([client.connect(), new Promise<never>((_, reject) => {
+        connectTimer = setTimeout(() => reject(new Error(`Connection timed out after ${timeout} ms`)), timeout);
+      })]);
       if (lifecycle.signal.aborted || this.client !== client) {
         await client.disconnect();
         return;
@@ -255,6 +263,7 @@ export class SessionManager {
       });
     } catch (err) {
       if (lifecycle.signal.aborted || this.signInAbort !== lifecycle) return;
+      lifecycle.abort();
       this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
@@ -268,6 +277,8 @@ export class SessionManager {
       this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
 
       this.send({ type: "error", message, code: "CONNECTION_FAILED" });
+    } finally {
+      clearTimeout(connectTimer);
     }
   }
 
