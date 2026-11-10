@@ -126,7 +126,7 @@ Packaged-app browser suites live in `e2e/`; run `bun run e2e` locally/CI and `bu
 
 Harness, fixtures (STDIO/HTTP/OAuth), elicitation and live-Call coverage: `docs/testing.md`. Session seam: `cd apps/server && bun test src/__tests__/session-protocol.test.ts`.
 
-Session connect has a 120-second deadline covering transport setup, initialize, initial discovery and browser sign-in; timeout aborts and closes the pending transport. SSE event limiting normalizes CR/CRLF to LF before SDK parsing so final CR-terminated events dispatch without another byte.
+Session connect has a 120-second deadline covering transport setup, initialize, initial discovery; browser approval pauses the deadline and resolving approval starts a fresh budget; timeout aborts and closes the pending transport. SSE event limiting normalizes CR/CRLF to LF before SDK parsing so final CR-terminated events dispatch without another byte.
 
 ### Untrusted content budgets
 Calls forwarded to the browser are capped at 1 MiB (oversize results become a text preview with original byte count); HTTP response streams are capped at 4 MiB and fail on overflow. Stderr lines/log messages retain 16 KiB prefixes, logs retain at most 500 entries/4 MiB including search indexes, and output schemas containing regex keywords or formats are reported as unvalidated to avoid executing server-selected regex.

@@ -213,6 +213,17 @@ export class SessionManager {
     this.signInAbort = lifecycle;
     let connectTimer: ReturnType<typeof setTimeout> | undefined;
 
+    const timeout = this.options.connectTimeoutMs ?? 120_000;
+    let rejectTimeout: (error: Error) => void;
+    const deadline = new Promise<never>((_, reject) => { rejectTimeout = reject; });
+    const clock = {
+      pause: () => { clearTimeout(connectTimer); },
+      resume: () => {
+        if (lifecycle.signal.aborted) return;
+        clearTimeout(connectTimer);
+        connectTimer = setTimeout(() => rejectTimeout(new Error(`Connection timed out after ${timeout} ms`)), timeout);
+      },
+    };
     try {
       const client: MCPClientInterface =
         config.transport === "stdio"
@@ -236,17 +247,15 @@ export class SessionManager {
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
               oauth: config.config.auth?.type === "oauth"
-                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal)
+                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal, clock)
                 : undefined,
             });
 
       this.client = client;
       // SDK request timers do not cover a transport send stuck reading HTTP.
       // Bound the entire handshake and initial tool/prompt discovery instead.
-      const timeout = this.options.connectTimeoutMs ?? 120_000;
-      const info = await Promise.race([client.connect(), new Promise<never>((_, reject) => {
-        connectTimer = setTimeout(() => reject(new Error(`Connection timed out after ${timeout} ms`)), timeout);
-      })]);
+      clock.resume();
+      const info = await Promise.race([client.connect(), deadline]);
       if (lifecycle.signal.aborted || this.client !== client) {
         await client.disconnect();
         return;
@@ -392,14 +401,18 @@ export class SessionManager {
     }
   }
 
-  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal): OAuthSignIn | undefined {
+  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal, clock: { pause(): void; resume(): void }): OAuthSignIn | undefined {
     const oauth = this.options.oauth;
     if (!oauth) return undefined;
     return {
       redirectUrl: oauth.redirectUrl,
       signal,
       storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
-      authorize: (_authorizationUrl, state, flowSignal) => oauth.redirects.wait(state, flowSignal),
+      authorize: async (_authorizationUrl, state, flowSignal) => {
+        clock.pause();
+        try { return await oauth.redirects.wait(state, flowSignal); }
+        finally { clock.resume(); }
+      },
       onAuthorization: authorizationUrl => {
         this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });

@@ -27,8 +27,8 @@ afterEach(async () => {
   await fixture.close();
 });
 
-function openSession() {
-  const harness = new SessionHarness({ oauth: { redirectUrl: callback.redirectUrl, redirects: callback.redirects, storage: oauthStorage } });
+function openSession(connectTimeoutMs?: number) {
+  const harness = new SessionHarness({ connectTimeoutMs, oauth: { redirectUrl: callback.redirectUrl, redirects: callback.redirects, storage: oauthStorage } });
   harnesses.push(harness);
   return harness;
 }
@@ -601,3 +601,14 @@ for (const url of ["ms-settings:privacy", "http://auth.example.com/authorize"]) 
     expect(session.messages.some(message => message.type === "oauth_authorize")).toBe(false);
   });
 }
+
+ test("browser approval can outlast the connect deadline", async () => {
+  const session = openSession(200);
+  const connecting = session.send(fixture.connection(connectionId));
+  const link = await session.waitFor("oauth_authorize");
+  await Bun.sleep(350);
+  await approveInBrowser(link.url);
+  await connecting;
+  expect(session.messages.some(message => message.type === "connected")).toBe(true);
+  expect(session.messages.filter(message => message.type === "error")).toEqual([]);
+});
