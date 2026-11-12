@@ -8,7 +8,6 @@ import {
 } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { toast } from 'sonner';
 import type { Collection } from '@mcp-studio/types';
 
 interface AddConnectionDialogProps {
@@ -33,7 +32,6 @@ export function AddConnectionDialog({ collection, open, onClose }: AddConnection
   const handleSave = async () => {
     if (!name.trim()) { setError('Name is required'); return; }
     await addConnection(collection.id, { name: name.trim() });
-    toast.success(`Connection "${name.trim()}" added`);
     onClose();
   };
 

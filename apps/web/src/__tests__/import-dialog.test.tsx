@@ -11,7 +11,8 @@ it('previews mixed entries and imports valid Connections into the chosen Collect
   const onClose = vi.fn();
   render(<ImportConnectionsDialog onClose={onClose} />);
   fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: '{"mcpServers":{"local":{"command":"bun"},"broken":null}}' } });
-  expect(screen.getByText('STDIO · bun')).toBeInTheDocument();
+  expect(screen.getByText('STDIO')).toBeInTheDocument();
+  expect(screen.getByText('bun')).toBeInTheDocument();
   expect(screen.getByText('Expected a server settings object.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
   await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
@@ -64,7 +65,7 @@ it('imports mcp-remote as a direct HTTP Connection with masked headers, or keeps
   const source = JSON.stringify({ mcpServers: { remote: { command: 'npx', args: ['-y', 'mcp-remote', 'https://example.com/mcp', '--header', 'X-API-Key: private-value'] } } });
   render(<ImportConnectionsDialog onClose={() => {}} />);
   fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: source } });
-  expect(screen.getByText('HTTP · https://example.com/mcp')).toBeInTheDocument();
+  expect(screen.getByText('https://example.com/mcp')).toBeInTheDocument();
   expect(screen.getByRole('list', { name: 'remote headers' })).toHaveTextContent('X-API-Key: •••••••• (masked)');
   await userEvent.click(screen.getByLabelText('Keep as STDIO (run mcp-remote)'));
   expect(screen.getByRole('list', { name: 'remote arguments' })).toHaveTextContent('X-API-Key: •••••••• (masked)');

@@ -50,7 +50,6 @@ export default function EnvironmentPanel() {
     const vars = { ...localVars, [newKey.trim()]: newValue };
     setLocalVars(vars);
     flushVars(vars);
-    toast.success(`Variable "${newKey.trim()}" added`);
     setNewKey('');
     setNewValue('');
   };
@@ -69,7 +68,6 @@ export default function EnvironmentPanel() {
   const handleCreateEnv = async () => {
     if (!newEnvName.trim()) return;
     await createEnvironment(newEnvName.trim());
-    toast.success(`Environment "${newEnvName.trim()}" created`);
     setNewEnvName('');
     setShowNewEnv(false);
   };

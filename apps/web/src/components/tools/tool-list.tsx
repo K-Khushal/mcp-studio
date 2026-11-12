@@ -24,7 +24,7 @@ export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) 
     <span className="flex items-center gap-2"><ToolIcon tool={tool} /><span className="truncate">{toolTitle(tool)}</span></span>
     <ToolBadges tool={tool} compact />
     {tool.description && (
-      <span className="block truncate text-xs text-muted-foreground mt-0.5">{tool.description}</span>
+      <span className="mt-0.5 block truncate pl-6 text-xs text-muted-foreground">{tool.description}</span>
     )}
   </button>
 );

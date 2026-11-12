@@ -30,9 +30,9 @@ const UptimeTimer = memo(({ connectedAt }: { connectedAt: number }) => {
   }, [connectedAt]); // restart cleanly on reconnect
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" title="Session uptime">
       <Timer size={11} />
-      <span className="tabular-nums min-w-14">{formatUptime(now - connectedAt)}</span>
+      <span className="tabular-nums min-w-9">{formatUptime(now - connectedAt)}</span>
     </div>
   );
 });
@@ -89,13 +89,13 @@ export function StatusBar() {
       {connectionStatus === 'connected' && connectedAt && <UptimeTimer connectedAt={connectedAt} />}
 
       {/* Last Call latency */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" title="Last Call latency">
         <Clock size={11} />
         <span className="tabular-nums">{requestCount > 0 ? `${latency}ms` : '—'}</span>
       </div>
 
       {/* Total Calls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" title="Calls this Session">
         <Activity size={11} />
         <span className="tabular-nums">{requestCount} {requestCount === 1 ? 'call' : 'calls'}</span>
       </div>

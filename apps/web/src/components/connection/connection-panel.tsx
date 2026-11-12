@@ -189,10 +189,12 @@ export function ConnectionPanel() {
               ? 'bg-success'
               : isSelectedConnectionConnecting
                 ? 'bg-warning motion-safe:animate-pulse'
-                : 'bg-destructive'
+                : lastConnectionError?.connectionId === selectedConnectionId
+                  ? 'bg-destructive'
+                  : 'bg-muted-foreground/50'
           )} />
           <span className="text-xs text-muted-foreground">
-            {isSelectedConnectionConnected ? 'Connected' : isSelectedConnectionConnecting ? 'Connecting...' : 'Disconnected'}
+            {isSelectedConnectionConnected ? 'Connected' : isSelectedConnectionConnecting ? 'Connecting…' : lastConnectionError?.connectionId === selectedConnectionId ? 'Failed' : 'Disconnected'}
           </span>
         </div>
         <div className="flex-1" />

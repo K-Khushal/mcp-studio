@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { ChevronRight, ChevronDown, Plus, FileText, Trash2, Pencil, Plug } from 'lucide-react';
+import { ChevronRight, ChevronDown, Plus, FileText, Globe, SquareTerminal, Trash2, Pencil, Plug } from 'lucide-react';
 import { useStore } from '@/store';
 import { cn } from '@/lib/utils';
 import { AddConnectionDialog } from './add-connection-dialog';
@@ -38,6 +38,7 @@ export function CollectionRow({ collection, connections = collection.connections
   const liveConnectionId = useStore((s) =>
     s.connectionStatus === 'connected' ? s.connectedConnectionId : s.connectionStatus === 'connecting' ? s.connectingConnectionId : null
   );
+  const liveConnecting = useStore((s) => s.connectionStatus === 'connecting');
   const [expanded, setExpanded] = useState(true);
   const [searchExpansion, setSearchExpansion] = useState<{ query: string; expanded?: boolean }>({ query: searchQuery });
   // Reset even when clearing then returning to the same query.
@@ -169,8 +170,10 @@ export function CollectionRow({ collection, connections = collection.connections
               title={conn.name}
               className="flex min-w-0 flex-1 items-center gap-2 py-1.5 pl-8 pr-2 text-left text-xs outline-hidden focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
             >
-              <FileText size={11} className="shrink-0" aria-hidden />
+              {(() => { const Icon = conn.connectionConfig?.transport === 'http' ? Globe : conn.connectionConfig?.transport === 'stdio' ? SquareTerminal : FileText; return <Icon size={12} className="shrink-0" aria-hidden />; })()}
               <span className="min-w-0 flex-1 truncate">{conn.name}</span>
+              {/* Visual cue only: the banner announces Session status; keeps the row's accessible name stable */}
+              {liveConnectionId === conn.id && <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', liveConnecting ? 'bg-warning motion-safe:animate-pulse' : 'bg-success')} />}
             </button>
             <div className={cn(ACTIONS, REVEAL_CONNECTION)}>
               {liveConnectionId !== conn.id && (
