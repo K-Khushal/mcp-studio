@@ -14,10 +14,14 @@ it.each([0, 1, 2])("pluralizes %i Calls", (count) => {
   expect(screen.getByText(count === 1 ? "1 call" : `${count} calls`)).toBeTruthy();
 });
 import { StudioView } from "../views/studio-view";
-it("opens the Tools tab by default", () => {
+it("opens HTTP on Tools and a disconnected STDIO Connection on Arguments", () => {
   vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
-  useStore.setState({ transport: "stdio", connectionStatus: "disconnected" });
+  useStore.setState({ transport: "http", connectionStatus: "disconnected" });
   render(<StudioView />);
   expect(screen.getByText("Connect to load tools")).toBeTruthy();
   expect(screen.queryByText("Connect to load prompts")).toBeNull();
+  cleanup();
+  useStore.setState({ transport: "stdio" });
+  render(<StudioView />);
+  expect(screen.getByRole("tab", { name: /Arguments/ }).getAttribute("aria-selected")).toBe("true");
 });

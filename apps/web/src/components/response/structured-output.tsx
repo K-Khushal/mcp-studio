@@ -72,7 +72,7 @@ export function StructuredOutput({ result, schema }: { result: CallToolResult; s
   return <section aria-label="Structured content" className="mb-4 space-y-2">
     <h4 className="text-xs font-medium">Structured content</h4>
     {patternsDisabled && <p role="note" className="text-xs text-muted-foreground">Pattern validation is disabled for server-supplied pattern and patternProperties keywords.</p>}
-    {status && <p role={valid ? 'status' : 'alert'} className={`rounded-md border px-3 py-2 text-xs ${valid ? 'border-border text-muted-foreground' : 'border-destructive/40 bg-destructive/10 text-destructive-text'}`}>{status}</p>}
+    {status && <p role={valid ? 'status' : 'alert'} className={`rounded-md border px-3 py-2 text-xs ${valid ? 'border-success/30 bg-success/10 text-success-text' : 'border-destructive/40 bg-destructive/10 text-destructive-text'}`}>{status}</p>}
     {result.structuredContent !== undefined && <JsonViewer data={result.structuredContent} />}
   </section>;
 }

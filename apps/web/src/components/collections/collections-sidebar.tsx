@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { FolderPlus, Search, Import } from 'lucide-react';
-import { toast } from 'sonner';
 import type { Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
 import { CollectionRow } from '@/components/collections/collection-row';
@@ -42,7 +41,6 @@ export function CollectionsSidebar() {
     const trimmed = newName.trim();
     if (trimmed) {
       await createCollection(trimmed);
-      toast.success(`Collection "${trimmed}" created`);
     }
     setNewName('');
     setIsCreating(false);

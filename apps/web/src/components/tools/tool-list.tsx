@@ -24,7 +24,7 @@ export const ToolListItem = ({ tool, isSelected, onSelect }: ToolListItemProps) 
     <span className="flex items-center gap-2"><ToolIcon tool={tool} /><span className="truncate">{toolTitle(tool)}</span></span>
     <ToolBadges tool={tool} compact />
     {tool.description && (
-      <span className="block truncate text-xs text-muted-foreground mt-0.5">{tool.description}</span>
+      <span className="mt-0.5 block truncate pl-6 text-xs text-muted-foreground">{tool.description}</span>
     )}
   </button>
 );
@@ -46,7 +46,7 @@ export function ToolList({ tools, selectedToolName, search, onSearch, onSelect }
   );
 
   return (
-    <div className="w-56 shrink-0 border-r border-border flex flex-col">
+    <div className="flex max-h-44 w-full shrink-0 flex-col border-b border-border md:max-h-none md:w-56 md:border-r md:border-b-0">
       <div className="p-2 border-b border-border">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />

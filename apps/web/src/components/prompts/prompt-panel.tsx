@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useState } from 'react';
-import { ChevronRight, Search } from 'lucide-react';
+import { MessageSquareText, Search } from 'lucide-react';
+import { PanelEmptyState } from '@/components/shared/panel-empty-state';
 import { useStore } from '@/store';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
@@ -28,9 +29,9 @@ const PromptListItem = ({ prompt, isSelected, onSelect }: PromptListItemProps) =
         : 'border-l-transparent text-muted-foreground hover:text-foreground hover:bg-muted/30'
     )}
   >
-    <span className="block truncate font-mono">{prompt.name}</span>
+    <span className="flex items-center gap-2"><MessageSquareText size={16} aria-hidden className="shrink-0 text-muted-foreground" /><span className="truncate">{prompt.name}</span></span>
     {prompt.description && (
-      <span className="block truncate text-xs text-muted-foreground mt-0.5">{prompt.description}</span>
+      <span className="mt-0.5 block truncate pl-6 text-xs text-muted-foreground">{prompt.description}</span>
     )}
   </button>
 );
@@ -51,7 +52,7 @@ function PromptList({ prompts, selectedPromptName, search, onSearch, onSelect }:
   );
 
   return (
-    <div className="w-56 shrink-0 border-r border-border flex flex-col">
+    <div className="flex max-h-44 w-full shrink-0 flex-col border-b border-border md:max-h-none md:w-56 md:border-r md:border-b-0">
       <div className="p-2 border-b border-border">
         <div className="relative">
           <Search size={12} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
@@ -143,7 +144,7 @@ export function PromptPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
       <PromptList
         prompts={prompts}
         selectedPromptName={selectedPrompt?.name}
@@ -154,10 +155,7 @@ export function PromptPanel() {
 
       <div className="flex-1 flex flex-col min-w-0 p-4 gap-4 overflow-y-auto">
         {!selectedPrompt ? (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <ChevronRight size={12} />
-            Select a prompt to get started
-          </div>
+          <PanelEmptyState icon={MessageSquareText} title="Select a prompt to get started" hint={`${prompts.length} prompt${prompts.length === 1 ? '' : 's'} available. Pick one from the list to fill in its arguments and run it.`} />
         ) : (
           <>
             <div>

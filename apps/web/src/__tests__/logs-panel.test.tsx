@@ -110,3 +110,15 @@ describe("LogsPanel source, level and search filters", () => {
   });
 });
 
+
+describe("LogsPanel long messages", () => {
+  it("collapses a multiline stderr object to its first line and expands it pretty-printed", () => {
+    useStore.setState({ logs: [{ id: "m", level: "INFO", source: "server", message: '[1] {\n  "id": 0,\n  "method": "initialize"\n}', timestamp: 0 }] });
+    render(<LogsPanel />);
+    const row = screen.getByRole("button", { name: /\[1\] \{/ });
+    expect(row.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.getByText("+3 lines")).toBeTruthy();
+    fireEvent.click(row);
+    expect(document.getElementById("log-detail-m")?.textContent).toBe('[1] {\n  "id": 0,\n  "method": "initialize"\n}');
+  });
+});

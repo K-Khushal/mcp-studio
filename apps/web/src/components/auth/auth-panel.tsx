@@ -1,11 +1,10 @@
-import { toast } from 'sonner';
 import { useStore } from '@/store';
 import type { HttpAuth } from '@mcp-studio/types';
 import { useId } from 'react';
 import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
-import { Button } from '@/components/ui/button';
+import { OAuthStatusCard } from './oauth-status';
 
 const AUTH_TYPES = [
   { value: 'none', label: 'None' },
@@ -16,7 +15,7 @@ const AUTH_TYPES = [
 
 export function AuthPanel() {
   const id = useId();
-  const { httpAuth, setHttpAuth, selectedConnectionId, collections, signOut } = useStore();
+  const { httpAuth, setHttpAuth, selectedConnectionId, collections } = useStore();
   const selectedCollection = collections.find((c) => c.connections.some((r) => r.id === selectedConnectionId));
 
   const handleTypeChange = (type: HttpAuth['type']) => {
@@ -24,13 +23,6 @@ export function AuthPanel() {
     else if (type === 'bearer') setHttpAuth({ type: 'bearer', token: '' });
     else if (type === 'oauth') setHttpAuth({ type: 'oauth' });
     else setHttpAuth({ type: 'apikey', key: '', value: '', in: 'header' });
-  };
-
-  const handleSignOut = async () => {
-    if (!selectedCollection || !selectedConnectionId) return;
-    if (await signOut(selectedCollection.id, selectedConnectionId)) {
-      toast.success('Signed out', { description: 'The next connect will ask you to sign in again.' });
-    }
   };
 
   return (
@@ -97,9 +89,7 @@ export function AuthPanel() {
             On connect, Studio discovers the MCP Server&apos;s authorization server, registers itself and opens
             sign-in in your browser. Tokens stay on this machine, saved with this Connection, and refresh automatically.
           </p>
-          <Button variant="outline" size="sm" onClick={handleSignOut} disabled={!selectedCollection}>
-            Sign out
-          </Button>
+          <OAuthStatusCard collectionId={selectedCollection?.id} />
         </div>
       )}
 

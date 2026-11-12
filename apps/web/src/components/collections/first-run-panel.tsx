@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { FolderPlus, Import, Zap } from 'lucide-react';
-import { toast } from 'sonner';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -17,7 +16,6 @@ export function FirstRunPanel() {
     const trimmed = name.trim();
     if (!trimmed) return;
     await createCollection(trimmed);
-    toast.success(`Collection "${trimmed}" created`);
   };
 
   return (

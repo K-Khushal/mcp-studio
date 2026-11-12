@@ -34,19 +34,40 @@ const chipClass = (active: boolean) =>
     active ? "bg-primary/15 text-primary-text" : "text-muted-foreground hover:text-foreground",
   );
 
+const PREVIEW_CHARS = 160;
+
+/** Full text for an expanded row: a trailing JSON object/array is pretty-printed; anything else is shown as is. */
+export function expandedMessage(message: string): string {
+  const start = message.search(/[[{]/);
+  if (start === -1) return message;
+  try { return message.slice(0, start) + JSON.stringify(JSON.parse(message.slice(start)), null, 2); } catch { return message; }
+}
+
 function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean; onToggle: () => void }) {
   const { payload } = log;
   const detailId = `log-detail-${log.id}`;
+  // Multiline or long messages (stderr objects, stack traces) collapse to their first line.
+  const newline = log.message.indexOf("\n");
+  const firstLine = newline === -1 ? log.message : log.message.slice(0, newline);
+  const long = !payload && (newline !== -1 || log.message.length > PREVIEW_CHARS);
+  const hiddenLines = newline === -1 ? 0 : log.message.split("\n").length - 1;
   const summary = (
     <>
       <span className="text-muted-foreground shrink-0 tabular-nums">[{formatTimestamp(log.timestamp)}]</span>
       <span className={cn("shrink-0 w-11 font-semibold", levelColors[log.level] ?? "text-foreground")}>{log.level}</span>
       <span className={cn("shrink-0 w-14 font-mono text-xs leading-5 italic", sourceColors[log.source])}>{log.source}</span>
-      <span className="text-foreground">{log.message}</span>
+      {long && !expanded ? (
+        <span className="flex min-w-0 gap-2">
+          <span className="truncate text-foreground">{firstLine.length > PREVIEW_CHARS ? `${firstLine.slice(0, PREVIEW_CHARS)}…` : firstLine}</span>
+          {hiddenLines > 0 && <span className="shrink-0 text-muted-foreground">+{hiddenLines} line{hiddenLines === 1 ? "" : "s"}</span>}
+        </span>
+      ) : (
+        <span className={cn("text-foreground", long ? "min-w-0" : "break-all")}>{long ? firstLine.slice(0, PREVIEW_CHARS) : log.message}</span>
+      )}
     </>
   );
 
-  if (!payload) return <div className="flex gap-2 pl-4">{summary}</div>;
+  if (!payload && !long) return <div className="flex gap-2 pl-4">{summary}</div>;
 
   return (
     <div>
@@ -69,7 +90,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
           id={detailId}
           className="ml-4 my-1 max-h-64 overflow-auto overscroll-contain rounded-md border border-border bg-muted/50 p-2 font-mono text-xs leading-4 text-foreground select-text"
         >
-          {JSON.stringify(payload.body, null, 2)}
+          {payload ? JSON.stringify(payload.body, null, 2) : expandedMessage(log.message)}
         </pre>
       )}
     </div>

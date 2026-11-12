@@ -30,9 +30,9 @@ const UptimeTimer = memo(({ connectedAt }: { connectedAt: number }) => {
   }, [connectedAt]); // restart cleanly on reconnect
 
   return (
-    <div className="flex items-center gap-1">
+    <div className="flex items-center gap-1" title="Session uptime">
       <Timer size={11} />
-      <span className="tabular-nums min-w-14">{formatUptime(now - connectedAt)}</span>
+      <span className="tabular-nums min-w-9">{formatUptime(now - connectedAt)}</span>
     </div>
   );
 });
@@ -66,7 +66,7 @@ export function StatusBar() {
   const { label: statusLabel, dot: statusDot } = STATUS[connectionStatus];
 
   return (
-    <div className="flex items-center h-7 px-4 border-t border-border bg-background text-xs text-muted-foreground gap-4 shrink-0">
+    <div className="flex items-center h-7 px-4 border-t border-border bg-background text-xs text-muted-foreground gap-4 shrink-0 overflow-hidden whitespace-nowrap">
       {/* Active Connection name */}
       {connectedConnectionName && (
         <div className="flex items-center gap-1 min-w-0">
@@ -89,13 +89,13 @@ export function StatusBar() {
       {connectionStatus === 'connected' && connectedAt && <UptimeTimer connectedAt={connectedAt} />}
 
       {/* Last Call latency */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" title="Last Call latency">
         <Clock size={11} />
         <span className="tabular-nums">{requestCount > 0 ? `${latency}ms` : '—'}</span>
       </div>
 
       {/* Total Calls */}
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1" title="Calls this Session">
         <Activity size={11} />
         <span className="tabular-nums">{requestCount} {requestCount === 1 ? 'call' : 'calls'}</span>
       </div>
@@ -109,7 +109,7 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
-      <span className="font-mono">MCP Studio v{__APP_VERSION__}</span>
+      <span className="hidden font-mono sm:inline">MCP Studio v{__APP_VERSION__}</span>
     </div>
   );
 }

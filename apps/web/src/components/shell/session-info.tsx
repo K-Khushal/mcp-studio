@@ -9,9 +9,9 @@ export const STATUS = {
   disconnected: { label: "Not connected", dot: "bg-muted-foreground/40" },
 } as const;
 
-function Chip({ children }: { children: React.ReactNode }) {
+function Chip({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground">
+    <span className={cn("shrink-0 rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs leading-none text-muted-foreground", className)}>
       {children}
     </span>
   );
@@ -37,13 +37,13 @@ export function SessionInfo() {
       {connected && (
         <>
           {serverInfo?.name && (
-            <span className="truncate font-semibold text-foreground">{serverInfo.name}</span>
+            <span className="hidden truncate font-semibold text-foreground sm:inline">{serverInfo.name}</span>
           )}
           {serverInfo?.version && (
-            <span className="shrink-0 font-mono text-muted-foreground">v{serverInfo.version}</span>
+            <span className="hidden shrink-0 font-mono text-muted-foreground md:inline">v{serverInfo.version}</span>
           )}
-          {transport && <Chip>{transport.toUpperCase()}{transport === "http" && httpVariant ? ` · ${httpVariant === "streamable" ? "Streamable HTTP" : "SSE"}` : ""}</Chip>}
-          {protocolVersion && <Chip>MCP {protocolVersion}</Chip>}
+          {transport && <Chip className="hidden lg:inline-block">{transport.toUpperCase()}{transport === "http" && httpVariant ? ` · ${httpVariant === "streamable" ? "Streamable HTTP" : "SSE"}` : ""}</Chip>}
+          {protocolVersion && <Chip className="hidden lg:inline-block">MCP {protocolVersion}</Chip>}
         </>
       )}
     </div>

@@ -1341,7 +1341,9 @@ function handleServerMessage(msg: ServerMessage): void {
           logs: failureLogs,
           lastConnectionError: connectionId ? { connectionId, message: msg.message } : null,
         });
-        toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: Infinity });
+        // The selected Connection shows the failure inline; a toast only reports one the user moved away from.
+        if (connectionId && connectionId === useStore.getState().selectedConnectionId) toast.dismiss("connection-failed");
+        else toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: 10_000 });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
         if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;

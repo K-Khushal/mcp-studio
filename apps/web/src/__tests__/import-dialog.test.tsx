@@ -8,12 +8,15 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 it('previews mixed entries and imports valid Connections into the chosen Collection', async () => {
   useStore.setState({ collections: [{ id: 'c', name: 'Imported', connections: [], createdAt: 0, updatedAt: 0 }] });
   vi.stubGlobal('fetch', vi.fn(async (_url, init) => new Response(JSON.stringify({ id: 'new', ...JSON.parse(init.body), createdAt: 0, updatedAt: 0 }))));
-  render(<ImportConnectionsDialog onClose={() => {}} />);
+  const onClose = vi.fn();
+  render(<ImportConnectionsDialog onClose={onClose} />);
   fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: '{"mcpServers":{"local":{"command":"bun"},"broken":null}}' } });
-  expect(screen.getByText('STDIO · bun')).toBeInTheDocument();
+  expect(screen.getByText('STDIO')).toBeInTheDocument();
+  expect(screen.getByText('bun')).toBeInTheDocument();
   expect(screen.getByText('Expected a server settings object.')).toBeInTheDocument();
   await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
-  expect(await screen.findByText('Imported', { selector: 'p' })).toBeInTheDocument();
+  await vi.waitFor(() => expect(onClose).toHaveBeenCalled());
+  expect(useStore.getState().selectedConnectionId).toBe('new');
   expect(useStore.getState().collections[0]?.connections[0]?.connectionConfig).toEqual({ transport: 'stdio', config: { command: 'bun', args: [], env: {}, inheritSystemEnv: true } });
 });
 
@@ -54,4 +57,28 @@ it('masks sensitive environment values in the preview while keeping imported val
   expect(screen.getByRole('list', { name: 'local arguments' }).children).toHaveLength(2);
   await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
   expect(useStore.getState().collections[0]?.connections[0]?.connectionConfig).toMatchObject({ config: { env: { API_TOKEN: 'private-value' } } });
+});
+
+it('imports mcp-remote as a direct HTTP Connection with masked headers, or keeps STDIO on request', async () => {
+  useStore.setState({ collections: [{ id: 'c', name: 'Target', connections: [], createdAt: 0, updatedAt: 0 }] });
+  vi.stubGlobal('fetch', vi.fn(async (_url, init) => new Response(JSON.stringify({ id: 'new', ...JSON.parse(init.body), createdAt: 0, updatedAt: 0 }))));
+  const source = JSON.stringify({ mcpServers: { remote: { command: 'npx', args: ['-y', 'mcp-remote', 'https://example.com/mcp', '--header', 'X-API-Key: private-value'] } } });
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: source } });
+  expect(screen.getByText('https://example.com/mcp')).toBeInTheDocument();
+  expect(screen.getByRole('list', { name: 'remote headers' })).toHaveTextContent('X-API-Key: •••••••• (masked)');
+  await userEvent.click(screen.getByLabelText('Keep as STDIO (run mcp-remote)'));
+  expect(screen.getByRole('list', { name: 'remote arguments' })).toHaveTextContent('X-API-Key: •••••••• (masked)');
+  expect(screen.getByRole('list', { name: 'remote arguments' })).not.toHaveTextContent('private-value');
+  await userEvent.click(screen.getByLabelText('Keep as STDIO (run mcp-remote)'));
+  await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
+  expect(useStore.getState().collections[0]?.connections[0]?.connectionConfig).toEqual({ transport: 'http', config: { url: 'https://example.com/mcp', headers: { 'X-API-Key': 'private-value' } } });
+});
+
+it('masks a converted header whose value was expanded from env', () => {
+  useStore.setState({ collections: [{ id: 'c', name: 'Target', connections: [], createdAt: 0, updatedAt: 0 }] });
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: JSON.stringify({ mcpServers: { r: { command: 'npx', args: ['mcp-remote', 'https://a.example/mcp', '--header', 'X-Custom: ${AUTH_TOKEN}'], env: { AUTH_TOKEN: 'private-value' } } } }) } });
+  expect(screen.getByRole('list', { name: 'r headers' })).toHaveTextContent('X-Custom: •••••••• (masked)');
+  expect(screen.getByRole('list', { name: 'r headers' })).not.toHaveTextContent('private-value');
 });

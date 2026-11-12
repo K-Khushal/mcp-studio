@@ -7,7 +7,7 @@ import { parseClientMessage } from "./session/client-message.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
 import { createConnection, deleteConnection, updateConnection } from "./db/queries/connections.js";
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
-import { clearOAuthCredentials, oauthStorage } from "./db/queries/oauth-credentials.js";
+import { clearOAuthCredentials, getOAuthStatus, oauthStorage } from "./db/queries/oauth-credentials.js";
 import { oauthCallbackResponse, OAuthRedirects } from "./oauth/redirects.js";
 import { clearLegacyCookie, hasWebSocketToken, isAuthorized, resolveToken, unauthorized } from "./http/access.js";
 import { BadRequest, parseExtraOrigin, readJsonObject, withSecurityHeaders } from "./http/security.js";
@@ -137,8 +137,9 @@ async function route(req: Request, server: Server<SocketData>): Promise<Response
     }
   }
 
-  // Sign out: forget the Connection's OAuth tokens and client registration
+  // OAuth status (no tokens) and sign out: forget the Connection's OAuth tokens and client registration
   const oauthMatch = url.pathname.match(/^\/collections\/([^/]+)\/connections\/([^/]+)\/oauth$/);
+  if (oauthMatch && req.method === "GET") return json(getOAuthStatus(oauthMatch[2]!));
   if (oauthMatch && req.method === "DELETE") {
     await clearOAuthCredentials(oauthMatch[2]!);
     return json({ ok: true });

@@ -1,5 +1,6 @@
 import { useEffect, useCallback, useId, useRef, useState, type KeyboardEvent } from 'react';
-import { ChevronRight } from 'lucide-react';
+import { Wrench } from 'lucide-react';
+import { PanelEmptyState } from '@/components/shared/panel-empty-state';
 import { useStore } from '@/store';
 import { RequiredNotice, RunButton, isRunShortcut } from '@/components/shared/run-button';
 import { ToolIcon, ToolBadges, toolTitle } from './tool-metadata';
@@ -81,7 +82,7 @@ export default function ToolPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
       <ToolList
         tools={tools}
         selectedToolName={selectedTool?.name}
@@ -92,10 +93,7 @@ export default function ToolPanel() {
 
       <div className="flex-1 flex flex-col min-w-0 p-4 gap-4 overflow-y-auto">
         {!selectedTool ? (
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            <ChevronRight size={12} />
-            Select a tool to get started
-          </div>
+          <PanelEmptyState icon={Wrench} title="Select a tool to get started" hint={`${tools.length} tool${tools.length === 1 ? '' : 's'} available. Pick one from the list to fill in its arguments and run it.`} />
         ) : (
           <>
             <div>
