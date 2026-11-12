@@ -18,8 +18,7 @@ export async function createConnection(page: Page, name: string, collection = na
 export async function configureStdio(page: Page, command: string, args: string[]) {
   await page.getByRole('radio', { name: 'STDIO', exact: true }).click();
   await page.getByLabel('Command', { exact: true }).fill(command);
-  const settings = page.getByRole('button', { name: /^STDIO settings:/ });
-  if (await settings.getAttribute('aria-expanded') === 'false') await settings.click();
+  await page.getByRole('tab', { name: /^Arguments/ }).click();
   for (const [index, arg] of args.entries()) {
     await page.getByRole('button', { name: 'Add argument', exact: true }).click();
     await page.getByLabel(`Argument ${index + 1}`, { exact: true }).fill(arg);

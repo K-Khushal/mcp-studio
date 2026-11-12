@@ -133,12 +133,14 @@ test('config import, theme and saved entities survive a packaged CLI restart', a
   await dialog.getByLabel('Target Collection').selectOption('');
   await dialog.getByLabel('New Collection name').fill('Imported Collection');
   await dialog.getByRole('button', { name: 'Import 2 Connections', exact: true }).click();
-  await expect(dialog.getByText('Imported', { exact: true })).toHaveCount(2);
-  await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
+  // Full success closes the dialog and selects the first imported Connection.
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText('Imported 2 Connections', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Rename Connection Imported fixture', exact: true })).toBeVisible();
   await page.getByRole('button', { name: 'Settings', exact: true }).click();
   await page.getByRole('radio', { name: 'Light', exact: true }).click();
   await page.getByRole('dialog').getByRole('button', { name: 'Close', exact: true }).click();
-  await page.getByText('Imported fixture', { exact: true }).click();
+  await page.getByTitle('Imported fixture', { exact: true }).click();
   await page.getByTitle('Active Environment', { exact: true }).click();
   await page.getByRole('button', { name: 'New', exact: true }).click();
   await page.getByPlaceholder('Environment name').fill('Restart Environment');
@@ -160,7 +162,7 @@ test('config import, theme and saved entities survive a packaged CLI restart', a
   await expect(page.getByText('Imported HTTP', { exact: true })).toBeVisible();
   await expect(page.getByRole('button', { name: /^Theme: Light/ })).toBeVisible();
   expect(await page.evaluate(() => getComputedStyle(document.documentElement).colorScheme)).toBe('light');
-  await page.getByText('Imported fixture', { exact: true }).click();
+  await page.getByTitle('Imported fixture', { exact: true }).click();
   await connect(page);
   await selectTool(page, 'echo');
   await jsonArgs(page, { text: 'after restart' });

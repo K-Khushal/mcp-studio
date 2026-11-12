@@ -1,20 +1,20 @@
 import { useEffect, useId, useRef } from 'react';
-import { ChevronRight, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { VariableInput } from '@/components/shared/variable-input';
 import { Switch } from '@/components/ui/switch';
-import { cn } from '@/lib/utils';
 
 const fieldClass = 'h-7 font-mono text-xs';
 
-function Section({ label, htmlFor, children }: { label: string; htmlFor?: string; children: React.ReactNode }) {
+function Section({ label, htmlFor, hideLabel, children }: { label: string; htmlFor?: string; hideLabel?: boolean; children: React.ReactNode }) {
   const id = useId();
+  const labelClass = hideLabel ? 'sr-only' : 'text-xs font-medium text-muted-foreground';
   return (
-    <div role={htmlFor ? undefined : 'group'} aria-labelledby={htmlFor ? undefined : id} className="grid grid-cols-[8rem_1fr] items-start gap-3">
-      {htmlFor ? <label htmlFor={htmlFor} className="pt-1.5 text-xs font-medium text-muted-foreground">{label}</label>
-        : <div id={id} className="pt-1.5 text-xs font-medium text-muted-foreground">{label}</div>}
+    <div role={htmlFor ? undefined : 'group'} aria-labelledby={htmlFor ? undefined : id} className="space-y-1.5">
+      {htmlFor ? <label htmlFor={htmlFor} className={labelClass}>{label}</label>
+        : <div id={id} className={labelClass}>{label}</div>}
       <div className="min-w-0 space-y-1.5">{children}</div>
     </div>
   );
@@ -48,46 +48,23 @@ function useFocusNewRow(count: number) {
   return container;
 }
 
-const plural = (count: number, noun: string) => `${count} ${noun}${count === 1 ? '' : 's'}`;
+/** Non-blank argument count, shown on the Arguments tab. */
+export const stdioArgCount = (args: string[]) => args.filter((arg) => arg !== '').length;
+/** Named Process env count, shown on the Process env tab. */
+export const stdioEnvCount = (env: { key: string }[]) => env.filter((row) => row.key.trim()).length;
 
-export function StdioForm({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
-  const stdio = useStore((s) => s.stdio);
-  const envCount = stdio.env.filter((row) => row.key.trim()).length;
-  const summary = [stdio.command.trim() || 'no command', plural(stdio.args.filter((arg) => arg !== '').length, 'arg'), `${envCount} env`].join(' · ');
-
-  return (
-    <div className="border-t border-border">
-      <button
-        type="button"
-        aria-expanded={open}
-        aria-controls="stdio-settings"
-        aria-label={`STDIO settings: ${summary}`}
-        onClick={() => onOpenChange(!open)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left text-xs text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-hidden focus-visible:ring-2 focus-visible:ring-ring"
-      >
-        <ChevronRight size={12} className={cn('shrink-0 transition-transform', open && 'rotate-90')} />
-        <span className="font-medium">STDIO settings</span>
-        {!open && <span className="min-w-0 truncate font-mono">{summary}</span>}
-      </button>
-      {open && <StdioFields />}
-    </div>
-  );
-}
-
-function StdioFields() {
+/** Arguments tab: the command's args and its working directory. */
+export function StdioArgsPanel() {
   const stdio = useStore((s) => s.stdio);
   const setStdio = useStore((s) => s.setStdio);
   const argsRef = useFocusNewRow(stdio.args.length);
-  const envRef = useFocusNewRow(stdio.env.length);
 
   const setArg = (index: number, value: string) =>
     setStdio({ args: stdio.args.map((arg, i) => (i === index ? value : arg)) });
-  const setEnv = (index: number, patch: Partial<{ key: string; value: string }>) =>
-    setStdio({ env: stdio.env.map((row, i) => (i === index ? { ...row, ...patch } : row)) });
 
   return (
-    <div id="stdio-settings" className="max-h-[40vh] space-y-3 overflow-y-auto px-3 pb-3 pt-1">
-      <Section label="Arguments">
+    <div className="space-y-4 p-4">
+      <Section label="Arguments" hideLabel>
         <div ref={argsRef} className="space-y-1.5">
           {stdio.args.map((arg, index) => (
             <div key={index} data-row className="flex items-center gap-1.5">
@@ -114,8 +91,25 @@ function StdioFields() {
           className={fieldClass}
         />
       </Section>
+    </div>
+  );
+}
 
-      <Section label="Environment">
+/** Process env tab: variables set in the spawned MCP server process (not Studio Variables). */
+export function StdioEnvPanel() {
+  const stdio = useStore((s) => s.stdio);
+  const setStdio = useStore((s) => s.setStdio);
+  const envRef = useFocusNewRow(stdio.env.length);
+
+  const setEnv = (index: number, patch: Partial<{ key: string; value: string }>) =>
+    setStdio({ env: stdio.env.map((row, i) => (i === index ? { ...row, ...patch } : row)) });
+
+  return (
+    <div className="space-y-4 p-4">
+      <p className="text-xs text-muted-foreground">
+        Set in the server process, which reads them as environment variables. Values can use <code className="rounded bg-muted px-1">{'{{Variables}}'}</code> from the active Environment.
+      </p>
+      <Section label="Process env" hideLabel>
         <div ref={envRef} className="space-y-1.5">
           {stdio.env.map((row, index) => (
             <div key={index} data-row className="grid grid-cols-[1fr_1fr_auto] items-center gap-1.5">

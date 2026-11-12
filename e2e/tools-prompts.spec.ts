@@ -125,7 +125,7 @@ test('keyboard-only: pick a tool, run it, keep args across tabs, answer an elici
   await expect(page.getByText('typed by keyboard', { exact: true }).last()).toBeVisible();
 
   // Prompts tab, then back: the Tool's typed arguments survive.
-  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim() === 'Tools', 'Shift+Tab');
+  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim().startsWith('Tools') === true, 'Shift+Tab');
   await page.keyboard.press('ArrowRight');
   await tabTo(page, (el) => el?.tagName === 'BUTTON' && el.textContent?.startsWith('greet') === true);
   await page.keyboard.press('Enter');
@@ -139,7 +139,7 @@ test('keyboard-only: pick a tool, run it, keep args across tabs, answer an elici
   await page.keyboard.press('Control+Enter');
   await expect(page.getByText('Hello, Ada!', { exact: true })).toBeVisible();
 
-  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim() === 'Prompts', 'Shift+Tab');
+  await tabTo(page, (el) => el?.getAttribute('role') === 'tab' && el.textContent?.trim().startsWith('Prompts') === true, 'Shift+Tab');
   await page.keyboard.press('ArrowLeft');
   await expect(page.getByRole('textbox', { name: 'text', exact: true })).toHaveValue('typed by keyboard');
 
