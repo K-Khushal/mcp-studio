@@ -1,8 +1,8 @@
 import { expect, test } from "bun:test";
-import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, mkdtemp, readdir, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ASSET_DIR_PID_FILE, ASSET_DIR_PREFIX, sweepStaleAssetDirs } from "../asset-dirs.js";
+import { ASSET_DIR_PID_FILE, ASSET_DIR_PREFIX, privateAssetBase, sweepStaleAssetDirs } from "../asset-dirs.js";
 
 test("sweeps asset dirs whose binary was killed and keeps live or recent ones", async () => {
   const base = await mkdtemp(join(tmpdir(), "studio-sweep-"));
@@ -31,4 +31,32 @@ test("STUDIO_RESOURCE_DIR is read once and not passed on to child processes", as
     console.log(JSON.stringify({ resourceDir, inherited: inherited.includes("STUDIO_RESOURCE_DIR") }));
   `], { env: { ...process.env, STUDIO_RESOURCE_DIR: "/tmp/studio-assets" }, stdout: "pipe" });
   expect(JSON.parse(await new Response(child.stdout).text())).toEqual({ resourceDir: "/tmp/studio-assets", inherited: false });
+});
+
+test("never follows symlinks or blocks on a FIFO marker", async () => {
+  const base = await mkdtemp(join(tmpdir(), "studio-sweep-"));
+  try {
+    const victim = await mkdtemp(join(tmpdir(), "studio-victim-"));
+    await symlink(victim, join(base, `${ASSET_DIR_PREFIX}link`));
+    await mkdir(join(base, `${ASSET_DIR_PREFIX}fifo`));
+    const mkfifo = Bun.spawnSync(["mkfifo", join(base, `${ASSET_DIR_PREFIX}fifo`, ASSET_DIR_PID_FILE)]);
+    expect(mkfifo.exitCode).toBe(0);
+    const started = Date.now();
+    sweepStaleAssetDirs(base);
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect((await readdir(base)).sort()).toEqual([`${ASSET_DIR_PREFIX}fifo`, `${ASSET_DIR_PREFIX}link`]);
+    expect((await lstat(victim)).isDirectory()).toBe(true);
+    await rm(victim, { recursive: true, force: true });
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+test("uses a private per-user base and refuses one other users can write", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "studio-base-"));
+  try {
+    const base = privateAssetBase(parent)!;
+    expect(base).toBeTruthy();
+    expect((await lstat(base)).mode & 0o777).toBe(0o700);
+    await chmod(base, 0o777);
+    expect(privateAssetBase(parent)).toBeNull();
+  } finally { await rm(parent, { recursive: true, force: true }); }
 });

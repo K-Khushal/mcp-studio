@@ -346,6 +346,12 @@ export class StudioOAuthProvider implements OAuthClientProvider {
 
 export type OAuthRevocation = "revoked" | "unsupported" | "failed" | "none";
 
+/** The SDK's issuer comparison: exact, tolerating one trailing slash. */
+function sameIssuer(stamp: unknown, issuer: string): boolean {
+  if (typeof stamp !== "string") return false;
+  return stamp === issuer || stamp.replace(/\/$/, "") === issuer.replace(/\/$/, "");
+}
+
 /**
  * RFC 7009: best-effort revocation of a Sign-in's tokens at the authorization server, when it
  * advertises a `revocation_endpoint`. Discovery and revocation share one deadline and the
@@ -360,11 +366,18 @@ export async function revokeOAuthTokens(serverUrl: string, credentials: OAuthCre
   const guarded = createOAuthFetch(new URL(serverUrl), options.fetchFn);
   const fetchFn: FetchLike = (input, init) => guarded(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
   try {
-    const { authorizationServerMetadata } = await discoverOAuthServerInfo(serverUrl, { fetchFn });
+    const { authorizationServerUrl, authorizationServerMetadata } = await discoverOAuthServerInfo(serverUrl, { fetchFn });
+    // Only the authorization server that issued them may receive these credentials: the SDK stamps
+    // tokens and client registrations with that issuer. Unstamped or re-pointed credentials are not sent.
+    const issuer = String(authorizationServerUrl);
+    const stamp = (value: unknown) => (value as { issuer?: unknown } | undefined)?.issuer;
+    if (!sameIssuer(stamp(tokens), issuer) || (clientInformation && !sameIssuer(stamp(clientInformation), issuer))) return "unsupported";
     // RFC 8414 fields; OpenID discovery documents may carry them too.
     const metadata = authorizationServerMetadata as { revocation_endpoint?: string; revocation_endpoint_auth_methods_supported?: string[] } | undefined;
     const endpoint = metadata?.revocation_endpoint;
     if (!metadata || !endpoint) return "unsupported";
+    // Tokens and client secrets travel only over HTTPS (HTTP only to loopback), like the approval URL.
+    if (!isSafeOAuthUrl(endpoint)) return "failed";
     let revoked = true;
     for (const [hint, token] of revocable) {
       const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });

@@ -62,7 +62,7 @@ describe("RFC 7009 revocation", () => {
 
   test("authenticates a confidential client with HTTP Basic and revokes refresh before access", async () => {
     const requests: Request[] = [];
-    const outcome = await revokeOAuthTokens(`${origin}/mcp`, { tokens: { access_token: "at", refresh_token: "rt", token_type: "Bearer" }, clientInformation: { client_id: "id", client_secret: "secret" } },
+    const outcome = await revokeOAuthTokens(`${origin}/mcp`, { tokens: { access_token: "at", refresh_token: "rt", token_type: "Bearer", issuer: origin }, clientInformation: { client_id: "id", client_secret: "secret", issuer: origin } } as never,
       { fetchFn: server({ revocation_endpoint: `${origin}/revoke`, revocation_endpoint_auth_methods_supported: ["client_secret_basic"] }, requests) });
     expect(outcome).toBe("revoked");
     expect(requests.map(r => r.headers.get("authorization"))).toEqual([`Basic ${btoa("id:secret")}`, `Basic ${btoa("id:secret")}`]);
@@ -73,15 +73,40 @@ describe("RFC 7009 revocation", () => {
 
   test("reports unsupported without a revocation_endpoint, and none without tokens", async () => {
     const requests: Request[] = [];
-    expect(await revokeOAuthTokens(`${origin}/mcp`, { tokens: { access_token: "at", token_type: "Bearer" } }, { fetchFn: server({}, requests) })).toBe("unsupported");
+    expect(await revokeOAuthTokens(`${origin}/mcp`, { tokens: { access_token: "at", token_type: "Bearer", issuer: origin } } as never, { fetchFn: server({}, requests) })).toBe("unsupported");
     expect(await revokeOAuthTokens(`${origin}/mcp`, { clientInformation: { client_id: "id" } }, { fetchFn: server({}, requests) })).toBe("none");
     expect(requests).toEqual([]);
   });
 
   test("refuses a revocation endpoint on a private address for a public MCP Server", async () => {
     const requests: Request[] = [];
-    const outcome = await revokeOAuthTokens("https://8.8.8.8/mcp", { tokens: { access_token: "at", token_type: "Bearer" } },
+    const outcome = await revokeOAuthTokens("https://8.8.8.8/mcp", { tokens: { access_token: "at", token_type: "Bearer", issuer: "https://8.8.8.8/" } } as never,
       { fetchFn: async (input, init) => (new URL(new Request(input, init).url).pathname === "/revoke" ? server({}, requests)(input, init) : Response.json({ issuer: "https://8.8.8.8", authorization_endpoint: "https://8.8.8.8/a", token_endpoint: "https://8.8.8.8/t", response_types_supported: ["code"], revocation_endpoint: `${origin}/revoke` })) });
+    expect(outcome).toBe("failed");
+    expect(requests).toEqual([]);
+  });
+
+  test("sends nothing when discovery now names a different authorization server than the credentials' issuer", async () => {
+    const requests: Request[] = [];
+    const revocation = { revocation_endpoint: `${origin}/revoke` };
+    const credentials = (issuer?: string) => ({ tokens: { access_token: "at", refresh_token: "rt", token_type: "Bearer", ...(issuer ? { issuer } : {}) }, clientInformation: { client_id: "id", client_secret: "secret", issuer: origin } }) as never;
+    expect(await revokeOAuthTokens(`${origin}/mcp`, credentials("https://old-as.example"), { fetchFn: server(revocation, requests) })).toBe("unsupported");
+    expect(await revokeOAuthTokens(`${origin}/mcp`, credentials(), { fetchFn: server(revocation, requests) })).toBe("unsupported");
+    expect(await revokeOAuthTokens(`${origin}/mcp`, { tokens: { access_token: "at", token_type: "Bearer", issuer: origin }, clientInformation: { client_id: "id", issuer: "https://old-as.example" } } as never, { fetchFn: server(revocation, requests) })).toBe("unsupported");
+    expect(requests).toEqual([]);
+  });
+
+  test("never posts tokens to a plain-HTTP revocation endpoint on a public host", async () => {
+    const requests: Request[] = [];
+    const as = "https://mcp.example";
+    const outcome = await revokeOAuthTokens(`${as}/mcp`, { tokens: { access_token: "at", token_type: "Bearer", issuer: `${as}/` } } as never, {
+      fetchFn: async (input, init) => {
+        const request = new Request(input, init);
+        if (new URL(request.url).hostname === "8.8.8.8") { requests.push(request); return new Response(null, { status: 200 }); }
+        if (new URL(request.url).pathname.startsWith("/.well-known/oauth-authorization-server")) return Response.json({ issuer: as, authorization_endpoint: `${as}/a`, token_endpoint: `${as}/t`, response_types_supported: ["code"], revocation_endpoint: "http://8.8.8.8/revoke" });
+        return new Response("Not found", { status: 404 });
+      },
+    });
     expect(outcome).toBe("failed");
     expect(requests).toEqual([]);
   });

@@ -165,7 +165,9 @@ export class SessionManager {
     this.clearElicitations();
     const reason = "MCP Server connection closed unexpectedly";
     // End running Calls before `disconnected`, which retires the browser's connected workspace.
+    // A Call already aborted (cancel, timeout) reports its own outcome from runCall: one terminal message per Call.
     for (const [requestId, call] of this.calls) {
+      if (call.signal.aborted) continue;
       call.abort("connection_closed");
       this.send({ type: "error", requestId, code: "CONNECTION_CLOSED", message: reason });
     }
