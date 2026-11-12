@@ -21,10 +21,14 @@ try {
   if (!files.length) throw new Error("Build web assets before compiling");
   const entry = join(generated, "entry.ts");
   await Bun.write(entry, `${imports.join("\n")}
-import { mkdtempSync, mkdirSync, rmSync } from "node:fs";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, dirname } from "node:path";
-const root = mkdtempSync(join(tmpdir(), "mcp-studio-assets-"));
+import { ASSET_DIR_PID_FILE, ASSET_DIR_PREFIX, privateAssetBase, sweepStaleAssetDirs } from ${JSON.stringify(resolve("apps/server/src/asset-dirs.ts"))};
+const base = privateAssetBase();
+if (base) sweepStaleAssetDirs(base);
+const root = mkdtempSync(join(base ?? tmpdir(), ASSET_DIR_PREFIX));
+writeFileSync(join(root, ASSET_DIR_PID_FILE), String(process.pid));
 process.on("exit", () => rmSync(root, { recursive: true, force: true }));
 process.once("SIGINT", () => process.exit(130));
 process.once("SIGTERM", () => process.exit(143));

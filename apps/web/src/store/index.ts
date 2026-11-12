@@ -565,6 +565,8 @@ export const useStore = create<AppState & AppActions>()(
         try {
           const response = await studioFetch(`/api/collections/${collectionId}/connections/${connId}/oauth`, { method: "DELETE" });
           if (!response.ok) throw new Error("Sign-out failed");
+          const { revocation } = await response.json().catch(() => ({})) as { revocation?: string };
+          if (revocation === "failed") toast.warning("Signed out on this device", { description: "The authorization server did not confirm that the tokens were revoked.", duration: 10_000 });
           return true;
         } catch {
           toast.error("Failed to sign out", { duration: 10_000 });
@@ -1319,6 +1321,14 @@ function handleServerMessage(msg: ServerMessage): void {
       if (msg.code === "CONNECTION_FAILED") {
         const state = useStore.getState();
         const connectionId = state.connectingConnectionId ?? state.selectedConnectionId;
+        // The Studio Server keeps a live Session when a replacement is rejected before connecting (e.g. unresolved Variables).
+        if (state.connectionStatus === "connected" && state.connectedConnectionCache) {
+          if (!state.logs.some(log => log.source === "studio" && log.level === "ERROR" && log.message === msg.message)) addLog("ERROR", "studio", msg.message);
+          useStore.setState(s => ({ errorCount: s.errorCount + 1, lastConnectionError: connectionId ? { connectionId, message: msg.message } : null }));
+          if (connectionId && connectionId === state.selectedConnectionId) toast.dismiss("connection-failed");
+          else toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: 10_000 });
+          break;
+        }
         // The Studio Server normally sends this log first. Browser transport failures do not.
         if (!state.logs.some(log => log.source === "studio" && log.level === "ERROR" && log.message === msg.message)) {
           addLog("ERROR", "studio", msg.message);
@@ -1346,13 +1356,17 @@ function handleServerMessage(msg: ServerMessage): void {
         else toast.error("Connection failed", { id: "connection-failed", description: msg.message, duration: 10_000 });
         useStore.setState(s => ({ errorCount: s.errorCount + 1 }));
       } else {
+        // A resent requestId is refused while the original Call keeps running.
+        if (msg.code === "DUPLICATE_REQUEST") break;
         if (msg.requestId && (!matchesCall(msg.requestId) || !useStore.getState().connectedConnectionCache?.response.isRunning)) break;
         const errorAt = Date.now();
+        const label = msg.code === "CALL_TIMEOUT" ? "Timeout" : msg.code === "CONNECTION_CLOSED" ? "Connection closed" : "Error";
         useStore.setState((s) => {
           const startedAt = s.connectedConnectionCache?.response.startedAt;
           const elapsed = startedAt ? errorAt - startedAt : 0;
           return {
-            errorCount: s.errorCount + (s.connectionStatus === "disconnected" ? 0 : 1),
+            // The following `disconnected` counts a crash once.
+            errorCount: s.errorCount + (s.connectionStatus === "disconnected" || msg.code === "CONNECTION_CLOSED" ? 0 : 1),
             ...(!s.connectedConnectionCache ? { response: { ...s.response, error: msg.message, outcome: msg.code === "CALL_TIMEOUT" ? "timeout" : "error", isRunning: false, completedAt: errorAt } } : {}),
             latency: elapsed,
             ...syncConnectedWorkspace(s, (workspace) => ({
@@ -1365,7 +1379,7 @@ function handleServerMessage(msg: ServerMessage): void {
                 {
                   scope: "call",
                   durationMs: elapsed,
-                  label: msg.code === "CALL_TIMEOUT" ? "Timeout" : "Error",
+                  label,
                   detail: msg.message,
                   timestamp: fmtTime(errorAt),
                   status: "completed" as const,

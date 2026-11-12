@@ -65,3 +65,49 @@ it("delivers frames even when the protocol log callback throws", async () => {
     expect(await client.connect()).toMatchObject({ serverName: "ping-peer", tools: [], prompts: [] });
   } finally { await client.disconnect(); }
 });
+
+/** Answers the handshake and discovery, never tools/call. */
+class SilentPeer implements Transport {
+  onmessage?: Transport["onmessage"];
+  onclose?: Transport["onclose"];
+  async start() {}
+  async close() { this.onclose?.(); }
+  async send(message: JSONRPCMessage) {
+    if (!("method" in message) || !("id" in message)) return;
+    const results: Record<string, unknown> = {
+      initialize: { protocolVersion: "2025-06-18", capabilities: { tools: {} }, serverInfo: { name: "silent", version: "1" } },
+      "tools/list": { tools: [] },
+    };
+    if (message.method in results) this.onmessage?.({ jsonrpc: "2.0", id: message.id, result: results[message.method] as never });
+  }
+}
+
+class SilentClient extends BaseMCPClient {
+  protected readonly transportPhase = "connect" as const;
+  readonly transport = new SilentPeer();
+  protected async setupTransport() {
+    const client = new Client({ name: "test", version: "1" }, { capabilities: { elicitation: { form: {} } } });
+    await this.connectTransport(client, this.transport);
+    return client;
+  }
+  protected async teardownTransport() { await this.transport.close(); }
+  get pending() { return (this as unknown as { pendingMethods: Map<string, string> }).pendingMethods.size; }
+}
+
+it("forgets requests that are cancelled or cut off by a closed connection", async () => {
+  const client = new SilentClient();
+  await client.connect();
+  const cancelled = new AbortController();
+  const call = client.callTool("never", {}, "r1", { signal: cancelled.signal, timeout: 60_000 }).catch(() => "cancelled");
+  await Promise.resolve();
+  expect(client.pending).toBe(1);
+  cancelled.abort("cancelled");
+  expect(await call).toBe("cancelled");
+  expect(client.pending).toBe(0);
+  const open = client.callTool("never", {}, "r2", { signal: new AbortController().signal, timeout: 60_000 }).catch(() => "closed");
+  await Promise.resolve();
+  expect(client.pending).toBe(1);
+  await client.transport.close();
+  expect(await open).toBe("closed");
+  expect(client.pending).toBe(0);
+});

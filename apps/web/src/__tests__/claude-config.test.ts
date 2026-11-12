@@ -48,3 +48,8 @@ it.each([['http-first', true], ['http-only', true], ['sse-first', false], ['sse-
   const args = ['mcp-remote', 'https://a.example/mcp', '--transport', ...(strategy ? [strategy] : [])];
   expect(mcpRemoteToHttp('npx', args) !== null).toBe(converts);
 });
+
+it('marks disabled: true entries without a Connection or reserving the name', () => {
+  const { entries } = parseClaudeConfig('{"mcpServers":{"off":{"command":"node","disabled":true},"url":{"url":"https://example.com","disabled":true},"on":{"command":"bun","disabled":false}}}', ['off']);
+  expect(entries).toEqual([{ name: 'off', disabled: true }, { name: 'url', disabled: true }, expect.objectContaining({ name: 'on', connection: expect.anything() })]);
+});

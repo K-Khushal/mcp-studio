@@ -6,6 +6,7 @@ import { homedir } from "node:os";
 import { mkdirSync, existsSync, chmodSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import * as schema from "./schema.js";
+import { resourceDir } from "../resources.js";
 
 const DATA_DIR = join(homedir(), ".mcp-studio");
 const dbPath = process.env["STUDIO_DB_PATH"] ?? join(DATA_DIR, "studio.db");
@@ -24,8 +25,8 @@ export const db = drizzle(sqlite, { schema });
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const bundledMigrations = join(__dirname, "drizzle");
-const migrationsFolder = process.env["STUDIO_RESOURCE_DIR"]
-  ? join(process.env["STUDIO_RESOURCE_DIR"], "drizzle")
+const migrationsFolder = resourceDir
+  ? join(resourceDir, "drizzle")
   : existsSync(bundledMigrations) ? bundledMigrations : join(__dirname, "../../drizzle");
 
 migrate(db, { migrationsFolder });

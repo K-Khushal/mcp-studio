@@ -2,7 +2,7 @@ import { studioFetch } from "@/lib/studio-access";
 import { useRef, useState } from 'react';
 import type { Collection, Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
-import { parseClaudeConfig, type ImportEntry } from '@/lib/claude-config';
+import { MAX_IMPORT_BYTES, parseClaudeConfig, type ImportEntry } from '@/lib/claude-config';
 import { isSecretName } from '@/lib/is-secret-name';
 import { toast } from 'sonner';
 import { cn } from '@/lib/utils';
@@ -87,6 +87,7 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
           <Input id="import-file" type="file" accept=".json,application/json" className="h-9 cursor-pointer py-1.5 text-xs text-muted-foreground file:mr-3 file:h-6 file:cursor-pointer file:rounded-md file:bg-muted file:px-2.5 file:text-xs file:text-foreground hover:file:bg-muted/70 md:text-xs" onChange={async event => {
             const file = event.target.files?.[0];
             if (!file) return;
+            if (file.size > MAX_IMPORT_BYTES) { event.target.value = ''; changeSource(''); setError('This file is larger than 1 MiB. Choose claude_desktop_config.json or paste its contents.'); return; }
             try { changeSource(await file.text()); } catch { setError('Could not read this file. Try pasting its contents.'); }
           }} />
         </div>
@@ -115,7 +116,7 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
             <div className="flex items-center gap-2">
               {config && <span className="shrink-0 rounded bg-primary/10 px-1.5 py-0.5 font-mono text-primary-text">{config.transport === 'stdio' ? 'STDIO' : 'HTTP'}</span>}
               <p className="min-w-0 flex-1 truncate font-medium" title={entry.name}>{entry.name}</p>
-              <p className={cn('max-w-[50%] shrink-0 text-right', failed ? 'text-destructive-text' : result === 'Imported' ? 'text-success-text' : 'text-muted-foreground')}>{result || entry.error || 'Ready'}</p>
+              <p className={cn('max-w-[50%] shrink-0 text-right', failed ? 'text-destructive-text' : result === 'Imported' ? 'text-success-text' : 'text-muted-foreground')}>{result || entry.error || (entry.disabled ? 'Disabled in config' : 'Ready')}</p>
             </div>
             {config && <p className="mt-1 break-all font-mono text-muted-foreground">{config.transport === 'stdio' ? config.config.command : config.config.url}</p>}
             {entry.stdioConnection && <div className="mt-2 flex flex-col gap-1 text-muted-foreground">

@@ -82,3 +82,29 @@ it('masks a converted header whose value was expanded from env', () => {
   expect(screen.getByRole('list', { name: 'r headers' })).toHaveTextContent('X-Custom: •••••••• (masked)');
   expect(screen.getByRole('list', { name: 'r headers' })).not.toHaveTextContent('private-value');
 });
+
+it('refuses a file over 1 MiB without reading it', async () => {
+  useStore.setState({ collections: [] });
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  const file = new File(['x'], 'huge.json', { type: 'application/json' });
+  Object.defineProperty(file, 'size', { value: 1024 * 1024 + 1 });
+  const text = vi.fn(async () => '{"mcpServers":{"a":{"command":"bun"}}}');
+  Object.defineProperty(file, 'text', { value: text });
+  await userEvent.upload(screen.getByLabelText('Choose JSON file'), file);
+  expect(screen.getByRole('alert')).toHaveTextContent('larger than 1 MiB');
+  expect(text).not.toHaveBeenCalled();
+  expect(screen.getByLabelText('Configuration JSON')).toHaveValue('');
+});
+
+it('shows disabled entries as "Disabled in config" and does not import them', async () => {
+  useStore.setState({ collections: [{ id: 'c', name: 'Imported', connections: [], createdAt: 0, updatedAt: 0 }] });
+  const fetch = vi.fn(async (_url, init) => new Response(JSON.stringify({ id: 'new', ...JSON.parse(init.body), createdAt: 0, updatedAt: 0 })));
+  vi.stubGlobal('fetch', fetch);
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: '{"mcpServers":{"on":{"command":"bun"},"off":{"command":"node","disabled":true}}}' } });
+  expect(screen.getByText('Disabled in config')).toBeInTheDocument();
+  expect(screen.queryByText('node')).toBeNull();
+  await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
+  await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  expect(JSON.parse(fetch.mock.calls[0]![1].body)).toMatchObject({ name: 'on' });
+});

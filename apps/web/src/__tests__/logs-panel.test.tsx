@@ -104,6 +104,14 @@ describe("LogsPanel source, level and search filters", () => {
     expect(screen.queryByText(/"jsonrpc": "2.0"/)).toBeNull();
   });
 
+  it("shows a truncated body as its raw JSON text, not a quoted string", () => {
+    useStore.setState({ logs: [{ id: "t", level: "DEBUG", source: "protocol", message: "← tools/call #3", timestamp: 0,
+      payload: { direction: "in", method: "tools/call", id: 3, body: '{"jsonrpc":"2.0","id":3,"result":{"text":"aa [truncated, 20000 bytes]', truncated: true } }] });
+    render(<LogsPanel />);
+    fireEvent.click(screen.getByRole("button", { name: /tools\/call #3/ }));
+    expect(document.getElementById("log-detail-t")?.textContent).toBe('{"jsonrpc":"2.0","id":3,"result":{"text":"aa [truncated, 20000 bytes]');
+  });
+
   it("renders plain entries without an expander", () => {
     render(<LogsPanel />);
     expect(screen.queryByRole("button", { name: /Connected/ })).toBeNull();

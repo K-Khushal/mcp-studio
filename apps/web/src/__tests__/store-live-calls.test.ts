@@ -80,3 +80,41 @@ it("retains only the latest 50 progress steps and preserves Session phases", asy
   expect(timeline.filter(step => step.label === "Progress")[0]?.detail).toBe("151");
   expect(timeline.filter(step => step.scope === "session")).toHaveLength(2);
 });
+
+it("ignores DUPLICATE_REQUEST for the running Call", async () => {
+  await useStore.getState().invokeTool("slow", {});
+  const requestId = useStore.getState().response.requestId!;
+  receive({ type: "error", requestId, code: "DUPLICATE_REQUEST", message: "A Call with this requestId is already running" });
+  expect(useStore.getState().response).toMatchObject({ isRunning: true, error: null, outcome: null });
+  expect(useStore.getState().errorCount).toBe(0);
+  receive({ type: "result", requestId, data: { content: [] } });
+  expect(useStore.getState().response.outcome).toBe("result");
+});
+
+it("a crash ends the running Call with a Connection closed step and counts once", async () => {
+  await useStore.getState().invokeTool("slow", {});
+  const requestId = useStore.getState().response.requestId!;
+  const reason = "MCP Server connection closed unexpectedly";
+  receive({ type: "error", requestId, code: "CONNECTION_CLOSED", message: reason });
+  receive({ type: "log", level: "ERROR", source: "studio", message: reason, timestamp: 2 });
+  receive({ type: "status", status: "disconnected" });
+  receive({ type: "disconnected", reason });
+  const state = useStore.getState();
+  expect(state.response).toMatchObject({ isRunning: false, outcome: "error", error: reason });
+  expect(state.timeline.at(-1)).toMatchObject({ label: "Connection closed", detail: reason });
+  expect(state.errorCount).toBe(1);
+});
+
+it("a rejected replacement connect leaves the live Session connected", async () => {
+  receive({ type: "log", level: "ERROR", source: "studio", message: "Unresolved Variables: MISSING_URL", timestamp: 3 });
+  receive({ type: "error", code: "CONNECTION_FAILED", message: "Unresolved Variables: MISSING_URL" });
+  const state = useStore.getState();
+  expect(state.connectionStatus).toBe("connected");
+  expect(state.connectedConnectionId).toBe("live");
+  expect(state.connectedConnectionCache).not.toBeNull();
+  expect(state.lastConnectionError).toEqual({ connectionId: "live", message: "Unresolved Variables: MISSING_URL" });
+  expect(state.logs.filter(log => log.message === "Unresolved Variables: MISSING_URL")).toHaveLength(1);
+  await state.invokeTool("echo", {});
+  receive({ type: "result", requestId: useStore.getState().response.requestId!, data: { content: [] } });
+  expect(useStore.getState().response.outcome).toBe("result");
+});

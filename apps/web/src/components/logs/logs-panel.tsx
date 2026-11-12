@@ -5,7 +5,7 @@ import type { LogLevel, LogSource } from "@mcp-studio/types";
 import { CopyButton } from "../response/copy-button";
 import { cn } from "@/lib/utils";
 import type { LogEntry } from "@/store";
-import { LOG_LEVELS, LOG_SOURCES, filterLogs, formatLogLine } from "./filter-logs";
+import { LOG_LEVELS, LOG_SOURCES, filterLogs, formatLogBody, formatLogLine } from "./filter-logs";
 
 const levelColors: Record<string, string> = {
   INFO: "text-foreground",
@@ -90,7 +90,7 @@ function LogRow({ log, expanded, onToggle }: { log: LogEntry; expanded: boolean;
           id={detailId}
           className="ml-4 my-1 max-h-64 overflow-auto overscroll-contain rounded-md border border-border bg-muted/50 p-2 font-mono text-xs leading-4 text-foreground select-text"
         >
-          {payload ? JSON.stringify(payload.body, null, 2) : expandedMessage(log.message)}
+          {payload ? formatLogBody(payload, 2) : expandedMessage(log.message)}
         </pre>
       )}
     </div>

@@ -26,9 +26,14 @@ export function filterLogs(logs: LogEntry[], { level, source, search }: LogFilte
   );
 }
 
+/** A truncated body is already JSON text; quoting it again would hide the frame. */
+export function formatLogBody(payload: LogPayload, space?: number): string {
+  return payload.truncated ? String(payload.body) : JSON.stringify(payload.body, null, space) ?? "";
+}
+
 function searchableText(l: LogEntry): string {
   const text = l.payload
-    ? `${l.message} ${l.payload.method ?? ""} ${l.payload.id ?? ""} ${JSON.stringify(l.payload.body)}`
+    ? `${l.message} ${l.payload.method ?? ""} ${l.payload.id ?? ""} ${formatLogBody(l.payload)}`
     : l.message;
   return text.toLowerCase();
 }
@@ -36,7 +41,7 @@ function searchableText(l: LogEntry): string {
 /** Plain-text form of an entry for copy-to-clipboard. */
 export function formatLogLine(l: LogEntry, time: string): string {
   const line = `[${time}] ${l.level} [${l.source}] ${l.message}`;
-  return l.payload ? `${line}\n${JSON.stringify(l.payload.body, null, 2)}` : line;
+  return l.payload ? `${line}\n${formatLogBody(l.payload, 2)}` : line;
 }
 
 /** Bound retained frame bodies and build the search index once, at ingestion. */
@@ -46,10 +51,10 @@ export function prepareLog(message: string, payload?: LogPayload): { message: st
   const maxBodyLength = 64 * 1024;
   let storedPayload = payload;
   if (payload) {
-    const body = JSON.stringify(payload.body) ?? "";
+    const body = formatLogBody(payload);
     if (body.length > maxBodyLength) {
       const marker = "… [truncated]";
-      storedPayload = { ...payload, body: body.slice(0, maxBodyLength - marker.length) + marker };
+      storedPayload = { ...payload, body: body.slice(0, maxBodyLength - marker.length) + marker, truncated: true };
     }
   }
   if (storedPayload) storedPayload = {
@@ -58,7 +63,7 @@ export function prepareLog(message: string, payload?: LogPayload): { message: st
     id: typeof storedPayload.id === 'string' ? storedPayload.id.slice(0, 1024) : storedPayload.id,
   };
   const searchText = storedPayload
-    ? `${message} ${storedPayload.method ?? ""} ${storedPayload.id ?? ""} ${JSON.stringify(storedPayload.body)}`.toLowerCase()
+    ? `${message} ${storedPayload.method ?? ""} ${storedPayload.id ?? ""} ${formatLogBody(storedPayload)}`.toLowerCase()
     : message.toLowerCase();
   return { message, ...(storedPayload ? { payload: storedPayload } : {}), searchText };
 }

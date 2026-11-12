@@ -38,6 +38,8 @@ export interface LogPayload {
   method?: string;
   id?: string | number;
   body: unknown;
+  /** `body` is a cut-off JSON text, not the frame itself. */
+  truncated?: true;
 }
 
 export type ServerMessage =

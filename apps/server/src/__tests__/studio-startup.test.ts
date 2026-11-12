@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { chmod, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { connect } from "node:net";
 import { join } from "node:path";
 import { resolveToken } from "../http/access.js";
 import { parseExtraOrigin } from "../http/security.js";
@@ -37,6 +38,21 @@ test("a Host naming another port is rejected", async () => {
   try {
     expect((await studio.request("/collections", { headers: { Host: "localhost:7" } })).status).toBe(403);
     expect((await studio.request("/collections", { headers: { Host: `localhost:${studio.port}` } })).status).toBe(200);
+  } finally { await studio.stop(); }
+});
+
+test("a malformed Host is a 400, not a 500", async () => {
+  const studio = await startStudioServer({ STUDIO_PRODUCTION: "1" });
+  const statusLine = (host: string) => new Promise<string>((resolve, reject) => {
+    const socket = connect(studio.port, "127.0.0.1", () => socket.write(`GET /collections HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`));
+    let data = "";
+    socket.on("data", chunk => { data += chunk; });
+    socket.on("end", () => resolve(data.split("\r\n")[0]!));
+    socket.on("error", reject);
+  });
+  try {
+    for (const host of ["local host", "[::1", "%", "localhost:99999999"]) expect(await statusLine(host)).toBe("HTTP/1.1 400 Bad Request");
+    expect(studio.output()).not.toContain("Request failed");
   } finally { await studio.stop(); }
 });
 

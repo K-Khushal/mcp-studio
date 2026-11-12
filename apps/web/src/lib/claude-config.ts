@@ -2,7 +2,9 @@ import type { Connection, HttpConfig } from '@mcp-studio/types';
 
 export type ImportedConnection = Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>;
 /** `stdioConnection` is set when `connection` was converted from an `mcp-remote` STDIO proxy to a direct HTTP Connection. */
-export interface ImportEntry { name: string; connection?: ImportedConnection; stdioConnection?: ImportedConnection; error?: string }
+export interface ImportEntry { name: string; connection?: ImportedConnection; stdioConnection?: ImportedConnection; error?: string; disabled?: true }
+/** Config files are read whole into memory; real ones are a few KiB. */
+export const MAX_IMPORT_BYTES = 1024 * 1024;
 export interface ImportPreview { entries: ImportEntry[]; error?: string }
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const strings = (value: unknown): value is Record<string, string> => record(value) && Object.values(value).every(v => typeof v === 'string');
@@ -55,6 +57,7 @@ export function parseClaudeConfig(source: string, existingNames: string[] = []):
   const entries = Object.entries(data.mcpServers).map(([name, value]): ImportEntry => {
     const invalid = (error: string) => ({ name, error });
     if (!name.trim()) return invalid('Connection name cannot be empty.');
+    if (record(value) && value.disabled === true) return { name, disabled: true };
     if (names.has(name)) return invalid('A Connection with this name already exists in the Collection.');
     names.add(name);
     if (!record(value)) return invalid('Expected a server settings object.');

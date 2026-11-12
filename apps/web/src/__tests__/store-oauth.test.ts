@@ -84,6 +84,16 @@ it("reports a failed sign-out instead of silently retaining credentials", async 
   expect(error).toHaveBeenCalledWith("Failed to sign out", { duration: 10_000 });
 });
 
+it("warns when the authorization server did not confirm revocation, but still signs out", async () => {
+  const warning = vi.spyOn(toast, "warning").mockReturnValue("revocation");
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ok: true, revocation: "revoked" })));
+  expect(await useStore.getState().signOut("col-1", "conn-1")).toBe(true);
+  expect(warning).not.toHaveBeenCalled();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ ok: true, revocation: "failed" })));
+  expect(await useStore.getState().signOut("col-1", "conn-1")).toBe(true);
+  expect(warning).toHaveBeenCalledWith("Signed out on this device", expect.objectContaining({ description: expect.stringContaining("did not confirm") }));
+});
+
 it.each(["ms-settings:privacy", "javascript:alert(1)", "data:text/html,test", "ftp://auth.example.com", "http://auth.example.com/authorize", "http://localhost.evil.test/authorize", "http://127.evil.test/authorize", "not a URL"])("refuses unsafe sign-in URL %s", async (url) => {
   const open = vi.fn();
   vi.stubGlobal("open", open);
