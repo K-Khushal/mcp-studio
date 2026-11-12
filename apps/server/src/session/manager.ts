@@ -16,6 +16,8 @@ import { nanoid } from "../utils/nanoid.js";
 type Send = (msg: ServerMessage) => void;
 
 export interface SessionOptions {
+  /** Whole connect deadline, including discovery and browser sign-in; defaults to 120 seconds. */
+  connectTimeoutMs?: number;
   /** Enables OAuth sign-in for HTTP Connections. */
   oauth?: {
     redirectUrl: string;
@@ -209,7 +211,20 @@ export class SessionManager {
     this.setStatus("connecting");
     const lifecycle = new AbortController();
     this.signInAbort = lifecycle;
+    let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
 
+    const timeout = this.options.connectTimeoutMs ?? 120_000;
+    let rejectTimeout: (error: Error) => void;
+    const deadline = new Promise<never>((_, reject) => { rejectTimeout = reject; });
+    const clock = {
+      pause: () => { clearTimeout(connectTimer); },
+      resume: () => {
+        if (settled || lifecycle.signal.aborted) return;
+        clearTimeout(connectTimer);
+        connectTimer = setTimeout(() => rejectTimeout(new Error(`Connection timed out after ${timeout} ms`)), timeout);
+      },
+    };
     try {
       const client: MCPClientInterface =
         config.transport === "stdio"
@@ -233,12 +248,15 @@ export class SessionManager {
               onHttpResponse: (requestId, status, headers) =>
                 this.send({ type: "http_response", requestId, status, headers }),
               oauth: config.config.auth?.type === "oauth"
-                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal)
+                ? this.oauthSignIn(msg.connectionId, config.config.url, lifecycle.signal, clock)
                 : undefined,
             });
 
       this.client = client;
-      const info = await client.connect();
+      // SDK request timers do not cover a transport send stuck reading HTTP.
+      // Bound the entire handshake and initial tool/prompt discovery instead.
+      clock.resume();
+      const info = await Promise.race([client.connect(), deadline]);
       if (lifecycle.signal.aborted || this.client !== client) {
         await client.disconnect();
         return;
@@ -255,6 +273,7 @@ export class SessionManager {
       });
     } catch (err) {
       if (lifecycle.signal.aborted || this.signInAbort !== lifecycle) return;
+      lifecycle.abort();
       this.clearElicitations();
       this.setStatus("error");
       try { await this.client?.disconnect(); } catch { /* Best-effort cleanup or persistence; retain in-memory state. */ }
@@ -268,6 +287,9 @@ export class SessionManager {
       this.send({ type: "log", level: "ERROR", source: "studio", message, timestamp: Date.now() });
 
       this.send({ type: "error", message, code: "CONNECTION_FAILED" });
+    } finally {
+      settled = true;
+      clearTimeout(connectTimer);
     }
   }
 
@@ -381,7 +403,7 @@ export class SessionManager {
     }
   }
 
-  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal): OAuthSignIn | undefined {
+  private oauthSignIn(connectionId: string | undefined, serverUrl: string, signal: AbortSignal, clock: { pause(): void; resume(): void }): OAuthSignIn | undefined {
     const oauth = this.options.oauth;
     if (!oauth) return undefined;
     return {
@@ -390,8 +412,10 @@ export class SessionManager {
       storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
       authorize: (_authorizationUrl, state, flowSignal) => oauth.redirects.wait(state, flowSignal),
       onAuthorization: authorizationUrl => {
+        clock.pause();
         this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
+        return clock.resume;
       },
     };
   }
