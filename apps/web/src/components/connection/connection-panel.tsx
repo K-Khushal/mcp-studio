@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils';
 import { useStore } from '@/store';
 import EnvironmentPanel from '../environments/environment-panel';
 import { OAuthSignInNotice } from '../auth/oauth-sign-in-notice';
-import { Loader2, Plug, Unplug } from 'lucide-react';
+import { CircleAlert, Loader2, Plug, Unplug } from 'lucide-react';
 import { VariableInput } from '@/components/shared/variable-input';
 import { buildConnectionConfig, headersFromRows, isConnectable } from '@/store/connection-form';
 import { SegmentedControl } from '@/components/ui/segmented-control';
@@ -202,23 +202,25 @@ export function ConnectionPanel() {
       </div>
 
       {/* Connection controls */}
-      <div className="flex items-center gap-3 p-3">
+      <div className="flex flex-wrap items-center gap-3 p-3 sm:flex-nowrap">
         <SegmentedControl aria-label="Transport" value={transport} onValueChange={setTransport} options={[{ value: 'stdio', label: 'STDIO' }, { value: 'http', label: 'HTTP' }]} />
 
+        <div className="order-last min-w-0 basis-full sm:order-none sm:flex-1 sm:basis-auto">
         <VariableInput
           value={transport === 'stdio' ? stdio.command : connectionUrl}
           onChange={(e) => (transport === 'stdio' ? setStdio({ command: e.target.value }) : setConnectionUrl(e.target.value))}
           onKeyDown={(e) => e.key === 'Enter' && canConnect && !isSelectedConnectionConnected && !isSelectedConnectionConnecting && handleConnect()}
           aria-label={transport === 'stdio' ? 'Command' : 'Server URL'}
           placeholder={transport === 'stdio' ? 'npx' : 'http://localhost:4000'}
-          className="flex-1 font-mono"
+          className="font-mono"
         />
+        </div>
 
         <button
           onClick={handleConnect}
           disabled={isConnecting || (!canConnect && !isSelectedConnectionConnected)}
           className={cn(
-            'flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors',
+            'ml-auto flex items-center gap-1.5 px-4 py-1.5 rounded-md text-xs font-medium transition-colors sm:ml-0',
             isSelectedConnectionConnected
               ? 'bg-destructive/15 text-destructive-text hover:bg-destructive/25'
               : 'bg-primary text-primary-foreground hover:bg-primary/90',
@@ -230,8 +232,9 @@ export function ConnectionPanel() {
         </button>
       </div>
       {lastConnectionError?.connectionId === selectedConnectionId && (
-        <p role="alert" className="mx-3 mb-3 flex items-start gap-2 text-xs leading-relaxed text-foreground">
-          <span className="shrink-0 font-semibold">{lastConnectionError.sessionEnded ? 'Session ended:' : 'Connection failed:'}</span>
+        <p role="alert" className="mx-3 mb-3 flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+          <CircleAlert size={14} aria-hidden className="mt-0.5 shrink-0 text-destructive-text" />
+          <span className="shrink-0 font-semibold text-destructive-text">{lastConnectionError.sessionEnded ? 'Session ended:' : 'Connection failed:'}</span>
           <span className="min-w-0 whitespace-pre-wrap break-words">{lastConnectionError.message}</span>
         </p>
       )}

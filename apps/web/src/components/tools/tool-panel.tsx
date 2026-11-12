@@ -82,7 +82,7 @@ export default function ToolPanel() {
   }
 
   return (
-    <div className="flex h-full min-h-0">
+    <div className="flex h-full min-h-0 flex-col md:flex-row">
       <ToolList
         tools={tools}
         selectedToolName={selectedTool?.name}

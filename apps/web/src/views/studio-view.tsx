@@ -72,7 +72,7 @@ export function StudioView() {
 
       {/* Tabs */}
       {/* Radix keeps the roving tab stop on the last focused tab; remount when the app switches tabs itself */}
-      <TabsList key={`${selectedConnectionId}:${live}:${transport}`} aria-label="Workspace">
+      <TabsList key={`${selectedConnectionId}:${live}:${transport}`} aria-label="Workspace" className="overflow-x-auto whitespace-nowrap [scrollbar-width:none]">
         {tabs.map(trigger)}
         <div aria-hidden className="mx-1.5 h-3.5 w-px self-center bg-border" />
         {callTabs.map(trigger)}

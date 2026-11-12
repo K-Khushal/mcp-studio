@@ -31,8 +31,8 @@ export function ResponseHeader({
   copyText,
 }: ResponseHeaderProps) {
   return (
-    <div className="flex items-center justify-between px-4 py-2 border-b border-border shrink-0">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-4 py-2 border-b border-border shrink-0">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
           Response
         </span>

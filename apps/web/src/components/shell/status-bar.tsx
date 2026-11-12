@@ -66,7 +66,7 @@ export function StatusBar() {
   const { label: statusLabel, dot: statusDot } = STATUS[connectionStatus];
 
   return (
-    <div className="flex items-center h-7 px-4 border-t border-border bg-background text-xs text-muted-foreground gap-4 shrink-0">
+    <div className="flex items-center h-7 px-4 border-t border-border bg-background text-xs text-muted-foreground gap-4 shrink-0 overflow-hidden whitespace-nowrap">
       {/* Active Connection name */}
       {connectedConnectionName && (
         <div className="flex items-center gap-1 min-w-0">
@@ -109,7 +109,7 @@ export function StatusBar() {
       )}
 
       <div className="flex-1" />
-      <span className="font-mono">MCP Studio v{__APP_VERSION__}</span>
+      <span className="hidden font-mono sm:inline">MCP Studio v{__APP_VERSION__}</span>
     </div>
   );
 }

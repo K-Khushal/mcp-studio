@@ -25,11 +25,12 @@ beforeEach(() => {
   useStore.setState({ selectedConnectionId: "first", lastConnectionError: null, connectionStatus: "disconnected" });
 });
 
-it("replaces the persistent failure toast when a connection is retried", async () => {
+it("reports the selected Connection's failure inline, without a duplicate toast, across retries", async () => {
   await useStore.getState().connect(config);
   await useStore.getState().connect(config);
 
-  expect(toast.getToasts().filter(item => "title" in item && item.title === "Connection failed")).toHaveLength(1);
+  expect(toast.getToasts().filter(item => "title" in item && item.title === "Connection failed")).toHaveLength(0);
+  expect(useStore.getState().lastConnectionError?.connectionId).toBe("first");
 });
 
 it("clears the previous failure on switching Connections and on disconnect", async () => {

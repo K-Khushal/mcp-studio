@@ -19,6 +19,8 @@ test("failure toasts and logs use the sanitized Studio Server message without ad
     auth: { type: "bearer", token: "private-bearer-value" },
     headers: { Cookie: "private-cookie-value", "X-Api-Key": "private-header-value" },
   } });
+  // Moving away while connecting: the failure is no longer shown inline, so it toasts.
+  useStore.setState({ selectedConnectionId: "elsewhere" });
   deliver({ type: "error", code: "CONNECTION_FAILED", message: "Authentication failed for [REDACTED]" });
   const failure = toast.getToasts().find(item => item.id === "connection-failed");
   expect(failure).toMatchObject({ title: "Connection failed", description: "Authentication failed for [REDACTED]" });
