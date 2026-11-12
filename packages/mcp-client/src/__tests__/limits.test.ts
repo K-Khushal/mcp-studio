@@ -1,5 +1,5 @@
 import { expect, it } from 'vitest';
-import { boundedText, limitResponseBody, BoundedLines } from '../limits.js';
+import { boundedText, limitResponseBody, BoundedLines, StderrEntries } from '../limits.js';
 
 it('bounds Unicode text and reports original byte count', () => {
   expect(boundedText('😀'.repeat(100), 16)).toContain('truncated, 400 bytes');
@@ -48,4 +48,19 @@ it('passes through unterminated SSE bytes at EOF without adding a dispatch delim
 
 it.each([1, 2, 3, 8, 64])('enforces the per-event cap for CRLF chunks of %i bytes', async size => {
   await expect(limitResponseBody(sseResponse('data: ok\r\n\r\ndata: ' + 'x'.repeat(32) + '\r\n\r\n', size), 16).text()).rejects.toThrow('SSE event exceeds 16 bytes');
+});
+it('joins a pretty-printed object and stack frames into single stderr entries', () => {
+  const entries: string[] = [];
+  const stderr = new StderrEntries(entry => entries.push(entry));
+  for (const line of ['[1] Connected', '[1] [Local→Remote] initialize', '[1] {', '  "method": "a{b",', '  "params": {}', '}', '', 'Error: boom', '    at main (x.js:1)', 'done']) stderr.push(line);
+  stderr.flush();
+  expect(entries).toEqual(['[1] Connected', '[1] [Local→Remote] initialize', '[1] {\n  "method": "a{b",\n  "params": {}\n}', 'Error: boom\n    at main (x.js:1)', 'done']);
+});
+it('emits a pending stderr entry after a quiet period', async () => {
+  const entries: string[] = [];
+  const stderr = new StderrEntries(entry => entries.push(entry), 5);
+  stderr.push('ready');
+  expect(entries).toEqual([]);
+  await new Promise(resolve => setTimeout(resolve, 20));
+  expect(entries).toEqual(['ready']);
 });

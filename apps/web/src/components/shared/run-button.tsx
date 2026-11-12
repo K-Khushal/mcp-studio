@@ -26,9 +26,9 @@ export function RunButton({ label, running, disabled, describedBy, onClick }: Ru
       aria-keyshortcuts="Control+Enter Meta+Enter"
       className="shrink-0 gap-1.5 text-xs"
     >
-      <Play size={12} aria-hidden="true" />
+      <Play size={12} aria-hidden="true" className="fill-current" />
       {running ? 'Running…' : label}
-      {!running && <kbd aria-hidden="true" className="ml-1 font-mono text-xs opacity-80">{isMac ? '⌘↵' : 'Ctrl+↵'}</kbd>}
+      {!running && <kbd aria-hidden="true" className="ml-0.5 inline-flex h-4 items-center rounded-sm bg-primary-foreground/15 px-1 font-sans text-xs leading-none">{isMac ? '⌘ ↵' : 'Ctrl ↵'}</kbd>}
     </Button>
   );
 }

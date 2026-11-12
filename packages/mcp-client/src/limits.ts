@@ -85,3 +85,48 @@ export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024
   });
   return new Response(body, { status: response.status, statusText: response.statusText, headers: response.headers });
 }
+
+/** Net `{`/`[` nesting a line opens, ignoring brackets inside double-quoted strings. */
+function bracketDelta(line: string): number {
+  let delta = 0;
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (quoted) { if (c === '\\') i++; else if (c === '"') quoted = false; }
+    else if (c === '"') quoted = true;
+    else if (c === '{' || c === '[') delta++;
+    else if (c === '}' || c === ']') delta--;
+  }
+  return delta;
+}
+
+/**
+ * Joins stderr lines that belong together — a pretty-printed JSON object, indented stack frames —
+ * into one entry. A line continues the entry while brackets are open or when it is indented or a closer;
+ * the entry is emitted when an unrelated line arrives, after `idleMs` of quiet, or at `maxBytes`.
+ */
+export class StderrEntries {
+  private lines: string[] = [];
+  private bytes = 0;
+  private depth = 0;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  constructor(private emit: (entry: string) => void, private idleMs = 10, private maxBytes = 16 * 1024) {}
+  push(line: string) {
+    if (!line.trim()) return;
+    const size = encoder.encode(line).length + 1;
+    const continues = this.lines.length > 0 && (this.depth > 0 || /^\s/.test(line) || /^[\]}]/.test(line));
+    if (!continues || this.bytes + size > this.maxBytes) this.flush();
+    this.lines.push(line);
+    this.bytes += size;
+    this.depth = Math.max(0, this.depth + bracketDelta(line));
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.flush(), this.idleMs);
+  }
+  flush() {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null; }
+    if (this.lines.length) this.emit(this.lines.join('\n').trim());
+    this.lines = [];
+    this.bytes = 0;
+    this.depth = 0;
+  }
+}

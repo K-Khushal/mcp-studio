@@ -1,10 +1,45 @@
-import type { Connection } from '@mcp-studio/types';
+import type { Connection, HttpConfig } from '@mcp-studio/types';
 
 export type ImportedConnection = Omit<Connection, 'id' | 'createdAt' | 'updatedAt'>;
-export interface ImportEntry { name: string; connection?: ImportedConnection; error?: string }
+/** `stdioConnection` is set when `connection` was converted from an `mcp-remote` STDIO proxy to a direct HTTP Connection. */
+export interface ImportEntry { name: string; connection?: ImportedConnection; stdioConnection?: ImportedConnection; error?: string }
 export interface ImportPreview { entries: ImportEntry[]; error?: string }
 const record = (value: unknown): value is Record<string, unknown> => typeof value === 'object' && value !== null && !Array.isArray(value);
 const strings = (value: unknown): value is Record<string, string> => record(value) && Object.values(value).every(v => typeof v === 'string');
+const isHttpUrl = (value: string) => { try { return ['http:', 'https:'].includes(new URL(value).protocol); } catch { return false; } };
+
+const RUNNERS = new Set(['npx', 'bunx', 'pnpx']);
+const RUNNER_FLAGS = new Set(['-y', '--yes']);
+// The SDK negotiates these itself; a copied Accept would break the legacy SSE fallback.
+const TRANSPORT_HEADERS = new Set(['accept', 'content-type']);
+
+/**
+ * `npx -y mcp-remote <url> [--header "Name: value"]…` is a STDIO bridge to an HTTP server Studio can reach directly.
+ * Returns null when the args use anything beyond the URL, headers and `--transport`, so unknown behaviour stays STDIO.
+ */
+export function mcpRemoteToHttp(command: string, args: string[], env: Record<string, string> = {}): HttpConfig | null {
+  if (!RUNNERS.has(command.replace(/\.cmd$/i, '').split(/[\\/]/).pop()!)) return null;
+  let index = 0;
+  while (index < args.length && RUNNER_FLAGS.has(args[index]!)) index++;
+  if (!/^mcp-remote(@[\w.-]+)?$/.test(args[index] ?? '')) return null;
+  const url = args[index + 1];
+  if (!url || !isHttpUrl(url)) return null;
+  const headers: Record<string, string> = {};
+  // mcp-remote expands ${VAR} from env so secrets can stay out of args.
+  const expand = (value: string) => value.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (match, name: string) => Object.hasOwn(env, name) ? env[name]! : match);
+  for (let i = index + 2; i < args.length; i++) {
+    const arg = args[i]!;
+    if (arg === '--header') {
+      const header = expand(args[++i] ?? '');
+      const colon = header.indexOf(':');
+      if (colon < 1 || header.includes('${')) return null;
+      const name = header.slice(0, colon).trim();
+      if (!TRANSPORT_HEADERS.has(name.toLowerCase())) headers[name] = header.slice(colon + 1).trim();
+    } else if (arg === '--transport') i++;
+    else return null;
+  }
+  return { url, headers, ...(Object.keys(headers).length ? {} : { auth: { type: 'oauth' as const } }) };
+}
 
 export function parseClaudeConfig(source: string, existingNames: string[] = []): ImportPreview {
   let data: unknown;
@@ -22,7 +57,11 @@ export function parseClaudeConfig(source: string, existingNames: string[] = []):
       if (typeof value.command !== 'string' || !value.command.trim()) return invalid('command must be a nonempty string.');
       if (value.args !== undefined && (!Array.isArray(value.args) || !value.args.every(v => typeof v === 'string'))) return invalid('args must be an array of strings.');
       if (value.env !== undefined && !strings(value.env)) return invalid('env must contain string values.');
-      return { name, connection: { name, connectionConfig: { transport: 'stdio', config: { command: value.command, args: (value.args ?? []) as string[], env: (value.env ?? {}) as Record<string, string>, inheritSystemEnv: true } } } };
+      const args = (value.args ?? []) as string[];
+      const env = (value.env ?? {}) as Record<string, string>;
+      const stdio: ImportedConnection = { name, connectionConfig: { transport: 'stdio', config: { command: value.command, args, env, inheritSystemEnv: true } } };
+      const http = mcpRemoteToHttp(value.command, args, env);
+      return http ? { name, connection: { name, connectionConfig: { transport: 'http', config: http } }, stdioConnection: stdio } : { name, connection: stdio };
     }
     if (typeof value.url !== 'string' || !value.url.trim()) return invalid('Provide a command or an HTTP url.');
     if (value.type !== undefined && !['sse', 'http', 'streamable-http'].includes(String(value.type))) return invalid('Unsupported HTTP type. Use sse, http or streamable-http.');

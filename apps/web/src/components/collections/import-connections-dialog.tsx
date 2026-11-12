@@ -2,10 +2,16 @@ import { studioFetch } from "@/lib/studio-access";
 import { useRef, useState } from 'react';
 import type { Collection, Connection } from '@mcp-studio/types';
 import { useStore } from '@/store';
-import { parseClaudeConfig } from '@/lib/claude-config';
+import { parseClaudeConfig, type ImportEntry } from '@/lib/claude-config';
+import { isSecretName } from '@/lib/is-secret-name';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+
+const MASK = '•••••••• (masked)';
+/** Masks `Name: value` header args (e.g. after mcp-remote's --header) whose name looks secret. */
+const maskArg = (arg: string) => { const match = /^([\w-]+):\s*\S/.exec(arg); return match && isSecretName(match[1]!) ? `${match[1]}: ${MASK}` : arg; };
 
 async function post<T>(url: string, data: unknown): Promise<T> {
   const response = await studioFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -21,6 +27,8 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [results, setResults] = useState<Record<string, string>>({});
+  const [keepStdio, setKeepStdio] = useState<Set<string>>(new Set());
+  const chosen = (entry: ImportEntry) => keepStdio.has(entry.name) && entry.stdioConnection ? entry.stdioConnection : entry.connection;
   const locked = useRef(false);
   const preview = source.trim() ? parseClaudeConfig(source, collections.find(c => c.id === target)?.connections.filter(c => (Object.hasOwn(results, c.name) ? results[c.name] : undefined) !== 'Imported').map(c => c.name)) : { entries: [] };
   const ready = preview.entries.filter(e => e.connection && (Object.hasOwn(results, e.name) ? results[e.name] : undefined) !== 'Imported');
@@ -38,14 +46,23 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
         id = collection.id;
         setTarget(id);
       }
+      const imported: Connection[] = [];
       for (const entry of ready) {
         try {
-          const connection = await post<Connection>(`/api/collections/${id}/connections`, entry.connection);
+          const connection = await post<Connection>(`/api/collections/${id}/connections`, chosen(entry));
           useStore.setState(s => ({ collections: s.collections.map(c => c.id === id ? { ...c, connections: [...c.connections, connection] } : c) }));
           setResults(s => ({ ...s, [entry.name]: 'Imported' }));
+          imported.push(connection);
         } catch (cause) {
           setResults(s => ({ ...s, [entry.name]: cause instanceof Error ? cause.message : 'Could not import. Try again.' }));
         }
+      }
+      // Failures keep the dialog open so they stay visible; full success closes it and opens the first import.
+      if (imported.length && imported.length === ready.length) {
+        toast.success(`Imported ${imported.length} Connection${imported.length === 1 ? '' : 's'}`);
+        const { connectionStatus, loadConnection } = useStore.getState();
+        if (connectionStatus === 'disconnected' || connectionStatus === 'error') loadConnection(imported[0]!);
+        onClose();
       }
     } catch (cause) { setError(cause instanceof Error ? cause.message : 'Could not create Collection.'); }
     finally { locked.current = false; setBusy(false); }
@@ -82,17 +99,31 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
       {(error || preview.error) && <p role="alert" className="text-xs text-destructive-text">{error || preview.error}</p>}
       <ul aria-label="Import preview" aria-live="polite" className="max-h-52 divide-y divide-border overflow-y-auto overscroll-contain text-xs">
         {preview.entries.map(entry => {
-          const config = entry.connection?.connectionConfig;
+          const config = chosen(entry)?.connectionConfig;
           const result = Object.hasOwn(results, entry.name) ? results[entry.name] : undefined;
           return <li key={entry.name} className="flex items-start justify-between gap-4 py-3">
-            <div className="min-w-0"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}{config?.transport === 'stdio' && <div className="break-all text-muted-foreground">
+            <div className="min-w-0 flex-1"><p className="break-words font-medium">{entry.name}</p>{config && <p className="break-all text-muted-foreground">{config.transport === 'stdio' ? `STDIO · ${config.config.command}` : `HTTP · ${config.config.url}`}</p>}
+            {entry.stdioConnection && <div className="mt-1 flex flex-col gap-1 text-muted-foreground">
+              {!keepStdio.has(entry.name) && <p>Converted from mcp-remote: Studio connects to the URL directly{config?.transport === 'http' && config.config.auth?.type === 'oauth' ? ' and signs in with OAuth if the server asks' : ''}.</p>}
+              <label className="flex items-center gap-2">
+                <input type="checkbox" className="accent-primary" checked={keepStdio.has(entry.name)} disabled={busy || result === 'Imported'} onChange={e => setKeepStdio(prev => { const next = new Set(prev); if (e.target.checked) next.add(entry.name); else next.delete(entry.name); return next; })} />
+                Keep as STDIO (run mcp-remote)
+              </label>
+            </div>}
+            {config?.transport === 'http' && Object.keys(config.config.headers).length > 0 && <div className="break-all text-muted-foreground">
+              <p>Headers:</p>
+              <ul aria-label={`${entry.name} headers`} className="list-inside list-disc">{Object.entries(config.config.headers).map(([name, value]) => <li key={name}>{name}: {isSecretName(name) ? MASK : value}</li>)}</ul>
+            </div>}
+            {config?.transport === 'stdio' && <div className="break-all text-muted-foreground">
               <p>Args:</p>
-              <ul aria-label={`${entry.name} arguments`} className="list-inside list-disc">{config.config.args.map((arg, index) => <li key={index}>{arg}</li>)}</ul>
-              <p>Env:</p>
-              <ul aria-label={`${entry.name} environment`} className="list-inside list-disc">{Object.entries(config.config.env).map(([name, value]) => <li key={name}>{name}: {/secret|token|password|passwd|credential|key/i.test(name) ? '•••••••• (masked)' : value}</li>)}</ul>
+              <ul aria-label={`${entry.name} arguments`} className="list-inside list-disc">{config.config.args.map((arg, index) => <li key={index}>{maskArg(arg)}</li>)}</ul>
+              {Object.keys(config.config.env).length > 0 && <>
+                <p>Env:</p>
+                <ul aria-label={`${entry.name} environment`} className="list-inside list-disc">{Object.entries(config.config.env).map(([name, value]) => <li key={name}>{name}: {isSecretName(name) ? MASK : value}</li>)}</ul>
+              </>}
               <p>Inherit system environment: {config.config.inheritSystemEnv ? 'Yes — all Studio process variables' : 'No'}</p>
             </div>}</div>
-            <p className={`max-w-[55%] ${entry.error || (result && result !== 'Imported') ? 'text-destructive-text' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>
+            <p className={`max-w-[40%] shrink-0 ${entry.error || (result && result !== 'Imported') ? 'text-destructive-text' : 'text-muted-foreground'}`}>{result || entry.error || 'Ready'}</p>
           </li>;
         })}
       </ul>
