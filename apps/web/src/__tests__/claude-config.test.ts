@@ -37,3 +37,14 @@ it('converts mcp-remote proxies to direct HTTP and leaves unknown flags as STDIO
   expect(entry?.connection?.connectionConfig?.transport).toBe('http');
   expect(entry?.stdioConnection?.connectionConfig?.transport).toBe('stdio');
 });
+
+it('keeps OAuth when retained headers carry no credentials', () => {
+  expect(mcpRemoteToHttp('npx', ['mcp-remote', 'https://a.example/mcp', '--header', 'X-Tenant: acme']))
+    .toEqual({ url: 'https://a.example/mcp', headers: { 'X-Tenant': 'acme' }, auth: { type: 'oauth' } });
+  expect(mcpRemoteToHttp('npx', ['mcp-remote', 'https://a.example/mcp', '--header', 'Authorization: Bearer t'])?.auth).toBeUndefined();
+});
+
+it.each([['http-first', true], ['http-only', true], ['sse-first', false], ['sse-only', false], [undefined, false]])('converts --transport %s only when Studio can honour it', (strategy, converts) => {
+  const args = ['mcp-remote', 'https://a.example/mcp', '--transport', ...(strategy ? [strategy] : [])];
+  expect(mcpRemoteToHttp('npx', args) !== null).toBe(converts);
+});

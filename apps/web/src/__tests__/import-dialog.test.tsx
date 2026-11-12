@@ -74,3 +74,11 @@ it('imports mcp-remote as a direct HTTP Connection with masked headers, or keeps
   await userEvent.click(screen.getByRole('button', { name: 'Import 1 Connection' }));
   expect(useStore.getState().collections[0]?.connections[0]?.connectionConfig).toEqual({ transport: 'http', config: { url: 'https://example.com/mcp', headers: { 'X-API-Key': 'private-value' } } });
 });
+
+it('masks a converted header whose value was expanded from env', () => {
+  useStore.setState({ collections: [{ id: 'c', name: 'Target', connections: [], createdAt: 0, updatedAt: 0 }] });
+  render(<ImportConnectionsDialog onClose={() => {}} />);
+  fireEvent.change(screen.getByLabelText('Configuration JSON'), { target: { value: JSON.stringify({ mcpServers: { r: { command: 'npx', args: ['mcp-remote', 'https://a.example/mcp', '--header', 'X-Custom: ${AUTH_TOKEN}'], env: { AUTH_TOKEN: 'private-value' } } } }) } });
+  expect(screen.getByRole('list', { name: 'r headers' })).toHaveTextContent('X-Custom: •••••••• (masked)');
+  expect(screen.getByRole('list', { name: 'r headers' })).not.toHaveTextContent('private-value');
+});

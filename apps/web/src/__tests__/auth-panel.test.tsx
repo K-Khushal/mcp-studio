@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 
 import { toast } from "sonner";
 
@@ -54,6 +54,26 @@ describe("AuthPanel", () => {
     expect(await screen.findByText("Not signed in")).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Sign out" })).toBeNull();
     expect(screen.getByRole("button", { name: "Sign in" })).toBeTruthy();
+  });
+
+  it("ignores a superseded status body that finishes parsing late", async () => {
+    let releaseOld!: () => void;
+    const oldBody = new Promise<void>((resolve) => { releaseOld = resolve; });
+    let call = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => {
+      call += 1;
+      if (call === 1) return { ok: true, json: async () => { await oldBody; return { signedIn: true, account: { email: "stale@example.com" } }; } } as unknown as Response;
+      return new Response(JSON.stringify({ signedIn: false }));
+    }));
+    useStore.setState({ httpAuth: { type: "oauth" }, connectionStatus: "disconnected" });
+    render(<AuthPanel />);
+    // Let the first response pass its fetch, so only its body parse is pending when the status changes.
+    await act(async () => { for (let i = 0; i < 5; i++) await Promise.resolve(); });
+    act(() => useStore.setState({ connectionStatus: "connecting" }));
+    expect(await screen.findByText("Not signed in")).toBeTruthy();
+    await act(async () => { releaseOld(); await oldBody; });
+    expect(screen.queryByText("stale@example.com")).toBeNull();
+    expect(screen.getByText("Not signed in")).toBeTruthy();
   });
 
   it("does not report successful sign-out when the Studio Server returns 500", async () => {

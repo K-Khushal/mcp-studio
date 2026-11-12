@@ -14,6 +14,12 @@ const MASK = '•••••••• (masked)';
 /** Masks `Name: value` header args (e.g. after mcp-remote's --header) whose name looks secret. */
 const maskArg = (arg: string) => { const match = /^([\w-]+):\s*\S/.exec(arg); return match && isSecretName(match[1]!) ? `${match[1]}: ${MASK}` : arg; };
 
+/** A converted header whose value came from the config's env (mcp-remote `${VAR}`) is masked like that env value. */
+const expandsEnv = (entry: ImportEntry, value: string) => {
+  const config = entry.stdioConnection?.connectionConfig;
+  return config?.transport === 'stdio' && Object.values(config.config.env).some(envValue => envValue !== '' && value.includes(envValue));
+};
+
 async function post<T>(url: string, data: unknown): Promise<T> {
   const response = await studioFetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   if (!response.ok) throw new Error(`Could not save (${response.status}). Try again.`);
@@ -121,7 +127,7 @@ export function ImportConnectionsDialog({ onClose }: { onClose: () => void }) {
             </div>}
             {config?.transport === 'http' && Object.keys(config.config.headers).length > 0 && <div className="mt-2 flex items-baseline gap-2 text-muted-foreground">
               <span className="shrink-0">Headers</span>
-              <ul aria-label={`${entry.name} headers`} className={detail}>{Object.entries(config.config.headers).map(([name, value]) => <li key={name} className={chip}>{name}: {isSecretName(name) ? MASK : value}</li>)}</ul>
+              <ul aria-label={`${entry.name} headers`} className={detail}>{Object.entries(config.config.headers).map(([name, value]) => <li key={name} className={chip}>{name}: {isSecretName(name) || expandsEnv(entry, value) ? MASK : value}</li>)}</ul>
             </div>}
             {config?.transport === 'stdio' && <div className="mt-2 flex flex-col gap-1.5 text-muted-foreground">
               {config.config.args.length > 0 && <div className="flex items-baseline gap-2">

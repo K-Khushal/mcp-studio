@@ -12,10 +12,14 @@ const RUNNERS = new Set(['npx', 'bunx', 'pnpx']);
 const RUNNER_FLAGS = new Set(['-y', '--yes']);
 // The SDK negotiates these itself; a copied Accept would break the legacy SSE fallback.
 const TRANSPORT_HEADERS = new Set(['accept', 'content-type']);
+// Studio tries Streamable HTTP and falls back to SSE on rejection; SSE-first strategies cannot be preserved.
+const HTTP_STRATEGIES = new Set(['http-first', 'http-only']);
+/** Headers that carry credentials themselves; any other header (tenant, version…) leaves OAuth to the server. */
+const AUTH_HEADER = /authorization|api[-_]?key|token|secret|cookie|auth/i;
 
 /**
  * `npx -y mcp-remote <url> [--header "Name: value"]…` is a STDIO bridge to an HTTP server Studio can reach directly.
- * Returns null when the args use anything beyond the URL, headers and `--transport`, so unknown behaviour stays STDIO.
+ * Returns null when the args use anything beyond the URL, headers and an HTTP-first `--transport`, so unknown behaviour stays STDIO.
  */
 export function mcpRemoteToHttp(command: string, args: string[], env: Record<string, string> = {}): HttpConfig | null {
   if (!RUNNERS.has(command.replace(/\.cmd$/i, '').split(/[\\/]/).pop()!)) return null;
@@ -35,10 +39,12 @@ export function mcpRemoteToHttp(command: string, args: string[], env: Record<str
       if (colon < 1 || header.includes('${')) return null;
       const name = header.slice(0, colon).trim();
       if (!TRANSPORT_HEADERS.has(name.toLowerCase())) headers[name] = header.slice(colon + 1).trim();
-    } else if (arg === '--transport') i++;
+    } else if (arg === '--transport') {
+      if (!HTTP_STRATEGIES.has(args[++i] ?? '')) return null;
+    }
     else return null;
   }
-  return { url, headers, ...(Object.keys(headers).length ? {} : { auth: { type: 'oauth' as const } }) };
+  return { url, headers, ...(Object.keys(headers).some(name => AUTH_HEADER.test(name)) ? {} : { auth: { type: 'oauth' as const } }) };
 }
 
 export function parseClaudeConfig(source: string, existingNames: string[] = []): ImportPreview {

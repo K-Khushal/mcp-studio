@@ -32,9 +32,11 @@ export function OAuthStatusCard({ collectionId }: { collectionId: string | undef
   useEffect(() => {
     if (!collectionId || !connectionId) return;
     let current = true;
+    // Parse before the staleness check so a superseded body can never overwrite a newer status.
     studioFetch(`/api/collections/${collectionId}/connections/${connectionId}/oauth`)
-      .then(async (response) => { if (current) setStatus(response.ok ? await response.json() as OAuthStatus : null); })
-      .catch(() => { if (current) setStatus(null); });
+      .then(async (response) => (response.ok ? await response.json() as OAuthStatus : null))
+      .catch(() => null)
+      .then((next) => { if (current) setStatus(next); });
     return () => { current = false; };
   }, [collectionId, connectionId, connectionStatus, waitingForBrowser, revision]);
 
