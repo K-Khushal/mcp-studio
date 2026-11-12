@@ -60,3 +60,19 @@ test("uses a private per-user base and refuses one other users can write", async
     expect(privateAssetBase(parent)).toBeNull();
   } finally { await rm(parent, { recursive: true, force: true }); }
 });
+
+test("without a uid (Windows) no base is trusted and nothing is swept", async () => {
+  const parent = await mkdtemp(join(tmpdir(), "studio-nouid-"));
+  const getuid = process.getuid;
+  try {
+    await mkdir(join(parent, `${ASSET_DIR_PREFIX}stale`));
+    await writeFile(join(parent, `${ASSET_DIR_PREFIX}stale`, ASSET_DIR_PID_FILE), "999999");
+    (process as { getuid?: unknown }).getuid = undefined;
+    expect(privateAssetBase(parent)).toBeNull();
+    sweepStaleAssetDirs(parent);
+    expect(await readdir(parent)).toEqual([`${ASSET_DIR_PREFIX}stale`]);
+  } finally {
+    (process as { getuid?: unknown }).getuid = getuid;
+    await rm(parent, { recursive: true, force: true });
+  }
+});

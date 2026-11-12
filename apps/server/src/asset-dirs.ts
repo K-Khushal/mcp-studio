@@ -6,22 +6,24 @@ import { join } from "node:path";
 export const ASSET_DIR_PREFIX = "mcp-studio-assets-";
 export const ASSET_DIR_PID_FILE = ".pid";
 const UNOWNED_MAX_AGE_MS = 24 * 60 * 60 * 1000;
-const uid = process.getuid?.();
 
-/** Owned by this user, a real directory (not a symlink) and, on POSIX, closed to other users. */
+/** Owned by this user, a real directory (not a symlink) and closed to other users. POSIX only: without a uid nothing is trusted. */
 function ownDirectory(path: string, requirePrivate: boolean): boolean {
+  const uid = process.getuid?.();
+  if (uid === undefined) return false;
   const stat = lstatSync(path);
-  if (!stat.isDirectory()) return false;
-  if (uid === undefined) return true;
-  return stat.uid === uid && (!requirePrivate || (stat.mode & 0o077) === 0);
+  return stat.isDirectory() && stat.uid === uid && (!requirePrivate || (stat.mode & 0o077) === 0);
 }
 
 /**
  * Per-user 0700 base under the shared temp dir, so other local users cannot plant entries the sweep
- * would read. Returns null when it exists but is not ours or not private; callers then skip sweeping.
+ * would read. Returns null when privacy cannot be established (not ours, not private, or no uid such
+ * as on Windows); callers then extract to a fresh mkdtemp dir and skip sweeping.
  */
 export function privateAssetBase(directory = tmpdir()): string | null {
-  const base = join(directory, `mcp-studio-${uid ?? "user"}`);
+  const uid = process.getuid?.();
+  if (uid === undefined) return null;
+  const base = join(directory, `mcp-studio-${uid}`);
   try { mkdirSync(base, { mode: 0o700 }); } catch (error) { if ((error as { code?: string }).code !== "EEXIST") return null; }
   try { return ownDirectory(base, true) ? base : null; } catch { return null; }
 }

@@ -96,6 +96,13 @@ describe("RFC 7009 revocation", () => {
     expect(requests).toEqual([]);
   });
 
+  test("matches issuers the way the SDK does: default port and trailing slash do not matter", async () => {
+    const requests: Request[] = [];
+    const stamped = { tokens: { access_token: "at", token_type: "Bearer", issuer: "http://127.0.0.1:9" }, clientInformation: { client_id: "id", issuer: "HTTP://127.0.0.1:9/" } } as never;
+    expect(await revokeOAuthTokens(`${origin}/mcp`, stamped, { fetchFn: server({ revocation_endpoint: `${origin}/revoke` }, requests) })).toBe("revoked");
+    expect(requests).toHaveLength(1);
+  });
+
   test("never posts tokens to a plain-HTTP revocation endpoint on a public host", async () => {
     const requests: Request[] = [];
     const as = "https://mcp.example";

@@ -346,10 +346,12 @@ export class StudioOAuthProvider implements OAuthClientProvider {
 
 export type OAuthRevocation = "revoked" | "unsupported" | "failed" | "none";
 
-/** The SDK's issuer comparison: exact, tolerating one trailing slash. */
+/** Mirrors the SDK's issuer comparison: parsed URLs (scheme, host, default port normalized), one trailing slash tolerated. */
 function sameIssuer(stamp: unknown, issuer: string): boolean {
   if (typeof stamp !== "string") return false;
-  return stamp === issuer || stamp.replace(/\/$/, "") === issuer.replace(/\/$/, "");
+  let [x, y] = [stamp, issuer];
+  try { [x, y] = [new URL(stamp).href, new URL(issuer).href]; } catch { /* not two URLs: compared as written */ }
+  return x === y || (x.endsWith("/") && x.slice(0, -1) === y) || (y.endsWith("/") && y.slice(0, -1) === x);
 }
 
 /**
