@@ -56,3 +56,19 @@ for (const stall of ["initialize", "tools/list"]) {
     }
   });
 }
+
+for (const split of [false, true]) {
+  test(`unterminated final SSE event is not dispatched and connect expires (split=${split})`, async () => {
+    const server = startCrlfSSEFixture("\n", split, false);
+    const session = new SessionHarness({ connectTimeoutMs: 100 });
+    try {
+      await session.send({ type: "connect", transport: "http", verbose: true, config: { url: server.url.toString(), headers: {} } });
+      expect(await session.waitFor("error")).toMatchObject({ code: "CONNECTION_FAILED", message: "Connection timed out after 100 ms" });
+      expect(session.messages.some(message => message.type === "connected")).toBe(false);
+      expect(session.messages.some(message => message.type === "log" && message.payload?.direction === "in")).toBe(false);
+    } finally {
+      await session.close();
+      await server.stop(true);
+    }
+  });
+}

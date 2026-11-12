@@ -212,6 +212,7 @@ export class SessionManager {
     const lifecycle = new AbortController();
     this.signInAbort = lifecycle;
     let connectTimer: ReturnType<typeof setTimeout> | undefined;
+    let settled = false;
 
     const timeout = this.options.connectTimeoutMs ?? 120_000;
     let rejectTimeout: (error: Error) => void;
@@ -219,7 +220,7 @@ export class SessionManager {
     const clock = {
       pause: () => { clearTimeout(connectTimer); },
       resume: () => {
-        if (lifecycle.signal.aborted) return;
+        if (settled || lifecycle.signal.aborted) return;
         clearTimeout(connectTimer);
         connectTimer = setTimeout(() => rejectTimeout(new Error(`Connection timed out after ${timeout} ms`)), timeout);
       },
@@ -287,6 +288,7 @@ export class SessionManager {
 
       this.send({ type: "error", message, code: "CONNECTION_FAILED" });
     } finally {
+      settled = true;
       clearTimeout(connectTimer);
     }
   }
@@ -408,14 +410,12 @@ export class SessionManager {
       redirectUrl: oauth.redirectUrl,
       signal,
       storage: connectionId ? oauth.storage(connectionId, serverUrl) : (this.sessionOAuthStorage ??= sessionStorage()),
-      authorize: async (_authorizationUrl, state, flowSignal) => {
-        clock.pause();
-        try { return await oauth.redirects.wait(state, flowSignal); }
-        finally { clock.resume(); }
-      },
+      authorize: (_authorizationUrl, state, flowSignal) => oauth.redirects.wait(state, flowSignal),
       onAuthorization: authorizationUrl => {
+        clock.pause();
         this.send({ type: "log", level: "INFO", source: "studio", message: "OAuth sign-in required; waiting for the browser", timestamp: Date.now() });
         this.send({ type: "oauth_authorize", url: authorizationUrl.toString() });
+        return clock.resume;
       },
     };
   }

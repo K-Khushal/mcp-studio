@@ -40,6 +40,8 @@ export function limitResponseBody(response: Response, maxBytes = 4 * 1024 * 1024
       try {
         const next = await reader.read();
         if (next.done) {
+          // Preserve bounded bytes at EOF without inventing a blank line. The SDK's
+          // parser does not dispatch an unterminated event (it has no flush).
           if (sse && !dropping && event.length) controller.enqueue(Uint8Array.from(event));
           controller.close(); return;
         }

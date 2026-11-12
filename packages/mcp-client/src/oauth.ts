@@ -99,7 +99,7 @@ export function createOAuthFetch(serverUrl: URL, fetchFn: FetchLike = fetch): Fe
   };
 }
 
-type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean; rejectBrowserSignIn(): void };
+type AuthWaiter = { signIn: OAuthSignIn; allowBrowserSignIn: boolean; rejectBrowserSignIn(): void; resume?: () => void };
 type AuthorizationFlow = {
   controller: AbortController;
   waiters: Set<AuthWaiter>;
@@ -133,8 +133,8 @@ export interface OAuthSignIn {
    * the redirect carrying `state` delivers. Rejecting aborts the connect.
    */
   authorize(authorizationUrl: URL, state: string, signal: AbortSignal): Promise<string>;
-  /** Delivers the shared approval link to browser-allowed connecting Sessions, including late joiners. */
-  onAuthorization?(authorizationUrl: URL): void;
+  /** Delivers the shared approval link to browser-allowed connecting Sessions, including late joiners. Return cleanup to resume after this waiter settles. */
+  onAuthorization?(authorizationUrl: URL): void | (() => void);
 }
 
 /**
@@ -186,7 +186,7 @@ export class StudioOAuthProvider implements OAuthClientProvider {
           // Register the redirect before sending the link to any browser.
           const approval = this.signIn.authorize(url, state, flowSignal);
           for (const waiter of waiters) {
-            if (waiter.allowBrowserSignIn) waiter.signIn.onAuthorization?.(url);
+            if (waiter.allowBrowserSignIn) waiter.resume = waiter.signIn.onAuthorization?.(url) || undefined;
             else waiter.rejectBrowserSignIn();
           }
           return approval;
@@ -227,11 +227,12 @@ export class StudioOAuthProvider implements OAuthClientProvider {
     try {
       if (flow.authorization) {
         if (!allowBrowserSignIn) throw new OAuthFlowError();
-        this.signIn.onAuthorization?.(flow.authorization.url);
+        waiter.resume = this.signIn.onAuthorization?.(flow.authorization.url) || undefined;
       }
       await this.waitForFlow(Promise.race([flow.promise, browserRequired]), signal);
       await this.credentials();
     } finally {
+      waiter.resume?.();
       flow.waiters.delete(waiter);
       if (flow.waiters.size === 0) flow.controller.abort();
     }

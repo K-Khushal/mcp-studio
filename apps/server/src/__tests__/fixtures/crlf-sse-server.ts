@@ -1,5 +1,5 @@
 /** DeepWiki-style stateless MCP: a single CRLF SSE event per POST, then EOF. */
-export function startCrlfSSEFixture(newline = "\r\n", split = false) {
+export function startCrlfSSEFixture(newline = "\r\n", split = false, terminate = true) {
   return Bun.serve({
     hostname: "127.0.0.1", port: 0,
     async fetch(request) {
@@ -11,7 +11,7 @@ export function startCrlfSSEFixture(newline = "\r\n", split = false) {
         : message.method === "tools/list"
           ? { tools: [{ name: "echo", inputSchema: { type: "object" } }] }
           : { prompts: [] };
-      const data = new TextEncoder().encode(`event: message${newline}data: ${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}${newline}${newline}`);
+      const data = new TextEncoder().encode(`event: message${newline}data: ${JSON.stringify({ jsonrpc: "2.0", id: message.id, result })}${terminate ? newline + newline : ""}`);
       let offset = 0;
       return new Response(new ReadableStream({
         pull(controller) {

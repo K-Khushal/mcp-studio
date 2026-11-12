@@ -478,7 +478,7 @@ test("browser authorization rejects an existing non-browser waiter while a conne
     redirectUrl: callback.redirectUrl, signal: controller.signal, storage,
     authorize: (_url: URL, state: string, signal: AbortSignal) => callback.redirects.wait(state, signal),
   };
-  const nonBrowser = new StudioOAuthProvider({ ...signIn, onAuthorization: url => nonBrowserLinks.push(url) });
+  const nonBrowser = new StudioOAuthProvider({ ...signIn, onAuthorization: url => { nonBrowserLinks.push(url); } });
   const browser = new StudioOAuthProvider({ ...signIn, onAuthorization: url => link.resolve(url) });
   // Both join before discovery can request browser approval.
   const calling = nonBrowser.authenticate(url, null, response, fetch, false);
@@ -611,4 +611,20 @@ for (const url of ["ms-settings:privacy", "http://auth.example.com/authorize"]) 
   await connecting;
   expect(session.messages.some(message => message.type === "connected")).toBe(true);
   expect(session.messages.filter(message => message.type === "error")).toEqual([]);
+});
+
+ test("shared browser approval pauses both Sessions including a late joiner", async () => {
+  const first = openSession(200);
+  const second = openSession(200);
+  const connectingFirst = first.send(fixture.connection(connectionId));
+  const link = await first.waitFor("oauth_authorize");
+  const connectingSecond = second.send(fixture.connection(connectionId));
+  await second.waitFor("oauth_authorize");
+  await Bun.sleep(350);
+  await approveInBrowser(link.url);
+  await Promise.all([connectingFirst, connectingSecond]);
+  for (const session of [first, second]) {
+    expect(session.messages.some(message => message.type === "connected")).toBe(true);
+    expect(session.messages.filter(message => message.type === "error")).toEqual([]);
+  }
 });

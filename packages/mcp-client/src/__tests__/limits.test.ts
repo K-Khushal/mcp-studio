@@ -42,7 +42,7 @@ it.each(['\n\n', '\r\n\r\n', '\r\r', '\n\r\n', '\r\n\n'])('preserves multiple SS
   }
 });
 
-it('preserves an SSE event ending without a blank line', async () => {
+it('passes through unterminated SSE bytes at EOF without adding a dispatch delimiter', async () => {
   expect(await limitResponseBody(sseResponse('data: café', 1), 16).text()).toBe('data: café');
 });
 
