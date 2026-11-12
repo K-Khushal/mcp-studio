@@ -25,8 +25,8 @@ Domain vocabulary is in [`GLOSSARY.md`](GLOSSARY.md); design decisions are in [`
 Bun is required for `bunx`. Once the npm package is published:
 
 ```bash
-bunx mcp-studio
-bunx mcp-studio --port 4000 --no-open
+bunx mcp-studio-app
+bunx mcp-studio-app --port 4000 --no-open
 ```
 
 The CLI serves the UI, REST API (also under `/api`) and `/ws` on one loopback port (`127.0.0.1` and `[::1]`), `http://localhost:3000` by default. `--port` changes the port; `--no-open` skips the browser launch. Data lives in `~/.mcp-studio/studio.db` (override with `STUDIO_DB_PATH`). `npx` is unsupported.
