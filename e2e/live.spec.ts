@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { createConnection, configureStdio, jsonArgs, runTool, selectTool, fixtureInfo } from './helpers';
+import { createConnection, configureStdio, jsonArgs, selectTool, fixtureInfo } from './helpers';
 
 type Tool = { name: string; title?: string; annotations?: { title?: string }; inputSchema: { properties?: Record<string, unknown> } };
 const candidates = [
@@ -68,7 +68,8 @@ for (const candidate of candidates) {
       row.call = tool!.name;
       await selectTool(page, tool!.name, tool!.title || tool!.annotations?.title || tool!.name);
       await jsonArgs(page, candidate.name === 'Filesystem' ? { path: info.directory } : candidate.args);
-      await runTool(page);
+      // Remote tools (e.g. GitMCP's docs fetch) can exceed runTool's 15s wait.
+      await page.getByRole('button', { name: 'Run Tool', exact: true }).click();
       await expect.poll(() => result, { timeout: 60_000 }).toBeDefined();
       expect(result!.isError).not.toBe(true);
       expect(result!.content?.length).toBeGreaterThan(0);
