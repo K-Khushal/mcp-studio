@@ -20,7 +20,7 @@
     "typecheck": "turbo typecheck",
     "clean": "turbo clean && rm -rf node_modules",
     "smoke": "bun scripts/smoke-cli.ts",
-    "prepack": "bun run build",
+    "prepack": "rm -rf apps/web/dist && turbo build --force && bun scripts/build-package.ts",
     "e2e": "bun run build && bun --cwd e2e playwright test --project=local",
     "e2e:live": "bun run build && bun --cwd e2e playwright test --project=live"
   },
@@ -36,7 +36,9 @@
     "mcp-studio": "dist/cli.js"
   },
   "files": [
-    "dist",
+    "dist/cli.js",
+    "dist/web",
+    "dist/drizzle",
     "README.md",
     "LICENSE"
   ],

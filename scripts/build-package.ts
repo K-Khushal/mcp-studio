@@ -1,5 +1,7 @@
-import { cp, mkdir } from "node:fs/promises";
+import { cp, mkdir, rm } from "node:fs/promises";
 
+// Start clean so stale web bundles or local standalone binaries never reach the npm tarball.
+await rm("dist", { recursive: true, force: true });
 await mkdir("dist", { recursive: true });
 const result = await Bun.build({
   entrypoints: ["apps/server/src/cli.ts"],
