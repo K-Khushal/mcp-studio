@@ -163,9 +163,13 @@ export class SessionManager {
   private connectionClosed(client: MCPClientInterface): void {
     if (this.client !== client) return;
     this.clearElicitations();
-    for (const call of this.calls.values()) call.abort("cancelled");
-    if (this.status !== "connected") return;
     const reason = "MCP Server connection closed unexpectedly";
+    // End running Calls before `disconnected`, which retires the browser's connected workspace.
+    for (const [requestId, call] of this.calls) {
+      call.abort("connection_closed");
+      this.send({ type: "error", requestId, code: "CONNECTION_CLOSED", message: reason });
+    }
+    if (this.status !== "connected") return;
     this.client = null;
     this.send({ type: "log", level: "ERROR", source: "studio", message: reason, timestamp: Date.now() });
     this.setStatus("disconnected");
@@ -176,7 +180,7 @@ export class SessionManager {
   }
   private forwardLog: NonNullable<MCPClientOptions["onLog"]> = (level, source, message, payload) => {
     const serialized = payload ? JSON.stringify(payload.body) ?? "" : "";
-    this.send({ type: "log", level, source, message: boundedText(message), timestamp: Date.now(), ...(payload ? { payload: { ...payload, body: new TextEncoder().encode(serialized).length > 16 * 1024 ? boundedText(serialized) : payload.body } } : {}) });
+    this.send({ type: "log", level, source, message: boundedText(message), timestamp: Date.now(), ...(payload ? { payload: new TextEncoder().encode(serialized).length > 16 * 1024 ? { ...payload, body: boundedText(serialized), truncated: true as const } : payload } : {}) });
   };
 
   private setStatus(status: ConnectionStatus): void {
@@ -343,7 +347,9 @@ export class SessionManager {
       if (controller.signal.aborted) throw controller.signal.reason;
       this.send(boundResult(result));
     } catch (err) {
-      if (controller.signal.reason === "cancelled") {
+      if (controller.signal.reason === "connection_closed") {
+        // connectionClosed() already reported it.
+      } else if (controller.signal.reason === "cancelled") {
         this.send({ type: "cancelled", requestId });
       } else if (controller.signal.reason === "timeout") {
         this.send({ type: "error", requestId, code: "CALL_TIMEOUT", message: `Call timed out after ${seconds} seconds` });

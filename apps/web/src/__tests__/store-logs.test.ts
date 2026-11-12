@@ -89,6 +89,8 @@ it("bounds retained frame bodies and searches the retained text case-insensitive
   const entry = useStore.getState().logs.at(-1)!;
   expect(String(entry.payload?.body).length).toBeLessThanOrEqual(64 * 1024);
   expect(entry.payload?.body).toContain("[truncated]");
+  expect(entry.payload?.truncated).toBe(true);
+  expect(String(entry.payload?.body).startsWith('{"content":"Needle')).toBe(true);
   expect(entry.searchText).toContain("needle");
   expect(filterLogs([entry], { level: null, source: null, search: "NEEDLE" })).toEqual([entry]);
   expect(filterLogs([entry], { level: null, source: null, search: "discarded-tail" })).toEqual([]);
@@ -133,4 +135,14 @@ it("evicts oldest entries at the count limit and resets accounting on clear", ()
   useStore.getState().clearLogs();
   deliver({ type: "log", level: "INFO", source: "server", message: "fresh", timestamp: 511 });
   expect(useStore.getState().logs.map(log => log.message)).toEqual(["fresh"]);
+});
+
+it("keeps a body the Studio Server already truncated as raw text", async () => {
+  const { formatLogLine } = await import("../components/logs/filter-logs");
+  const body = '{"result":{"text":"needle [truncated, 20000 bytes]';
+  deliver({ type: "log", level: "DEBUG", source: "protocol", message: "← tools/call #9", timestamp: 1, payload: { direction: "in", method: "tools/call", id: 9, body, truncated: true } });
+  const entry = useStore.getState().logs.at(-1)!;
+  expect(entry.payload?.body).toBe(body);
+  expect(formatLogLine(entry, "t")).toBe(`[t] DEBUG [protocol] ← tools/call #9\n${body}`);
+  expect(entry.searchText).toContain('{"result":{"text":"needle');
 });

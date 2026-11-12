@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
-import type { OAuthStorage } from "@mcp-studio/mcp-client";
+import { revokeOAuthTokens } from "@mcp-studio/mcp-client";
+import type { OAuthCredentials, OAuthRevocation, OAuthStorage } from "@mcp-studio/mcp-client";
 import type { OAuthStatus } from "@mcp-studio/types";
 import { db } from "../index.js";
 import { connections, oauthCredentials } from "../schema.js";
@@ -38,10 +39,17 @@ export function oauthStorage(connectionId: string, serverUrl: string): OAuthStor
   };
 }
 
-/** Sign out retires all outstanding adapters before deleting persisted credentials. */
-export async function clearOAuthCredentials(connectionId: string): Promise<void> {
+/** Retires all outstanding adapters before deleting persisted credentials; returns what was deleted. */
+export async function clearOAuthCredentials(connectionId: string): Promise<{ serverUrl: string; credentials: OAuthCredentials } | undefined> {
   generations.delete(connectionId);
-  db.delete(oauthCredentials).where(eq(oauthCredentials.connectionId, connectionId)).run();
+  return db.delete(oauthCredentials).where(eq(oauthCredentials.connectionId, connectionId))
+    .returning({ serverUrl: oauthCredentials.serverUrl, credentials: oauthCredentials.credentials }).get();
+}
+
+/** Sign out deletes local credentials first, then revokes them at the authorization server best-effort (RFC 7009). */
+export async function signOut(connectionId: string, revoke: typeof revokeOAuthTokens = revokeOAuthTokens): Promise<OAuthRevocation> {
+  const removed = await clearOAuthCredentials(connectionId);
+  return removed ? revoke(removed.serverUrl, removed.credentials) : "none";
 }
 
 function jwtClaims(token: unknown): Record<string, unknown> | null {

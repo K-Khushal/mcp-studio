@@ -1,7 +1,7 @@
 import { isSafeOAuthUrl } from "@mcp-studio/types";
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
-import { auth, extractWWWAuthenticateParams, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
+import { auth, discoverOAuthServerInfo, extractWWWAuthenticateParams, selectClientAuthMethod, type OAuthClientProvider, type OAuthDiscoveryState } from "@modelcontextprotocol/sdk/client/auth.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
 
 import type { FetchLike } from "@modelcontextprotocol/sdk/shared/transport.js";
@@ -341,5 +341,49 @@ export class StudioOAuthProvider implements OAuthClientProvider {
     const credentials = await this.signIn.storage.load();
     this.remember(patch);
     await this.signIn.storage.save({ ...credentials, ...patch });
+  }
+}
+
+export type OAuthRevocation = "revoked" | "unsupported" | "failed" | "none";
+
+/**
+ * RFC 7009: best-effort revocation of a Sign-in's tokens at the authorization server, when it
+ * advertises a `revocation_endpoint`. Discovery and revocation share one deadline and the
+ * destination policy of the sign-in itself. Never throws, and never reports tokens or responses.
+ */
+export async function revokeOAuthTokens(serverUrl: string, credentials: OAuthCredentials, options: { timeoutMs?: number; fetchFn?: FetchLike } = {}): Promise<OAuthRevocation> {
+  const { tokens, clientInformation } = credentials;
+  // Revoking the refresh token also invalidates its access tokens on most servers; send both.
+  const revocable = [["refresh_token", tokens?.refresh_token], ["access_token", tokens?.access_token]].filter((entry): entry is [string, string] => Boolean(entry[1]));
+  if (!revocable.length) return "none";
+  const deadline = AbortSignal.timeout(options.timeoutMs ?? 5_000);
+  const guarded = createOAuthFetch(new URL(serverUrl), options.fetchFn);
+  const fetchFn: FetchLike = (input, init) => guarded(input, { ...init, signal: init?.signal ? AbortSignal.any([init.signal, deadline]) : deadline });
+  try {
+    const { authorizationServerMetadata } = await discoverOAuthServerInfo(serverUrl, { fetchFn });
+    // RFC 8414 fields; OpenID discovery documents may carry them too.
+    const metadata = authorizationServerMetadata as { revocation_endpoint?: string; revocation_endpoint_auth_methods_supported?: string[] } | undefined;
+    const endpoint = metadata?.revocation_endpoint;
+    if (!metadata || !endpoint) return "unsupported";
+    let revoked = true;
+    for (const [hint, token] of revocable) {
+      const headers = new Headers({ "Content-Type": "application/x-www-form-urlencoded", Accept: "application/json" });
+      const body = new URLSearchParams({ token, token_type_hint: hint });
+      if (clientInformation) {
+        const method = selectClientAuthMethod(clientInformation, metadata.revocation_endpoint_auth_methods_supported ?? []);
+        if (method === "client_secret_basic" && clientInformation.client_secret) headers.set("Authorization", `Basic ${btoa(`${clientInformation.client_id}:${clientInformation.client_secret}`)}`);
+        else {
+          body.set("client_id", clientInformation.client_id);
+          if (method === "client_secret_post" && clientInformation.client_secret) body.set("client_secret", clientInformation.client_secret);
+        }
+      }
+      const response = await fetchFn(endpoint, { method: "POST", headers, body });
+      await response.body?.cancel();
+      // RFC 7009 §2.2: 200 for revoked and for already-invalid tokens.
+      if (!response.ok) revoked = false;
+    }
+    return revoked ? "revoked" : "failed";
+  } catch {
+    return "failed";
   }
 }

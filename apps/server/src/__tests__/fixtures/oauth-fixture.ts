@@ -14,7 +14,7 @@ const json = (body: unknown, status = 200) => Response.json(body, { status, head
 export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-first" = "streamable") {
   let discoveryGate: { started(): void; resume: Promise<void> } | undefined;
   let tokenGate: { grant: string; phase: "request" | "response"; started: () => void; resume: Promise<void> } | undefined;
-  const faults: { authorizationUrl?: string; refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean; expireOnPrompts?: boolean } = {};
+  const faults: { authorizationUrl?: string; refresh?: boolean; exchange?: boolean; registration?: boolean; scope?: boolean; expireOnPrompts?: boolean; revocation?: "unsupported" | "error" | "hang" } = {};
   const legacy = mode !== "streamable" ? await startHTTPFixture("sse") : undefined;
   const endpoint = legacy ? {
     handle(request: Request) {
@@ -33,6 +33,7 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
   const issued: string[] = [];
   const idTokens: string[] = [];
   const presented = new Set<string>();
+  const revocations: { token: string; hint: string | null; clientId: string | null }[] = [];
   const counts = { registrations: 0, authorizations: 0, refreshes: 0 };
 
   const issueTokens = () => {
@@ -83,7 +84,19 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
           grant_types_supported: ["authorization_code", "refresh_token"],
           code_challenge_methods_supported: ["S256"],
           token_endpoint_auth_methods_supported: ["none"],
+          ...(faults.revocation === "unsupported" ? {} : { revocation_endpoint: `${origin}/revoke` }),
         });
+      case "/revoke": {
+        if (faults.revocation === "hang") await new Promise(() => {});
+        if (faults.revocation === "error") return new Response("revocation diagnostic", { status: 503 });
+        const form = new URLSearchParams(await request.text());
+        const token = form.get("token") ?? "";
+        if (!clients.has(form.get("client_id") ?? "")) return json({ error: "invalid_client" }, 401);
+        revocations.push({ token, hint: form.get("token_type_hint"), clientId: form.get("client_id") });
+        accessTokens.delete(token);
+        refreshTokens.delete(token);
+        return new Response(null, { status: 200 });
+      }
       case "/register": {
         if (faults.registration) return new Response("DCR diagnostic body with private server data", { status: 500 });
         const metadata = await request.json() as { redirect_uris: string[] };
@@ -186,6 +199,8 @@ export async function startOAuthFixture(mode: "streamable" | "sse" | "sse-auth-f
     /** Every access and refresh token the authorization server issued. */
     issued,
     idTokens,
+    /** RFC 7009 revocation requests the authorization server accepted. */
+    revocations,
     /** Every bearer token the MCP endpoint received. */
     presented,
     /** Revokes every access and refresh token, so only a new sign-in gets through. */

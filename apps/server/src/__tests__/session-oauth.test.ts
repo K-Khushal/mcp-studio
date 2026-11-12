@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test";
-import { StreamableHTTPClient, StudioOAuthProvider } from "@mcp-studio/mcp-client";
+import { revokeOAuthTokens, StreamableHTTPClient, StudioOAuthProvider } from "@mcp-studio/mcp-client";
 import { createCollection } from "../db/queries/collections";
 import { createConnection, updateConnection } from "../db/queries/connections";
-import { clearOAuthCredentials, oauthStorage } from "../db/queries/oauth-credentials";
+import { clearOAuthCredentials, getOAuthStatus, oauthStorage, signOut } from "../db/queries/oauth-credentials";
 import { approveInBrowser, startOAuthCallback, startOAuthFixture } from "./fixtures/oauth-fixture";
 import { SessionHarness } from "./fixtures/session-harness";
 import { clearDb } from "./helpers/clear-db";
@@ -91,6 +91,36 @@ test("signing out clears the Connection's tokens so the next connect signs in ag
   await signInAndConnect(openSession());
   expect(fixture.counts).toEqual({ registrations: 2, authorizations: 2, refreshes: 0 });
 });
+
+test("signing out revokes the refresh and access tokens at the authorization server (RFC 7009)", async () => {
+  await signInAndConnect(openSession());
+  const { tokens, clientInformation } = await oauthStorage(connectionId, fixture.connection().config.url).load();
+  const logged = [spyOn(console, "log"), spyOn(console, "warn"), spyOn(console, "error")];
+  try {
+    expect(await signOut(connectionId)).toBe("revoked");
+    expect(fixture.revocations).toEqual([
+      { token: tokens!.refresh_token!, hint: "refresh_token", clientId: clientInformation!.client_id },
+      { token: tokens!.access_token, hint: "access_token", clientId: clientInformation!.client_id },
+    ]);
+    expect(getOAuthStatus(connectionId)).toEqual({ signedIn: false });
+    for (const spy of logged) expect(JSON.stringify(spy.mock.calls)).not.toContain(tokens!.access_token);
+  } finally { for (const spy of logged) spy.mockRestore(); }
+  const mcp = await fetch(fixture.connection().config.url, { method: "POST", headers: { authorization: `Bearer ${tokens!.access_token}` } });
+  expect(mcp.status).toBe(401);
+  expect(await signOut(connectionId)).toBe("none");
+});
+
+for (const [fault, outcome] of [["unsupported", "unsupported"], ["error", "failed"], ["hang", "failed"]] as const) {
+  test(`sign out deletes local credentials when revocation is ${fault}`, async () => {
+    await signInAndConnect(openSession());
+    fixture.faults.revocation = fault;
+    const started = Date.now();
+    expect(await signOut(connectionId, (url, credentials) => revokeOAuthTokens(url, credentials, { timeoutMs: 300 }))).toBe(outcome);
+    expect(Date.now() - started).toBeLessThan(2_000);
+    expect(fixture.revocations).toEqual([]);
+    expect(getOAuthStatus(connectionId)).toEqual({ signedIn: false });
+  });
+}
 
 test("no token value reaches the browser or the logs", async () => {
   const session = openSession();

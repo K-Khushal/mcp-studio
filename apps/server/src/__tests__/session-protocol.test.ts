@@ -152,6 +152,22 @@ test("crash mid-Session reports disconnected with a reason", async () => {
   } finally { await session.close(); }
 });
 
+test("a crash ends the running Call as CONNECTION_CLOSED before disconnected and flushes the final stderr line", async () => {
+  const session = new SessionHarness();
+  try {
+    await session.send(stdioFixture);
+    await session.waitFor("connected");
+    await session.send({ type: "invoke", tool: "crash", params: { text: "panic: no newline" }, requestId: "crash-call" });
+    expect(await session.waitFor("error")).toEqual({ type: "error", requestId: "crash-call", code: "CONNECTION_CLOSED", message: "MCP Server connection closed unexpectedly" });
+    await session.waitFor("disconnected");
+    const order = session.messages.map(m => m.type === "log" ? m.message : m.type === "error" ? m.code : m.type);
+    expect(order.indexOf("panic: no newline")).toBeGreaterThan(-1);
+    expect(order.indexOf("panic: no newline")).toBeLessThan(order.indexOf("CONNECTION_CLOSED"));
+    expect(order.indexOf("CONNECTION_CLOSED")).toBeLessThan(order.indexOf("disconnected"));
+    expect(session.messages.filter(m => m.type === "cancelled" || m.type === "error")).toHaveLength(1);
+  } finally { await session.close(); }
+});
+
 test("a rejected replacement Connection preserves live Session crash detection", async () => {
   const session = new SessionHarness();
   try {

@@ -42,7 +42,7 @@ try {
     const command = process.platform === "darwin" ? ["open", url]
       : process.platform === "win32" ? ["cmd", "/c", "start", "", url] : ["xdg-open", url];
     try {
-      const child = Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+      const child = Bun.spawn(command, { env: process.env, stdout: "ignore", stderr: "ignore" });
       child.unref();
       void child.exited.then(code => {
         if (code !== 0) console.warn(`Open ${url} in your browser.`);

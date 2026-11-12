@@ -72,7 +72,9 @@ export function createProtocolServer() {
         } else process.stderr.write(String(args.text ?? "Fixture stderr") + "\n");
         return text("Written to stderr");
       }
-      case "crash": return process.exit(23);
+      case "crash":
+        if (args.text) await new Promise(resolve => process.stderr.write(String(args.text), resolve));
+        return process.exit(23);
       default: throw new Error(`Unknown tool: ${request.params.name}`);
     }
   });

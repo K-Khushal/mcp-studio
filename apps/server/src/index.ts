@@ -7,9 +7,10 @@ import { parseClientMessage } from "./session/client-message.js";
 import { getAllCollections, createCollection, updateCollection, deleteCollection } from "./db/queries/collections.js";
 import { createConnection, deleteConnection, updateConnection } from "./db/queries/connections.js";
 import { getAllEnvironments, createEnvironment, updateEnvironment, deleteEnvironment, getActiveEnvironment } from "./db/queries/environments.js";
-import { clearOAuthCredentials, getOAuthStatus, oauthStorage } from "./db/queries/oauth-credentials.js";
+import { getOAuthStatus, oauthStorage, signOut } from "./db/queries/oauth-credentials.js";
 import { oauthCallbackResponse, OAuthRedirects } from "./oauth/redirects.js";
 import { clearLegacyCookie, hasWebSocketToken, isAuthorized, resolveToken, unauthorized } from "./http/access.js";
+import { resourceDir } from "./resources.js";
 import { BadRequest, parseExtraOrigin, readJsonObject, withSecurityHeaders } from "./http/security.js";
 
 const PORT = Number(process.env["PORT"] ?? 3000);
@@ -20,8 +21,8 @@ const devAppOrigin = production ? "" : extraOrigin || "http://localhost:5173";
 const corsOrigin = extraOrigin || devAppOrigin;
 /** The Launch token (ADR-0007); the CLI prints the link that carries it. */
 export const token = resolveToken(process.env);
-const webRoot = process.env["STUDIO_RESOURCE_DIR"]
-  ? resolve(process.env["STUDIO_RESOURCE_DIR"], "web")
+const webRoot = resourceDir
+  ? resolve(resourceDir, "web")
   : fileURLToPath(new URL("./web/", import.meta.url));
 const oauthRedirects = new OAuthRedirects();
 
@@ -30,7 +31,9 @@ type SocketData = { session: SessionManager | null };
 process.on("unhandledRejection", error => console.error("[mcp-studio/server] Unhandled rejection:", error));
 
 async function route(req: Request, server: Server<SocketData>): Promise<Response | undefined> {
-  const url = new URL(req.url);
+  let url: URL;
+  // Bun builds req.url from the Host header, so a malformed Host fails to parse.
+  try { url = new URL(req.url); } catch { return new Response("Bad Host", { status: 400 }); }
   const origin = req.headers.get("Origin");
   const host = req.headers.get("Host") ?? "";
   const allowedHosts = [
@@ -137,13 +140,11 @@ async function route(req: Request, server: Server<SocketData>): Promise<Response
     }
   }
 
-  // OAuth status (no tokens) and sign out: forget the Connection's OAuth tokens and client registration
+  // OAuth status (no tokens) and sign out: forget the Connection's OAuth tokens and client registration,
+  // then revoke them at the authorization server when it supports that
   const oauthMatch = url.pathname.match(/^\/collections\/([^/]+)\/connections\/([^/]+)\/oauth$/);
   if (oauthMatch && req.method === "GET") return json(getOAuthStatus(oauthMatch[2]!));
-  if (oauthMatch && req.method === "DELETE") {
-    await clearOAuthCredentials(oauthMatch[2]!);
-    return json({ ok: true });
-  }
+  if (oauthMatch && req.method === "DELETE") return json({ ok: true, revocation: await signOut(oauthMatch[2]!) });
 
   // ---------------------------------------------------------------------------
   // Environments

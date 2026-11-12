@@ -56,13 +56,17 @@ export class StdioMCPClient extends BaseMCPClient {
     return client;
   }
 
+  protected override flushDiagnostics(): void {
+    this.stderrLines.write(this.stderrDecoder.end());
+    this.stderrLines.flush();
+    this.stderrEntries.flush();
+  }
+
   protected async teardownTransport(): Promise<void> {
     if (this.stderrHandler) {
       this.transport?.stderr?.off("data", this.stderrHandler);
       this.stderrHandler = null;
-      this.stderrLines.write(this.stderrDecoder.end());
-      this.stderrLines.flush();
-      this.stderrEntries.flush();
+      this.flushDiagnostics();
     }
     if (this.transport) {
       await this.transport.close();

@@ -10,6 +10,8 @@ import type { MCPTool, MCPPrompt, MCPPromptMessage, MCPContent } from "@mcp-stud
 import type { MCPClientInterface, MCPClientOptions, ConnectedServerInfo } from "./types.js";
 import { formatFrame, formatMcpLogMessage, mapMcpLogLevel } from "./log.js";
 
+const MAX_PENDING_METHODS = 1000;
+
 /**
  * BaseMCPClient — shared post-connect logic for all MCP transport types.
  *
@@ -94,6 +96,8 @@ export abstract class BaseMCPClient implements MCPClientInterface {
     client.onclose = () => {
       const wasConnected = this._isConnected;
       this._isConnected = false;
+      this.pendingMethods.clear();
+      this.flushDiagnostics();
       if (wasConnected) this.options.onClose?.();
     };
     client.setRequestHandler(ElicitRequestSchema, async (request, extra) => {
@@ -111,6 +115,9 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   private emitInitializePhase(): void {
     if (this.initializePhase) this.options.onSessionPhase?.("initialize", this.initializePhase.timestamp, this.initializePhase.durationMs);
   }
+
+  /** Emit buffered transport diagnostics, such as a crashed process's final stderr line. */
+  protected flushDiagnostics(): void {}
 
   /** Tap both directions of the transport so every JSON-RPC frame is seen, including the initialize handshake. */
   private captureFrames(transport: Transport): void {
@@ -140,17 +147,23 @@ export abstract class BaseMCPClient implements MCPClientInterface {
   }
 
   private logFrame(direction: "in" | "out", message: JSONRPCMessage): void {
-    const frame = message as { id?: string | number; method?: string };
+    const frame = message as { id?: string | number; method?: string; params?: { requestId?: string | number } };
     const isResponse = frame.method === undefined;
     let method = frame.method;
     if (frame.id !== undefined) {
       const requestDirection = isResponse ? (direction === "out" ? "in" : "out") : direction;
       const key = JSON.stringify([requestDirection, frame.id]);
-      if (method) this.pendingMethods.set(key, method);
-      else if (isResponse) {
+      if (method) {
+        this.pendingMethods.set(key, method);
+        // A peer that never answers must not grow the map without bound.
+        if (this.pendingMethods.size > MAX_PENDING_METHODS) this.pendingMethods.delete(this.pendingMethods.keys().next().value!);
+      } else if (isResponse) {
         method = this.pendingMethods.get(key);
         this.pendingMethods.delete(key);
       }
+    } else if (method === "notifications/cancelled" && frame.params?.requestId !== undefined) {
+      // A cancelled request may never get a response; the sender cancels its own request.
+      this.pendingMethods.delete(JSON.stringify([direction, frame.params.requestId]));
     }
     if (method === "initialize") {
       if (direction === "out" && !isResponse) this.initializeStartedAt = Date.now();
