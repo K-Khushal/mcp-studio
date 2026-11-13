@@ -1,0 +1,23 @@
+import { useId } from "react";
+import { cn } from "@/lib/utils";
+
+/** Duplex mark: two offset brackets joined by a protocol bar (client ↔ server). Source art: docs/brand/. */
+export function LogoMark({ size = 20, className }: { size?: number; className?: string }) {
+  const id = useId();
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" className={cn("shrink-0", className)} aria-hidden>
+      <defs>
+        <linearGradient id={`${id}t`} x1="4" y1="0" x2="28" y2="32" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#7A73FA" />
+          <stop offset=".55" stopColor="#5248E8" />
+          <stop offset="1" stopColor="#3B30C4" />
+        </linearGradient>
+      </defs>
+      <rect width="32" height="32" rx="7.5" fill={`url(#${id}t)`} />
+      <path
+        fill="#FFFFFF"
+        d="M14 7A1 1 0 0 0 13 6L10.414 6A1 1 0 0 0 9.707 6.293L6.293 9.707A1 1 0 0 0 6 10.414L6 17.586A1 1 0 0 0 6.293 18.293L9.707 21.707A1 1 0 0 0 10.414 22L13 22A1 1 0 0 0 14 21L14 19A1 1 0 0 1 15 18L19 18A1 1 0 0 0 20 17L20 17A1 1 0 0 1 21 16L21 16A1 1 0 0 1 22 17L22 19.586A1 1 0 0 1 21.707 20.293L20.293 21.707A1 1 0 0 1 19.586 22L19 22A1 1 0 0 0 18 23L18 25A1 1 0 0 0 19 26L21.586 26A1 1 0 0 0 22.293 25.707L25.707 22.293A1 1 0 0 0 26 21.586L26 14.414A1 1 0 0 0 25.707 13.707L22.293 10.293A1 1 0 0 0 21.586 10L19 10A1 1 0 0 0 18 11L18 13A1 1 0 0 1 17 14L13 14A1 1 0 0 0 12 15L12 15A1 1 0 0 1 11 16L11 16A1 1 0 0 1 10 15L10 12.414A1 1 0 0 1 10.293 11.707L11.707 10.293A1 1 0 0 1 12.414 10L13 10A1 1 0 0 0 14 9Z"
+      />
+    </svg>
+  );
+}

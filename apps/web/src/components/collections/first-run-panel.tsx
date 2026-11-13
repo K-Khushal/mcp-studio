@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { FolderPlus, Import, Zap } from 'lucide-react';
+import { FolderPlus, Import } from 'lucide-react';
 import { useStore } from '@/store';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { LogoMark } from '@/components/shell/logo-mark';
 import { ImportConnectionsDialog } from './import-connections-dialog';
 
 /** First run: no Collections yet, so the main pane leads with the two ways to start instead of a dead end. */
@@ -20,7 +21,7 @@ export function FirstRunPanel() {
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 text-center">
-      <Zap size={32} strokeWidth={1.5} className="text-primary-text" aria-hidden />
+      <LogoMark size={40} className="shadow-lg shadow-primary/25 rounded-[9px]" />
       <div className="flex flex-col gap-1">
         <h2 className="text-base font-semibold text-foreground">Welcome to MCP Studio</h2>
         <p className="max-w-sm text-sm text-muted-foreground">

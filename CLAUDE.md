@@ -84,6 +84,7 @@ Variable editors (`components/shared/variable-input.tsx`) keep native editing, p
 
 ### Frontend structure
 Single screen (`pages/home.tsx`): collections sidebar + studio view + logs panel; no view switching or icon sidebar.  
+Brand: Duplex mark — source SVGs in `docs/brand/`, in-app `shell/logo-mark.tsx` (`LogoMark`), `public/favicon.svg` + `apple-touch-icon.png`.  
 Shell: `src/components/shell/` (TopNav → SessionInfo + ThemeToggle + settings dialog, StatusBar); SessionInfo reads store `serverInfo`/`protocolVersion`/`connectionConfig`.  
 Features: `src/components/{auth,connection,tools,prompts,response,logs,collections,environments,configuration,shared}/`  
 STDIO form: store `stdio` (`StdioDraft`) via `setStdio`; `store/connection-form.ts` converts draft ↔ `StdioConfig` (blanks dropped), builds `ConnectionConfig` for autosave PATCH and Connect; `connectionUrl` HTTP-only. Workspace tabs (`views/studio-view.tsx`) = transport setup tabs (STDIO: Arguments + cwd, Process env = server process env, not Studio Variables; HTTP: Auth, Headers) | Tools, Prompts, with counts; disconnected STDIO opens on Arguments, a Session start switches to Tools. request/response split defaults 60/40 so Echo args + Run fit at 1366×768. Sidebar double-click connects; clicking/double-clicking another Connection while a Session is live asks, then disconnects.  
