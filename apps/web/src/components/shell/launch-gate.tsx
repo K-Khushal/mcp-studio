@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 
 import { consumeLaunchToken, onAccessDenied, studioFetch } from "../../lib/studio-access";
+import { LogoMark } from "./logo-mark";
 
 /** Mount the app only after checking the origin's Launch token (ADR-0007). */
 export function LaunchGate({ children }: { children: ReactNode }) {
@@ -45,6 +46,7 @@ export function LaunchGate({ children }: { children: ReactNode }) {
   return (
     <main className="grid min-h-screen place-items-center bg-background p-8 text-foreground">
       <div className="max-w-md space-y-2 text-sm leading-relaxed">
+        <LogoMark size={32} className="mb-4" />
         <h1 className="text-lg font-semibold">Open MCP Studio from your terminal</h1>
         <p className="text-muted-foreground">
           This Studio Server requires its launch link. Open the link printed in the terminal where you

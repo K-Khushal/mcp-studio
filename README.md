@@ -1,4 +1,6 @@
-# MCP Studio
+<p align="center"><img src="docs/brand/logo.svg" width="96" height="96" alt=""></p>
+
+<h1 align="center">MCP Studio</h1>
 
 > The **Postman for MCP**: connect to, inspect, and exercise MCP servers locally.
 
